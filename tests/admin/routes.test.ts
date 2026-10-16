@@ -1,5 +1,5 @@
 import { ADMIN_DEFAULTS } from '../../server/core/defaults.ts';
-import { HttpStatus } from '../../server/core/wire.ts';
+import { HttpStatus, MS_PER_SECOND } from '../../server/core/wire.ts';
 import { startTestApp, type TestApp } from '../helpers.ts';
 import { adminGql, type Browser, createBrowser, PASSWORD, signIn, signInAsAdmin } from '../oidc/browser.ts';
 
@@ -172,7 +172,7 @@ describe('first admin setup', () => {
   it('sends sign-ins to the setup page while there is no admin', async () => {
     const res = await fetch(`${app.base}/admin/login`, { redirect: 'manual' });
     expect(res.headers.get('location')).toBe('/setup');
-    expect(await (await fetch(`${app.base}/admin/setup`)).json()).toEqual({ needed: true });
+    expect(await (await fetch(`${app.base}/admin/setup`)).json()).toEqual({ needed: true, tokenRequired: false });
   });
 
   it('refuses the wrong token', async () => {
@@ -197,5 +197,46 @@ describe('first admin setup', () => {
     expect(res.status).toBe(HttpStatus.Conflict);
     const login = await fetch(`${app.base}/admin/login`, { redirect: 'manual' });
     expect(login.headers.get('location')).toMatch(/\/oidc\/auth\?/);
+  });
+});
+
+describe('first admin setup without a token', () => {
+  let now = 0;
+  let app: TestApp;
+
+  beforeEach(async () => {
+    now = Date.now();
+    app = await startTestApp({ now: () => now });
+  });
+
+  afterEach(() => app.close());
+
+  const postSetup = (body: Record<string, string>) =>
+    fetch(`${app.base}/admin/setup`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+  it('makes a new admin while the window is open', async () => {
+    const res = await postSetup({ username: 'root', password: PASSWORD });
+    expect(await res.json()).toEqual({ redirectTo: '/admin/login' });
+    expect(app.services.users.hasAdmin()).toBe(true);
+  });
+
+  it('never promotes an existing user without the token', async () => {
+    app.services.users.create({ username: 'ada', password: PASSWORD, email: '', name: '', groups: [] });
+    const res = await postSetup({ username: 'ada', password: PASSWORD });
+    expect(res.status).toBe(HttpStatus.Forbidden);
+    expect(app.services.users.hasAdmin()).toBe(false);
+  });
+
+  it('needs the token once the window has closed', async () => {
+    now += ADMIN_DEFAULTS.setupWindowSeconds * MS_PER_SECOND;
+    expect(await (await fetch(`${app.base}/admin/setup`)).json()).toEqual({ needed: true, tokenRequired: true });
+    const without = await postSetup({ username: 'root', password: PASSWORD });
+    expect(without.status).toBe(HttpStatus.Forbidden);
+    const withToken = await postSetup({ token: app.services.setup.token, username: 'root', password: PASSWORD });
+    expect(withToken.status).toBe(HttpStatus.Ok);
   });
 });

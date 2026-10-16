@@ -47,7 +47,12 @@ const callbackQuerySchema = z.object({
   error_description: z.string().optional(),
 });
 
-const setupSchema = z.object({ token: z.string(), username: z.string().trim(), password: z.string() });
+const setupSchema = z.object({
+  /** Left out or blank while the tokenless window is open. */
+  token: z.string().trim().optional(),
+  username: z.string().trim(),
+  password: z.string(),
+});
 
 /** What the admin routes use. */
 export interface AdminDeps {
@@ -127,7 +132,7 @@ function showError(res: Response, error: string, description: string): void {
  * `GET /admin/login` starts a code flow with PKCE and `prompt=login`, so someone already signed in as a non-admin
  * can switch user. `GET /admin/callback` checks the code, the user's groups, and sets the session cookie.
  * `POST /admin/logout` ends it and points at the provider's logout. `GET`/`POST /admin/setup` makes the
- * first admin with the token from the server log.
+ * first admin: a new user without a token for a while after boot, otherwise with the token from the server log.
  */
 export function createAdminRouter(deps: AdminDeps): Router {
   const { provider, users, adminSessions, setup, keys, issuer, throttle } = deps;
@@ -231,13 +236,13 @@ export function createAdminRouter(deps: AdminDeps): Router {
   });
 
   router.get(ADMIN_PATH.setup, (_req, res) => {
-    res.json({ needed: setup.isNeeded() });
+    res.json({ needed: setup.isNeeded(), tokenRequired: setup.isOpen() === false });
   });
 
   router.post(ADMIN_PATH.setup, guard, express.json({ limit: HTTP_DEFAULTS.bodyLimit }), async (req, res) => {
     const parsed = setupSchema.safeParse(req.body);
     if (parsed.success === false) {
-      sendRefusal(res, HttpStatus.BadRequest, 'Send the setup token, a username and a password.');
+      sendRefusal(res, HttpStatus.BadRequest, 'Send a username and a password.');
       return;
     }
     const { token, username, password } = parsed.data;
@@ -251,13 +256,30 @@ export function createAdminRouter(deps: AdminDeps): Router {
       sendRefusal(res, HttpStatus.Conflict, 'There is an admin already. Sign in instead.');
       return;
     }
-    if (setup.matches(token) === false) {
+    const hasToken = token !== undefined && token !== '';
+    if (hasToken && setup.matches(token) === false) {
       throttle.fail(ip, username);
-      sendRefusal(res, HttpStatus.Forbidden, 'That setup link is not this boot’s. Copy the one in the server log.');
+      sendRefusal(res, HttpStatus.Forbidden, 'That setup token is not this boot’s. Copy the one in the server log.');
+      return;
+    }
+    const existing = users.list().find((user) => user.username === username) ?? null;
+    if (hasToken === false && existing !== null) {
+      sendRefusal(
+        res,
+        HttpStatus.Forbidden,
+        `"${username}" already exists. Making an existing user the admin needs the setup token from the server log.`,
+      );
+      return;
+    }
+    if (hasToken === false && setup.isOpen() === false) {
+      sendRefusal(
+        res,
+        HttpStatus.Forbidden,
+        'Setup without a token has closed. Use the setup token from the server log.',
+      );
       return;
     }
     try {
-      const existing = users.list().find((user) => user.username === username) ?? null;
       if (existing === null) {
         users.create({ username, password, email: '', name: '', groups: [ADMIN_DEFAULTS.group] });
       } else {

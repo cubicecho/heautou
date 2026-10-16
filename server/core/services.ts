@@ -28,6 +28,8 @@ export interface ServiceSettings {
   issuer: string;
   /** Whether X-Forwarded-Proto and -Host are believed. */
   isProxied: boolean;
+  /** The clock, in epoch milliseconds, for the setup window. */
+  now?: () => number;
 }
 
 /** Everything the HTTP app is built from. */
@@ -67,6 +69,6 @@ export function openServices(settings: ServiceSettings): Services {
     }),
     isProxied: settings.isProxied,
   });
-  const setup = createSetupGate(users);
+  const setup = createSetupGate(users, settings.now);
   return { clients, users, adminSessions, setup, keys, provider, issuer: settings.issuer };
 }

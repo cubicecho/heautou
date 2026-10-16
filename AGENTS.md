@@ -16,8 +16,9 @@ npm run build && npm start   # one process on PORT (default 3000) serving dist/
 docker compose up -d --build # the same, in a container, with the data in a named volume
 ```
 
-`.env.example` documents `ISSUER_URL`, `PORT`, `DATA_DIR` and `TRUST_PROXY`. On a fresh data directory the boot
-log prints a `/setup#token=…` link that makes the first admin.
+`.env.example` documents `ISSUER_URL`, `PORT`, `DATA_DIR` and `TRUST_PROXY`. While there is no admin the app
+shows `/setup`: a new admin needs nothing for 10 minutes after boot (`ADMIN_DEFAULTS.setupWindowSeconds`); after that,
+or to promote an existing user, it needs the token the boot log prints.
 
 ## CI and releases
 

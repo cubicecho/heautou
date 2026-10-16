@@ -108,6 +108,11 @@ export interface AdminSettings {
   loginSeconds: number;
   /** Random bytes in an admin session token and in the setup token, before base64url. */
   tokenBytes: number;
+  /**
+   * How long after boot the first admin can be made without the setup token, in seconds. Only a new user can be
+   * made that way; making an existing user the admin always needs the token.
+   */
+  setupWindowSeconds: number;
 }
 
 export const ADMIN_DEFAULTS: Readonly<AdminSettings> = Object.freeze({
@@ -116,6 +121,7 @@ export const ADMIN_DEFAULTS: Readonly<AdminSettings> = Object.freeze({
   sessionSeconds: 43_200,
   loginSeconds: 3600,
   tokenBytes: 32,
+  setupWindowSeconds: 600,
 });
 
 /** How hard the unauthenticated routes may be hit. Counted per client IP, and per username for sign-ins. */

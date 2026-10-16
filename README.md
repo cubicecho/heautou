@@ -43,16 +43,18 @@ A minimal OpenID Connect provider for self-hosted setups. It gives your apps one
    docker compose up -d
    ```
 
-4. Make the first admin. While there is none, Heautou prints a one-time setup link in its log:
+4. Open `http://<your-host>:3000` within 10 minutes of starting it. While there is no admin, Heautou shows a
+   **Set up Heautou** page: choose a username and password for the first admin, then sign in with them.
+
+   After those 10 minutes, or to make a user that already exists the admin (when upgrading from a version
+   before admin sign-in), the page needs the setup token from Heautou's log:
 
    ```sh
    docker compose logs heautou | grep setup
    ```
 
-   Open the link, which looks like `http://<your-host>:3000/setup#token=…`, and choose a username and password.
-   The link changes on every restart and stops working once there is an admin.
-
-5. Open `http://<your-host>:3000` and sign in as that admin.
+   The log line holds a link, `http://<your-host>:3000/setup#token=…`, that fills the token in. The token changes
+   on every restart, so restarting also reopens the 10 minutes. Once there is an admin, the page is closed.
 
 Your clients, users and keys are kept in the `heautou-data` volume, so they survive restarts and upgrades.
 To upgrade, run `docker compose pull && docker compose up -d`.

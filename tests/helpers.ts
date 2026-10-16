@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { openServices, type Services } from '../server/core/services.ts';
+import { openServices, type ServiceSettings, type Services } from '../server/core/services.ts';
 import { createApp } from '../server/http/app.ts';
 
 /**
@@ -41,15 +41,16 @@ export interface TestApp {
 /**
  * Starts the whole app on a random port with an empty data directory. The issuer is that port's `/oidc`.
  *
+ * @param [settings] - Overrides for the services, such as the clock.
  * @returns The running app.
  */
-export async function startTestApp(): Promise<TestApp> {
+export async function startTestApp(settings: Pick<ServiceSettings, 'now'> = {}): Promise<TestApp> {
   const dataDir = tempDir();
   const server = createServer();
   server.listen(0, '127.0.0.1');
   await new Promise<void>((resolve) => server.once('listening', resolve));
   const base = `http://127.0.0.1:${portOf(server)}`;
-  const services = openServices({ dataDir, issuer: `${base}/oidc`, isProxied: false });
+  const services = openServices({ dataDir, issuer: `${base}/oidc`, isProxied: false, ...settings });
   server.on('request', createApp(services));
   const close = async (): Promise<void> => {
     server.closeAllConnections();
