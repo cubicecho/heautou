@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/cubicecho/heautou/compare/v1.0.0...v1.1.0) (2026-10-16)
+
+
+### Features
+
+* draw the sign-out, signed-out and error pages in the web app ([c9da1c8](https://github.com/cubicecho/heautou/commit/c9da1c83f5f7c0b5d60bd4f4e3d0c8f26cffae19))
+
 # 1.0.0 (2026-10-16)
 
 
