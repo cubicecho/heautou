@@ -1,0 +1,19 @@
+# Installed and built inside the image.
+node_modules
+dist
+schema.graphql
+web/src/__generated__
+web/src/route-tree.gen.ts
+.tanstack
+
+# Neither built nor shipped.
+data
+.git
+.github
+.env
+*.local
+*.log
+.claude
+Dockerfile
+.dockerignore
+docker-compose.yml

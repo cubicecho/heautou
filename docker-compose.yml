@@ -1,0 +1,23 @@
+# The provider and its admin UI on one port (.env is read from beside this file):
+#
+#   docker compose up -d --build
+#
+# Set ISSUER_URL to the address applications and browsers reach it at, ending in /oidc.
+name: heautou
+services:
+  heautou:
+    image: vantreeseba/heautou:latest
+    build: .
+    restart: unless-stopped
+    environment:
+      ISSUER_URL: ${ISSUER_URL:-http://localhost:3000/oidc}
+      TRUST_PROXY: ${TRUST_PROXY:-false}
+      NODE_ENV: production
+    ports:
+      - "${PORT:-3000}:3000"
+    volumes:
+      # Clients, users, signing keys and sessions, as plain JSON.
+      - heautou-data:/data
+
+volumes:
+  heautou-data:
