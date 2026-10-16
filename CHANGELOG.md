@@ -1,3 +1,10 @@
+# [1.4.0](https://github.com/cubicecho/heautou/compare/v1.3.0...v1.4.0) (2026-10-16)
+
+
+### Features
+
+* add groups, invites, account page, sessions, key rotation and branding ([bb421b0](https://github.com/cubicecho/heautou/commit/bb421b06263ede2928a3762c9e19e60149b0a97a))
+
 # [1.3.0](https://github.com/cubicecho/heautou/compare/v1.2.0...v1.3.0) (2026-10-16)
 
 
