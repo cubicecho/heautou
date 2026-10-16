@@ -1,3 +1,10 @@
+# [1.3.0](https://github.com/cubicecho/heautou/compare/v1.2.0...v1.3.0) (2026-10-16)
+
+
+### Features
+
+* let the first admin be made without a token for 10 minutes after boot ([1a6d79a](https://github.com/cubicecho/heautou/commit/1a6d79a68ca1812a1632e6b1aee369e8f9711e79))
+
 # [1.2.0](https://github.com/cubicecho/heautou/compare/v1.1.0...v1.2.0) (2026-10-16)
 
 
