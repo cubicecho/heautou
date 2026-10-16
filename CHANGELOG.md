@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/cubicecho/heautou/compare/v1.1.0...v1.2.0) (2026-10-16)
+
+
+### Features
+
+* require an admin sign-in and harden the server for self-hosting ([efc4623](https://github.com/cubicecho/heautou/commit/efc46233651b340160e441987bda043b13a0affc))
+
 # [1.1.0](https://github.com/cubicecho/heautou/compare/v1.0.0...v1.1.0) (2026-10-16)
 
 
