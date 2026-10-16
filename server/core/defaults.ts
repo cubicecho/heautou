@@ -74,6 +74,10 @@ export interface CredentialSettings {
   passwordHashBytes: number;
   /** Shortest password a user may be given. */
   minPasswordLength: number;
+  /** How long an invite or password reset link works, in seconds. */
+  passwordLinkSeconds: number;
+  /** Random bytes in a password link's token, before base64url. */
+  passwordLinkBytes: number;
 }
 
 export const CREDENTIAL_DEFAULTS: Readonly<CredentialSettings> = Object.freeze({
@@ -81,6 +85,8 @@ export const CREDENTIAL_DEFAULTS: Readonly<CredentialSettings> = Object.freeze({
   passwordSaltBytes: 16,
   passwordHashBytes: 64,
   minPasswordLength: 8,
+  passwordLinkSeconds: 86_400,
+  passwordLinkBytes: 32,
 });
 
 /** The keys the provider signs and seals with, made on first boot. */
@@ -89,11 +95,20 @@ export interface KeySettings {
   signingKeyBits: number;
   /** Random bytes in each cookie signing key. */
   cookieKeyBytes: number;
+  /** How old the keys may get before boot rotates them, in days. */
+  rotationDays: number;
+  /**
+   * How many signing and cookie keys are kept, the newest first. The older ones still verify tokens and cookies
+   * made before the last rotation.
+   */
+  keptKeys: number;
 }
 
 export const KEY_DEFAULTS: Readonly<KeySettings> = Object.freeze({
   signingKeyBits: 2048,
   cookieKeyBytes: 32,
+  rotationDays: 90,
+  keptKeys: 2,
 });
 
 /** How the admin UI signs its operators in. It is a client of this provider, like any other app. */
@@ -147,4 +162,23 @@ export const RATE_LIMIT_DEFAULTS: Readonly<RateLimitSettings> = Object.freeze({
   requestsPerIp: 120,
   requestWindowSeconds: 60,
   maxKeys: 10_000,
+});
+
+/** What the sign-in page and the sidebar show the provider as. */
+export interface BrandingSettings {
+  /** The name until the operator sets one. */
+  name: string;
+  /** Longest name, in characters. */
+  maxNameLength: number;
+  /** Largest logo, in bytes. */
+  maxLogoBytes: number;
+  /** How long browsers may keep the logo, in seconds. */
+  logoCacheSeconds: number;
+}
+
+export const BRANDING_DEFAULTS: Readonly<BrandingSettings> = Object.freeze({
+  name: 'Heautou',
+  maxNameLength: 60,
+  maxLogoBytes: 262_144,
+  logoCacheSeconds: 300,
 });

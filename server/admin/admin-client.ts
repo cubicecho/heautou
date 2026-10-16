@@ -1,6 +1,7 @@
 import type { AdapterPayload } from 'oidc-provider';
 import { OIDC_MOUNT_PATH } from '../core/config.ts';
 import { ADMIN_DEFAULTS } from '../core/defaults.ts';
+import type { Branding } from '../store/branding.ts';
 
 /** What the sign-in page calls the admin UI. */
 export const ADMIN_CLIENT_NAME = 'Heautou admin';
@@ -15,6 +16,27 @@ export const ADMIN_PATH = {
   logout: '/admin/logout',
   /** Whether an admin is still to be made, and makes one (POST). */
   setup: '/admin/setup',
+  /** Who is signed in, for the account page. */
+  account: '/admin/account',
+  /** Changes the signed-in user's password (POST). */
+  accountPassword: '/admin/account/password',
+  /** Ends every session of the signed-in user (POST). */
+  accountSignOut: '/admin/account/sign-out-everywhere',
+  /** Says whose a password link is (POST), and sets the password with it (POST to `/set`). */
+  passwordLink: '/admin/password-link',
+  passwordLinkSet: '/admin/password-link/set',
+  /** The provider's name and whether it has a logo, for every page. */
+  branding: '/admin/branding',
+  /** The logo image. */
+  logo: '/admin/branding/logo',
+} as const;
+
+/** The web app's pages the server links to. */
+export const WEB_APP_PAGE = {
+  /** A signed-in user's own page: their details, password and sessions. */
+  account: '/account',
+  /** Sets a password with a link's token, which is in the fragment: `#token=`. */
+  setPassword: '/set-password',
 } as const;
 
 /** Where the admin UI lives, worked out from the issuer. */
@@ -57,4 +79,22 @@ export function adminClientMetadata(issuer: string): AdapterPayload {
     grant_types: ['authorization_code'],
     response_types: ['code'],
   };
+}
+
+/** The branding as the web app reads it. */
+export interface BrandingView {
+  name: string;
+  /** Where the logo is served, versioned so a new one is fetched. Null when there is none. */
+  logoUrl: string | null;
+}
+
+/**
+ * Describes the branding for the web app.
+ *
+ * @param branding - The stored branding.
+ * @returns The name and the logo's URL.
+ */
+export function brandingView(branding: Branding): BrandingView {
+  const { name, logo } = branding;
+  return { name, logoUrl: logo === null ? null : `${ADMIN_PATH.logo}?v=${encodeURIComponent(logo.updatedAt)}` };
 }

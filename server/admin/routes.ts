@@ -1,6 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
-import express, { type CookieOptions, type RequestHandler, type Response, Router } from 'express';
-import type Provider from 'oidc-provider';
+import express, { type CookieOptions, type Request, type RequestHandler, type Response, Router } from 'express';
 import { z } from 'zod';
 import { ADMIN_DEFAULTS, HTTP_DEFAULTS } from '../core/defaults.ts';
 import { errorMessage } from '../core/errors.ts';
@@ -8,15 +7,16 @@ import { HttpStatus, MS_PER_SECOND } from '../core/wire.ts';
 import { readCookie, signValue, verifyValue } from '../http/cookies.ts';
 import { sameOriginJson, sendRefusal } from '../http/guards.ts';
 import { type LoginThrottle, sendTooMany } from '../http/rate-limit.ts';
+import type { ProviderHost } from '../oidc/host.ts';
 import { PAGE_PARAM, pageUrl, WEB_PAGE } from '../oidc/pages.ts';
 import type { AdminSessionStore } from '../store/admin-sessions.ts';
-import type { ProviderKeys } from '../store/keys.ts';
+import type { KeyStore } from '../store/keys.ts';
 import { isAdmin, type PublicUser, type UserStore } from '../store/users.ts';
-import { ADMIN_PATH, adminUrls } from './admin-client.ts';
+import { ADMIN_PATH, adminUrls, WEB_APP_PAGE } from './admin-client.ts';
 import type { SetupGate } from './setup.ts';
 
-/** The admin UI's cookies. */
-const COOKIE = {
+/** The web app's cookies. */
+export const COOKIE = {
   /** The session: an opaque token, looked up in the session store. */
   session: 'heautou_admin',
   /** A sign-in under way: its state, PKCE verifier and return path, signed. */
@@ -30,7 +30,7 @@ const RETURN_PATTERN = /^\/(?![/\\])/;
 const DEFAULT_RETURN = '/';
 
 /** The error codes the web app's error page explains. */
-const AdminError = { required: 'admin_required', signInFailed: 'admin_sign_in_failed' } as const;
+const AdminError = { signInFailed: 'admin_sign_in_failed', disabled: 'account_disabled' } as const;
 
 const loginStateSchema = z.object({
   state: z.string(),
@@ -56,11 +56,11 @@ const setupSchema = z.object({
 
 /** What the admin routes use. */
 export interface AdminDeps {
-  provider: Provider;
+  host: ProviderHost;
   users: UserStore;
   adminSessions: AdminSessionStore;
   setup: SetupGate;
-  keys: ProviderKeys;
+  keys: KeyStore;
   issuer: string;
   throttle: LoginThrottle;
 }
@@ -75,35 +75,62 @@ function randomToken(): string {
 }
 
 /**
- * Looks up who an admin session cookie belongs to. Their groups are read again on every request, so taking
- * someone out of the admin group signs them out.
+ * Looks up who a request's session cookie belongs to. The user is read again on every request, so disabling
+ * someone signs them out, and taking them out of the admin group takes the admin UI away.
  *
  * @param deps - The stores.
- * @param cookie - The session cookie's value, if sent.
- * @returns The admin, or null.
+ * @param req - The request.
+ * @returns The user, or null when there is no session or they are disabled.
  */
-function adminFor(deps: Pick<AdminDeps, 'users' | 'adminSessions'>, cookie: string | null): PublicUser | null {
+export function signedInUser(deps: Pick<AdminDeps, 'users' | 'adminSessions'>, req: Request): PublicUser | null {
+  const cookie = readCookie(req, COOKIE.session);
   const userId = cookie === null ? null : deps.adminSessions.find(cookie);
   const user = userId === null ? null : deps.users.find(userId);
-  return user !== null && isAdmin(user) ? user : null;
+  return user !== null && user.disabled === false ? user : null;
 }
 
 /**
- * Refuses requests without an admin session with 401, and puts the admin in `res.locals.viewer`.
+ * Refuses requests without a session with 401 and those of users who are not admins with 403, and puts the admin
+ * in `res.locals.viewer`.
  *
  * @param deps - The stores.
  * @returns The middleware.
  */
 export function requireAdmin(deps: Pick<AdminDeps, 'users' | 'adminSessions'>): RequestHandler {
   return (req, res, next) => {
-    const viewer = adminFor(deps, readCookie(req, COOKIE.session));
+    const viewer = signedInUser(deps, req);
     if (viewer === null) {
       sendRefusal(res, HttpStatus.Unauthorized, 'Sign in to the admin UI first.');
+      return;
+    }
+    if (isAdmin(viewer) === false) {
+      sendRefusal(res, HttpStatus.Forbidden, `"${viewer.username}" is not in the "${ADMIN_DEFAULTS.group}" group.`);
       return;
     }
     res.locals.viewer = viewer;
     next();
   };
+}
+
+/**
+ * The session cookie's options: sent to every path of this origin, never cross-site.
+ *
+ * @param issuer - The issuer, which says whether the cookie is `Secure`.
+ * @returns The options.
+ */
+export function sessionCookieOptions(issuer: string): CookieOptions {
+  return { httpOnly: true, secure: adminUrls(issuer).isHttps, path: '/', sameSite: 'strict' };
+}
+
+/**
+ * Says where a signed-in user goes after signing in: admins where they were going, everyone else to their account.
+ *
+ * @param user - The user.
+ * @param returnTo - Where the sign-in was started from.
+ * @returns The path.
+ */
+function landingFor(user: PublicUser, returnTo: string): string {
+  return isAdmin(user) || returnTo === WEB_APP_PAGE.account ? returnTo : WEB_APP_PAGE.account;
 }
 
 /**
@@ -121,9 +148,9 @@ function showError(res: Response, error: string, description: string): void {
 }
 
 /**
- * Builds the admin UI's sign-in routes. The admin UI is a client of this provider like any other, except that
+ * Builds the web app's sign-in routes. The web app is a client of this provider like any other, except that
  * it is built in and that it swaps its code in-process, which works even when the issuer's public URL is not
- * reachable from inside the server.
+ * reachable from inside the server. Admins land in the admin UI; other users on their account page.
  *
  * @param deps - The provider, the stores, the keys and the issuer.
  * @returns A router to mount at the root.
@@ -135,12 +162,12 @@ function showError(res: Response, error: string, description: string): void {
  * first admin: a new user without a token for a while after boot, otherwise with the token from the server log.
  */
 export function createAdminRouter(deps: AdminDeps): Router {
-  const { provider, users, adminSessions, setup, keys, issuer, throttle } = deps;
+  const { host, users, adminSessions, setup, keys, issuer, throttle } = deps;
   const urls = adminUrls(issuer);
   const guard = sameOriginJson(urls.origin);
   const cookieBase: CookieOptions = { httpOnly: true, secure: urls.isHttps };
   const loginCookie: CookieOptions = { ...cookieBase, path: '/admin', sameSite: 'lax' };
-  const sessionCookie: CookieOptions = { ...cookieBase, path: '/', sameSite: 'strict' };
+  const sessionCookie = sessionCookieOptions(issuer);
   const router = Router();
 
   router.get(ADMIN_PATH.login, (req, res) => {
@@ -150,8 +177,9 @@ export function createAdminRouter(deps: AdminDeps): Router {
     }
     const asked = typeof req.query.return === 'string' ? req.query.return : DEFAULT_RETURN;
     const returnTo = RETURN_PATTERN.test(asked) ? asked : DEFAULT_RETURN;
-    if (adminFor(deps, readCookie(req, COOKIE.session)) !== null) {
-      res.redirect(HttpStatus.SeeOther, returnTo);
+    const current = signedInUser(deps, req);
+    if (current !== null) {
+      res.redirect(HttpStatus.SeeOther, landingFor(current, returnTo));
       return;
     }
     const login: LoginState = {
@@ -160,7 +188,7 @@ export function createAdminRouter(deps: AdminDeps): Router {
       returnTo,
       expiresAt: Date.now() + ADMIN_DEFAULTS.loginSeconds * MS_PER_SECOND,
     };
-    const [signingKey = ''] = keys.cookieKeys;
+    const [signingKey = ''] = keys.current().cookieKeys;
     res.cookie(COOKIE.login, signValue(login, signingKey), {
       ...loginCookie,
       maxAge: ADMIN_DEFAULTS.loginSeconds * MS_PER_SECOND,
@@ -182,7 +210,7 @@ export function createAdminRouter(deps: AdminDeps): Router {
   router.get(ADMIN_PATH.callback, async (req, res) => {
     const cookie = readCookie(req, COOKIE.login);
     res.clearCookie(COOKIE.login, loginCookie);
-    const login = loginStateSchema.safeParse(cookie === null ? null : verifyValue(cookie, keys.cookieKeys));
+    const login = loginStateSchema.safeParse(cookie === null ? null : verifyValue(cookie, keys.current().cookieKeys));
     const query = callbackQuerySchema.safeParse(req.query);
     const isOurs =
       login.success && query.success && login.data.expiresAt > Date.now() && login.data.state === query.data.state;
@@ -196,7 +224,7 @@ export function createAdminRouter(deps: AdminDeps): Router {
       return;
     }
     try {
-      const code = await provider.AuthorizationCode.find(codeValue);
+      const code = await host.current().AuthorizationCode.find(codeValue);
       const challenge = createHash('sha256').update(login.data.verifier).digest('base64url');
       const isValid =
         code?.isValid === true &&
@@ -210,16 +238,15 @@ export function createAdminRouter(deps: AdminDeps): Router {
       }
       await code.consume();
       const user = users.find(code.accountId ?? '');
-      if (user === null || isAdmin(user) === false) {
-        const who = user === null ? 'That user' : `"${user.username}"`;
-        showError(res, AdminError.required, `${who} is not in the "${ADMIN_DEFAULTS.group}" group.`);
+      if (user === null || user.disabled) {
+        showError(res, AdminError.disabled, 'That account is disabled or was removed. Ask an admin.');
         return;
       }
       res.cookie(COOKIE.session, adminSessions.create(user.id), {
         ...sessionCookie,
         maxAge: ADMIN_DEFAULTS.sessionSeconds * MS_PER_SECOND,
       });
-      res.redirect(HttpStatus.SeeOther, login.data.returnTo);
+      res.redirect(HttpStatus.SeeOther, landingFor(user, login.data.returnTo));
     } catch (caught) {
       showError(res, AdminError.signInFailed, errorMessage(caught));
     }

@@ -5,7 +5,8 @@ A minimal OpenID Connect provider for self-hosted setups. It gives your apps one
 
 - **An OIDC provider** for the authorization code flow, with a client secret or with PKCE. Apps find it
   through the standard discovery URL.
-- **A small web UI** for adding the apps that sign in (clients) and the people who sign in (users).
+- **A small web UI** for adding the apps that sign in (clients) and the people who sign in (users), with
+  groups, invite links, and a page where each user changes their own password.
 - **Flat-file storage.** Everything is in a few JSON files in one folder. There is no database.
 
 > [!WARNING]
@@ -70,14 +71,21 @@ docker run -d --name heautou --restart unless-stopped \
 
 ## Connecting an app
 
-1. **Add a user.** Under **Users**, choose **New user** and set a username and password. Name, email and
-   groups are optional; they are put into the user's tokens. Only users in the `heautou-admin` group can
-   use the admin UI; everyone else can only sign in to your apps.
+1. **Add a user.** Under **Users**, choose **New user** and set a username. Name, email, groups and custom
+   claims are optional; they are put into the user's tokens. Leave the password empty to invite them instead:
+   Heautou gives you a link to send them (see [Managing users](#managing-users)). Only users in the
+   `heautou-admin` group can use the admin UI; everyone else can only sign in to your apps.
 2. **Add a client.** Under **Clients**, choose **New client**:
    - **Name:** what the sign-in page shows, such as "Grafana".
    - **Redirect URIs:** the app's callback URL. The app's OIDC docs give it, and it must match exactly.
    - **Client authentication:** keep **Secret, Basic header** unless the app says otherwise. Choose
      **Public (PKCE)** for browser-only or mobile apps that cannot keep a secret.
+   - **Allowed groups:** leave empty to let every user in. Otherwise only members of these groups may sign in
+     to the app; anyone else is told it is not for them.
+   - **Groups claim:** the claim the app reads groups from. It is `groups` unless the app wants another name,
+     such as `roles`.
+   - **Client credentials:** turn on for a service with no users, such as a backup job, that gets its own
+     token with `grant_type=client_credentials`. Such a client needs no redirect URI.
 3. **Copy the settings into the app.** Open the client's row on the Clients page:
 
    | The app asks for            | Use                                                           |
@@ -89,22 +97,46 @@ docker run -d --name heautou --restart unless-stopped \
    | Scopes                      | `openid profile email` (add `groups` for group-based roles)   |
 
    The **Overview** page shows the issuer and discovery URL with copy buttons. If an app wants each
-   endpoint entered separately, they are `<ISSUER_URL>/auth`, `/token`, `/me` (userinfo), `/jwks`
-   and `/session/end` (logout).
+   endpoint entered separately, they are `<ISSUER_URL>/auth`, `/token`, `/me` (userinfo), `/jwks`,
+   `/token/introspection` and `/session/end` (logout). An API can ask the introspection endpoint whether a
+   token it was sent is still good, with a confidential client's ID and secret.
 
 Signing in from the app sends you to Heautou's sign-in page and then back to the app. There is no
 consent screen: the apps you added are trusted.
 
 ### Claims
 
-| Scope     | Claims                                      |
-| --------- | ------------------------------------------- |
-| `openid`  | `sub` (the user's ID)                       |
-| `profile` | `name`, `preferred_username` (the username) |
-| `email`   | `email`, `email_verified`                   |
-| `groups`  | `groups`                                    |
+| Scope     | Claims                                                                    |
+| --------- | ------------------------------------------------------------------------- |
+| `openid`  | `sub` (the user's ID)                                                     |
+| `profile` | `name`, `preferred_username` (the username), and the user's custom claims |
+| `email`   | `email`, `email_verified`                                                 |
+| `groups`  | `groups`, or the client's own groups claim name                           |
 
-Add `offline_access` to the scopes for a refresh token.
+Add `offline_access` to the scopes for a refresh token. Custom claims are set per user, one `name=value` per
+line, and are sent as strings; the names the provider sets itself, such as `sub` or `email`, are refused.
+
+## Managing users
+
+- **Invites and password resets.** A user's link button makes a link to send them by chat or however you like:
+  Heautou sends no email. The link sets their password and works once, for 24 hours. A new link replaces the
+  old one.
+- **Their own account.** Every user can open `/account` to see their details, change their password, and see
+  or end where they are signed in. Signing in to the admin UI without being an admin lands there too.
+- **Disable and sign out.** Disabling a user turns them away at once: their tokens stop working and they can't
+  sign in again until you enable them. The sessions button lists where a user is signed in and ends one or all
+  of them. Heautou refuses to disable or delete the last admin.
+- **Groups.** The **Groups** page lists every group with its members and the clients limited to it. Renaming a
+  group renames it on every user and client. A group a client is limited to can't be deleted, and nor can
+  `heautou-admin`.
+
+## Settings
+
+- **Branding.** A name and a logo (PNG, JPEG, WebP or SVG, up to 256 KB) for the sign-in page, the account
+  page and the sidebar, in place of "Heautou".
+- **Signing keys.** Heautou rotates its signing key at start-up once it is 90 days old, and **Rotate now** does it
+  at once. The previous key stays published, so tokens it signed still verify; tokens signed with keys older than
+  that stop verifying, and those users sign in again.
 
 ## Configuration
 
@@ -155,7 +187,9 @@ Everything lives in the data folder, which is the `heautou-data` volume in Docke
 - `clients.json`: apps and their secrets
 - `users.json`: users, with hashed passwords
 - `keys.json`: the token signing keys
-- `admin-sessions.json`: signed-in admin browsers (hashed tokens)
+- `admin-sessions.json`: browsers signed in to the admin UI or the account page (hashed tokens)
+- `password-links.json`: open invite and reset links (hashed tokens)
+- `branding.json`: the name and logo
 - `oidc/`: sessions, codes and tokens
 
 Heautou makes its files readable by its own user only (mode 0600). Back up the folder to back up Heautou. Deleting `keys.json` makes new keys on the next start, and
@@ -171,6 +205,8 @@ What Heautou does:
 - **The admin API takes only same-origin JSON.** `/graphql` answers only `POST` with `Content-Type:
   application/json` from pages on the issuer's origin, so another website can't drive it through your browser.
   Open the admin UI at the issuer's address: requests from any other address are refused.
+- **Users can be shut out at once.** Every sign-in, token refresh and userinfo call checks the user is
+  enabled and in the client's allowed groups.
 - **Password guessing is slowed.** Sign-ins are limited to 5 failures per username and 10 per address in
   15 minutes, and sign-in routes to 120 requests a minute per address. Unknown usernames take as long to
   refuse as wrong passwords.

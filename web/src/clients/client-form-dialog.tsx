@@ -1,14 +1,16 @@
 import type { ClientFieldsFragment } from '@/__generated__/graphql';
 import { AUTH_METHOD_OPTIONS, AUTH_METHODS, authMethodOf } from '@/clients/auth-methods';
-import { InputField, SelectField, TextareaField, useAppForm } from '@/components/app-form';
+import { ComboboxField, InputField, SelectField, SwitchField, TextareaField, useAppForm } from '@/components/app-form';
 import { DialogLayout } from '@/components/dialog-layout';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { FormElement } from '@/components/ui/form-element';
-import { useCreateClient, useUpdateClient } from '@/core/admin';
+import { useCreateClient, useGroupOptions, useUpdateClient } from '@/core/admin';
 import { linesOf, messageOf } from '@/core/lists';
 
 const URI_ROWS = 3;
+/** The claim groups are released in unless the application reads another. */
+const DEFAULT_GROUPS_CLAIM = 'groups';
 
 interface ClientFormDialogProps {
   /** The client to edit, or null to add one. */
@@ -26,6 +28,7 @@ interface ClientFormDialogProps {
  */
 export function ClientFormDialog({ client, open, onOpenChange, onSaved }: ClientFormDialogProps) {
   const isEdit = client !== null;
+  const groupOptions = useGroupOptions();
   const create = useCreateClient();
   const update = useUpdateClient();
   const failure = isEdit ? update.error : create.error;
@@ -37,6 +40,9 @@ export function ClientFormDialog({ client, open, onOpenChange, onSaved }: Client
       authMethod: client?.authMethod ?? 'CLIENT_SECRET_BASIC',
       redirectUris: client?.redirectUris.join('\n') ?? '',
       postLogoutRedirectUris: client?.postLogoutRedirectUris.join('\n') ?? '',
+      allowedGroups: client?.allowedGroups ?? [],
+      groupsClaim: client?.groupsClaim ?? DEFAULT_GROUPS_CLAIM,
+      allowClientCredentials: client?.allowClientCredentials ?? false,
     },
     onSubmit: async ({ value }) => {
       const input = {
@@ -44,6 +50,9 @@ export function ClientFormDialog({ client, open, onOpenChange, onSaved }: Client
         authMethod: authMethodOf(value.authMethod),
         redirectUris: linesOf(value.redirectUris),
         postLogoutRedirectUris: linesOf(value.postLogoutRedirectUris),
+        allowedGroups: value.allowedGroups,
+        groupsClaim: value.groupsClaim.trim() || DEFAULT_GROUPS_CLAIM,
+        allowClientCredentials: value.allowClientCredentials,
       };
       const saved = isEdit
         ? await update.mutateAsync({ clientId: client.clientId, input })
@@ -91,12 +100,14 @@ export function ClientFormDialog({ client, open, onOpenChange, onSaved }: Client
             form={form}
             name="redirectUris"
             label="Redirect URIs"
-            required
             rows={URI_ROWS}
-            description="One per line. The application's callback, matched exactly."
+            description="One per line. The application's callback, matched exactly. Not needed for a client that only uses client credentials."
             placeholder="https://grafana.example.com/login/generic_oauth"
             validators={{
-              onChange: ({ value }) => (linesOf(value).length > 0 ? undefined : 'Add at least one redirect URI.'),
+              onChange: ({ value, fieldApi }) =>
+                linesOf(value).length > 0 || fieldApi.form.getFieldValue('allowClientCredentials')
+                  ? undefined
+                  : 'Add at least one redirect URI.',
             }}
           />
           <TextareaField
@@ -105,6 +116,31 @@ export function ClientFormDialog({ client, open, onOpenChange, onSaved }: Client
             label="Post-logout redirect URIs"
             rows={URI_ROWS}
             description="One per line. Where the application may send users after signing out. Optional."
+          />
+          <ComboboxField
+            form={form}
+            name="allowedGroups"
+            label="Allowed groups"
+            description="Only users in one of these groups may sign in to it. Leave empty to let every user in."
+            multiple
+            freeText
+            options={groupOptions}
+            placeholder="Every user"
+          />
+          <InputField
+            form={form}
+            name="groupsClaim"
+            label="Groups claim"
+            description="The claim the user's groups are released in. Change it for an application that reads roles from another name."
+            placeholder={DEFAULT_GROUPS_CLAIM}
+          />
+          <SwitchField
+            form={form}
+            name="allowClientCredentials"
+            label="Allow client credentials"
+            description="Lets the application get tokens for itself, with no user, for a backup job or a service calling an API."
+            // Whether redirect URIs are needed turns on this switch, so they are checked again when it moves.
+            listeners={{ onChange: ({ fieldApi }) => fieldApi.form.validateField('redirectUris', 'change') }}
           />
           {failure === null ? null : <Alert variant="destructive" title="Not saved" description={messageOf(failure)} />}
         </FormElement>

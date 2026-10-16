@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import express, { type Express, type Request, type Response } from 'express';
 import { createYoga } from 'graphql-yoga';
+import { createAccountRouter } from '../admin/account.ts';
 import { adminUrls } from '../admin/admin-client.ts';
 import { createAdminRouter, requireAdmin } from '../admin/routes.ts';
 import { isProduction, OIDC_MOUNT_PATH, trustProxy } from '../core/config.ts';
@@ -47,10 +48,16 @@ export function createApp(services: Services): Express {
     // The guards below decide who may call; Yoga's own CORS would answer any origin.
     cors: false,
     plugins: [useOperationLimits()],
-    context: ({ res }) => ({
+    context: ({ res }): Context => ({
       clients: services.clients,
       users: services.users,
       issuer: services.issuer,
+      host: services.host,
+      sessions: services.sessions,
+      keys: services.keys,
+      branding: services.branding,
+      passwordLinks: services.passwordLinks,
+      adminSessions: services.adminSessions,
       viewer: res.locals.viewer as PublicUser,
     }),
   });
@@ -71,8 +78,9 @@ export function createApp(services: Services): Express {
   );
   app.all(GRAPHQL_ENDPOINT, (req, res) => yoga(req, res));
   app.use(createAdminRouter({ ...services, throttle }));
+  app.use(createAccountRouter({ ...services, throttle }));
   app.use(createInteractionRouter({ ...services, origin, throttle }));
-  app.use(OIDC_MOUNT_PATH, services.provider.callback());
+  app.use(OIDC_MOUNT_PATH, (req, res) => services.host.handle(req, res));
 
   const hasWebBuild = existsSync(WEB_DIST);
   if (hasWebBuild) {

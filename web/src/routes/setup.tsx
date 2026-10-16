@@ -8,7 +8,7 @@ import { PasswordField } from '@/components/password-field';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { FormElement } from '@/components/ui/form-element';
-import { ShieldCheck } from '@/core/app-icons';
+import { BrandIcon } from '@/core/brand';
 import { jsonReply, postJson } from '@/core/json-reply';
 import { messageOf } from '@/core/lists';
 
@@ -102,7 +102,7 @@ function SetupPage() {
   return (
     <CenteredLayout
       level={1}
-      iconSlot={<ShieldCheck />}
+      iconSlot={<BrandIcon className="size-5" />}
       title="Set up Heautou"
       description={description}
       contentSlot={

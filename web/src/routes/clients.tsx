@@ -91,6 +91,17 @@ function ClientCredentials({ client }: { client: ClientFieldsFragment }) {
             value={uriList(client.postLogoutRedirectUris)}
             valueClassName="font-mono break-all whitespace-pre-line"
           />,
+          <PropertyRow
+            key="groups"
+            label="Allowed groups"
+            value={client.allowedGroups.length === 0 ? 'Every user' : client.allowedGroups.join(', ')}
+          />,
+          <PropertyRow key="claim" label="Groups claim" value={client.groupsClaim} valueClassName="font-mono" />,
+          <PropertyRow
+            key="credentials"
+            label="Client credentials"
+            value={client.allowClientCredentials ? 'Allowed' : 'Not allowed'}
+          />,
         ]}
       />
       {rotate.error === null ? null : (
@@ -158,7 +169,12 @@ function ClientsPage() {
                 open={openId === client.clientId}
                 onOpenChange={(next) => setOpenId(next ? client.clientId : null)}
                 title={client.name}
-                badgesSlot={<Badge variant="outline">{client.authMethod === 'NONE' ? 'Public' : 'Confidential'}</Badge>}
+                badgesSlot={
+                  <>
+                    <Badge variant="outline">{client.authMethod === 'NONE' ? 'Public' : 'Confidential'}</Badge>
+                    {client.allowedGroups.length === 0 ? null : <Badge variant="secondary">Limited</Badge>}
+                  </>
+                }
                 meta={<span className="font-mono text-foreground/60 text-xs">{client.clientId}</span>}
                 actionSlot={
                   <>

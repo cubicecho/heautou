@@ -7,7 +7,7 @@ import { CenteredLayout } from '@/components/centered-layout';
 import { PasswordField } from '@/components/password-field';
 import { Alert } from '@/components/ui/alert';
 import { FormElement } from '@/components/ui/form-element';
-import { ShieldCheck } from '@/core/app-icons';
+import { BrandIcon, useBrandName } from '@/core/brand';
 import { jsonReply, postJson } from '@/core/json-reply';
 import { messageOf } from '@/core/lists';
 
@@ -46,13 +46,16 @@ function LoginPage() {
     },
   });
 
+  const brandName = useBrandName();
   const description =
-    details.data === undefined ? 'Sign in to continue.' : `Sign in to continue to ${details.data.clientName}.`;
+    details.data === undefined
+      ? `Sign in with your ${brandName} account to continue.`
+      : `Sign in with your ${brandName} account to continue to ${details.data.clientName}.`;
 
   return (
     <CenteredLayout
       level={1}
-      iconSlot={<ShieldCheck />}
+      iconSlot={<BrandIcon className="size-5" />}
       title="Sign in"
       description={description}
       contentSlot={

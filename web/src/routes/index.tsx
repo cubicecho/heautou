@@ -15,6 +15,7 @@ const ENDPOINTS = [
   { label: 'Token', path: '/token' },
   { label: 'User info', path: '/me' },
   { label: 'JWKS', path: '/jwks' },
+  { label: 'Introspection', path: '/token/introspection' },
   { label: 'End session', path: '/session/end' },
 ] as const;
 
@@ -53,8 +54,8 @@ function OverviewPage() {
         <>
           <Alert
             variant="warning"
-            title="Keep this admin page on a trusted network"
-            description="It has no sign-in of its own, and the data directory holds client secrets and signing keys in plain text."
+            title="Keep this provider on a trusted network"
+            description="The data directory holds client secrets and signing keys in plain text, and the server has no TLS of its own: put it behind a proxy that does."
           />
           {query.isError ? <QueryError error={query.error} onRetry={query.refetch} what="the provider's URLs" /> : null}
           {info === undefined ? null : (

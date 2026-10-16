@@ -60,16 +60,22 @@ describe('admin sign-in', () => {
     expect(res.headers.get('access-control-allow-origin')).toBeNull();
   });
 
-  it('turns away a user outside the admin group', async () => {
+  it('sends a user outside the admin group to their account, not the admin API', async () => {
     app.services.users.create({ username: 'ada', password: PASSWORD, email: '', name: '', groups: [] });
     const browser = createBrowser(app.base);
     const callback = await signIn(app, '/admin/login', 'ada', PASSWORD, browser, `${app.base}/admin/callback`);
     const res = await browser.send(callback.pathname + callback.search);
-    expect(res.headers.get('location')).toMatch(/^\/error\?error=admin_required/);
-    expect((await browser.send('/graphql', { method: 'POST' })).status).not.toBe(HttpStatus.Ok);
+    expect(res.headers.get('location')).toBe('/account');
+    const gql = await browser.send('/graphql', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ query: VIEWER }),
+    });
+    expect(gql.status).toBe(HttpStatus.Forbidden);
+    expect((await browser.send('/admin/login')).headers.get('location')).toBe('/account');
   });
 
-  it('signs out an admin taken out of the group', async () => {
+  it('takes the admin API from an admin taken out of the group', async () => {
     const { users } = app.services;
     const bob = users.create({
       username: 'bob',
@@ -86,7 +92,7 @@ describe('admin sign-in', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ query: VIEWER }),
     });
-    expect(res.status).toBe(HttpStatus.Unauthorized);
+    expect(res.status).toBe(HttpStatus.Forbidden);
   });
 
   it('returns only to paths on this origin', async () => {

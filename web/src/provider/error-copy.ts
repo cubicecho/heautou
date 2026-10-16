@@ -53,10 +53,9 @@ const COPY: Record<string, ErrorCopy> = {
     description: 'Go back to the app to try again.',
     isClientSetup: false,
   },
-  admin_required: {
-    title: 'That account can’t use the admin UI',
-    description:
-      'Only users in the heautou-admin group can manage Heautou. Sign in with one of them, or ask an admin to add you.',
+  account_disabled: {
+    title: 'That account is disabled',
+    description: 'An admin turned it off. Ask them to enable it again.',
     isClientSetup: false,
   },
   admin_sign_in_failed: {

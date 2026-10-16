@@ -13,7 +13,10 @@ interface AdminSession {
 /** Sessions by the SHA-256 of their token, so the file alone cannot be replayed as a cookie. */
 export type AdminSessionDocument = Record<string, AdminSession>;
 
-/** The admin UI's sessions. */
+/**
+ * The web app's sessions: the admin UI's, and the account page's for users who are not admins. The cookie and the
+ * file keep the admin name they had before there was an account page.
+ */
 export interface AdminSessionStore {
   /**
    * Starts a session.
@@ -35,6 +38,12 @@ export interface AdminSessionStore {
    * @param token - The cookie's value.
    */
   remove: (token: string) => void;
+  /**
+   * Ends every session of one user, when they are disabled, removed or sign out everywhere.
+   *
+   * @param userId - The user.
+   */
+  removeUser: (userId: string) => void;
 }
 
 /**
@@ -76,6 +85,11 @@ export function createAdminSessionStore(
     remove: (token) => {
       const key = digest(token);
       file.update((sessions) => Object.fromEntries(Object.entries(live(sessions)).filter(([other]) => other !== key)));
+    },
+    removeUser: (userId) => {
+      file.update((sessions) =>
+        Object.fromEntries(Object.entries(live(sessions)).filter(([, session]) => session.userId !== userId)),
+      );
     },
   };
 }

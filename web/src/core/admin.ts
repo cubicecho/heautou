@@ -4,17 +4,29 @@ import {
   type ClientInput,
   ClientsDocument,
   CreateClientDocument,
+  CreatePasswordLinkDocument,
   CreateUserDocument,
   DeleteClientDocument,
+  DeleteGroupDocument,
   DeleteUserDocument,
+  EndUserSessionDocument,
+  GroupsDocument,
+  KeysDocument,
   type NewClientInput,
   type NewUserInput,
   ProviderDocument,
+  RenameGroupDocument,
   RotateClientSecretDocument,
+  RotateKeysDocument,
+  SetBrandingLogoDocument,
+  SetBrandingNameDocument,
+  SetUserDisabledDocument,
   SetUserPasswordDocument,
+  SignOutUserDocument,
   UpdateClientDocument,
   UpdateUserDocument,
   type UserInput,
+  UserSessionsDocument,
   UsersDocument,
   ViewerDocument,
 } from '@/__generated__/graphql';
@@ -27,6 +39,10 @@ const KEYS = {
   provider: ['provider'],
   clients: ['clients'],
   users: ['users'],
+  sessions: ['sessions'],
+  groups: ['groups'],
+  keys: ['keys'],
+  branding: ['branding'],
 } as const;
 
 /**
@@ -36,9 +52,14 @@ const KEYS = {
  * @param key - The list to refetch.
  * @returns The handler.
  */
-function refetching(queryClient: QueryClient, key: readonly string[]) {
-  return () => queryClient.invalidateQueries({ queryKey: key });
+function refetching(queryClient: QueryClient, ...keys: (readonly string[])[]) {
+  return () => Promise.all(keys.map((key) => queryClient.invalidateQueries({ queryKey: key })));
 }
+
+const brandingSchema = z.object({ name: z.string(), logoUrl: z.string().nullable() });
+
+/** What the sidebar and the sign-in pages show the provider as. */
+export type Branding = z.infer<typeof brandingSchema>;
 
 const signOutSchema = z.object({ redirectTo: z.string() });
 
@@ -95,7 +116,7 @@ export function useCreateClient() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (input: NewClientInput) => (await request(CreateClientDocument, { input })).createClient,
-    onSuccess: refetching(queryClient, KEYS.clients),
+    onSuccess: refetching(queryClient, KEYS.clients, KEYS.groups),
   });
 }
 
@@ -109,7 +130,7 @@ export function useUpdateClient() {
   return useMutation({
     mutationFn: async (vars: { clientId: string; input: ClientInput }) =>
       (await request(UpdateClientDocument, vars)).updateClient,
-    onSuccess: refetching(queryClient, KEYS.clients),
+    onSuccess: refetching(queryClient, KEYS.clients, KEYS.groups),
   });
 }
 
@@ -136,7 +157,7 @@ export function useDeleteClient() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (clientId: string) => (await request(DeleteClientDocument, { clientId })).deleteClient,
-    onSuccess: refetching(queryClient, KEYS.clients),
+    onSuccess: refetching(queryClient, KEYS.clients, KEYS.groups),
   });
 }
 
@@ -149,7 +170,7 @@ export function useCreateUser() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (input: NewUserInput) => (await request(CreateUserDocument, { input })).createUser,
-    onSuccess: refetching(queryClient, KEYS.users),
+    onSuccess: refetching(queryClient, KEYS.users, KEYS.groups),
   });
 }
 
@@ -162,7 +183,7 @@ export function useUpdateUser() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (vars: { id: string; input: UserInput }) => (await request(UpdateUserDocument, vars)).updateUser,
-    onSuccess: refetching(queryClient, KEYS.users),
+    onSuccess: refetching(queryClient, KEYS.users, KEYS.groups),
   });
 }
 
@@ -172,9 +193,11 @@ export function useUpdateUser() {
  * @returns The mutation.
  */
 export function useSetUserPassword() {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (vars: { id: string; password: string }) =>
       (await request(SetUserPasswordDocument, vars)).setUserPassword,
+    onSuccess: refetching(queryClient, KEYS.users),
   });
 }
 
@@ -187,6 +210,178 @@ export function useDeleteUser() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => (await request(DeleteUserDocument, { id })).deleteUser,
-    onSuccess: refetching(queryClient, KEYS.users),
+    onSuccess: refetching(queryClient, KEYS.users, KEYS.groups),
+  });
+}
+
+/**
+ * Disables or enables a user. Disabling ends their sessions and tokens.
+ *
+ * @returns The mutation.
+ */
+export function useSetUserDisabled() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (vars: { id: string; disabled: boolean }) =>
+      (await request(SetUserDisabledDocument, vars)).setUserDisabled,
+    onSuccess: refetching(queryClient, KEYS.users, KEYS.sessions),
+  });
+}
+
+/**
+ * Reads the browsers signed in as a user.
+ *
+ * @param id - The user.
+ * @returns The query.
+ */
+export function useUserSessions(id: string) {
+  return useQuery({
+    queryKey: [...KEYS.sessions, id],
+    queryFn: async () => (await request(UserSessionsDocument, { id })).user.sessions,
+  });
+}
+
+/**
+ * Ends one of a user's sessions.
+ *
+ * @returns The mutation.
+ */
+export function useEndUserSession() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (vars: { id: string; sessionId: string }) =>
+      (await request(EndUserSessionDocument, vars)).endUserSession,
+    onSuccess: refetching(queryClient, KEYS.sessions),
+  });
+}
+
+/**
+ * Ends every session and token of a user.
+ *
+ * @returns The mutation.
+ */
+export function useSignOutUser() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => (await request(SignOutUserDocument, { id })).signOutUser,
+    onSuccess: refetching(queryClient, KEYS.sessions),
+  });
+}
+
+/**
+ * Makes a link that sets a user's password. Their previous link stops working.
+ *
+ * @returns The mutation; it resolves to the link.
+ */
+export function useCreatePasswordLink() {
+  return useMutation({
+    mutationFn: async (id: string) => (await request(CreatePasswordLinkDocument, { id })).createPasswordLink,
+  });
+}
+
+/**
+ * Reads every group a user or client names.
+ *
+ * @returns The query.
+ */
+export function useGroups() {
+  return useQuery({ queryKey: KEYS.groups, queryFn: async () => (await request(GroupsDocument)).groups });
+}
+
+/**
+ * Lists the groups as options for a groups field.
+ *
+ * @returns One option per group, by name.
+ */
+export function useGroupOptions() {
+  const { data } = useGroups();
+  return (data ?? []).map(({ name }) => ({ value: name, label: name }));
+}
+
+/**
+ * Renames a group in every user and client.
+ *
+ * @returns The mutation.
+ */
+export function useRenameGroup() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (vars: { name: string; newName: string }) =>
+      (await request(RenameGroupDocument, vars)).renameGroup,
+    onSuccess: refetching(queryClient, KEYS.groups, KEYS.users, KEYS.clients),
+  });
+}
+
+/**
+ * Takes a group off every user.
+ *
+ * @returns The mutation; it resolves to how many users had it.
+ */
+export function useDeleteGroup() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (name: string) => (await request(DeleteGroupDocument, { name })).deleteGroup,
+    onSuccess: refetching(queryClient, KEYS.groups, KEYS.users),
+  });
+}
+
+/**
+ * Reads the signing keys.
+ *
+ * @returns The query.
+ */
+export function useKeys() {
+  return useQuery({ queryKey: KEYS.keys, queryFn: async () => (await request(KeysDocument)).keys });
+}
+
+/**
+ * Makes new signing and cookie keys.
+ *
+ * @returns The mutation.
+ */
+export function useRotateKeys() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => (await request(RotateKeysDocument)).rotateKeys,
+    onSuccess: (keys) => queryClient.setQueryData(KEYS.keys, keys),
+  });
+}
+
+/**
+ * Reads the provider's name and logo. Public: the sign-in pages show it too.
+ *
+ * @returns The query.
+ */
+export function useBranding() {
+  return useQuery({
+    queryKey: KEYS.branding,
+    queryFn: async () => jsonReply(await fetch('/admin/branding'), brandingSchema),
+    staleTime: Number.POSITIVE_INFINITY,
+  });
+}
+
+/**
+ * Renames the provider.
+ *
+ * @returns The mutation.
+ */
+export function useSetBrandingName() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (name: string) => (await request(SetBrandingNameDocument, { name })).setBrandingName,
+    onSuccess: (branding) => queryClient.setQueryData(KEYS.branding, branding),
+  });
+}
+
+/**
+ * Sets the logo from a data URL, or removes it with null.
+ *
+ * @returns The mutation.
+ */
+export function useSetBrandingLogo() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (dataUrl: string | null) => (await request(SetBrandingLogoDocument, { dataUrl })).setBrandingLogo,
+    onSuccess: (branding) => queryClient.setQueryData(KEYS.branding, branding),
   });
 }

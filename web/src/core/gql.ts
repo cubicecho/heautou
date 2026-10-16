@@ -8,6 +8,10 @@ const ENDPOINT = '/graphql';
 const ADMIN_LOGIN = '/admin/login';
 /** What `/graphql` answers when the admin session is missing or over. */
 const HTTP_UNAUTHORIZED = 401;
+/** What `/graphql` answers a signed-in user who is not an admin. */
+const HTTP_FORBIDDEN = 403;
+/** Where a user who is not an admin has their own page. */
+const ACCOUNT_PAGE = '/account';
 
 interface GraphQLResponse<T> {
   data?: T;
@@ -36,6 +40,7 @@ function errorOf(errors: { message: string }[]): Error {
  *
  * @remarks
  * Without an admin session the server answers 401, and the browser is sent to sign in, coming back to this page.
+ * A user who is signed in but not an admin gets 403, and is sent to their account page.
  */
 export async function request<TResult, TVariables>(
   document: TypedDocumentNode<TResult, TVariables>,
@@ -51,6 +56,10 @@ export async function request<TResult, TVariables>(
     const here = `${window.location.pathname}${window.location.search}`;
     window.location.assign(`${ADMIN_LOGIN}?return=${encodeURIComponent(here)}`);
     throw new Error('Your admin session ended. Signing in again…');
+  }
+  if (response.status === HTTP_FORBIDDEN && window.location.pathname !== ACCOUNT_PAGE) {
+    window.location.assign(ACCOUNT_PAGE);
+    throw new Error('Only admins may use this page.');
   }
   const body = ((await response.json().catch(() => null)) ?? {}) as GraphQLResponse<TResult>;
   if (body.error !== undefined) {

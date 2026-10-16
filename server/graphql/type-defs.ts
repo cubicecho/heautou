@@ -23,8 +23,31 @@ export const TYPE_DEFS = /* GraphQL */ `
     redirectUris: [String!]!
     "Where the provider may send the user after signing out."
     postLogoutRedirectUris: [String!]!
+    "Only users in one of these groups may sign in to it. Empty lets every user in."
+    allowedGroups: [String!]!
+    "The claim the user's groups are released in. groups unless the application reads another name."
+    groupsClaim: String!
+    "Whether it may get tokens for itself with the client credentials grant."
+    allowClientCredentials: Boolean!
     "When it was added, as an ISO 8601 string."
     createdAt: String!
+  }
+
+  "A claim of the operator's own, released with the profile scope."
+  type Claim {
+    name: String!
+    value: String!
+  }
+
+  "A browser signed in to the provider."
+  type Session {
+    id: ID!
+    "When they signed in, as an ISO 8601 string."
+    signedInAt: String
+    "When it ends unless used, as an ISO 8601 string."
+    expiresAt: String
+    "The names of the clients it signed in to."
+    clientNames: [String!]!
   }
 
   "Someone who can sign in through the provider."
@@ -39,8 +62,55 @@ export const TYPE_DEFS = /* GraphQL */ `
     name: String!
     "The groups claim."
     groups: [String!]!
+    "Claims of the operator's own."
+    claims: [Claim!]!
+    "A disabled user cannot sign in."
+    disabled: Boolean!
+    "False for an invited user who has not set a password yet."
+    hasPassword: Boolean!
+    "The browsers signed in as them, newest first."
+    sessions: [Session!]!
     "When they were added, as an ISO 8601 string."
     createdAt: String!
+  }
+
+  "A name users hold in their groups claim and clients may be limited to."
+  type Group {
+    name: String!
+    "Its users."
+    members: [User!]!
+    "The clients limited to it, among other groups."
+    clients: [Client!]!
+    "Whether it is the admin group, which cannot be renamed or removed."
+    isProtected: Boolean!
+  }
+
+  "A link a user opens to set their password."
+  type PasswordLink {
+    url: String!
+    "When it stops working, as an ISO 8601 string."
+    expiresAt: String!
+  }
+
+  "One key tokens are signed with."
+  type SigningKey {
+    kid: ID!
+    "Whether it signs new tokens. The others only verify older ones."
+    isCurrent: Boolean!
+  }
+
+  "The provider's signing and cookie keys."
+  type Keys {
+    "When they were last made, as an ISO 8601 string."
+    rotatedAt: String
+    signingKeys: [SigningKey!]!
+  }
+
+  "What the sign-in page and the sidebar show the provider as."
+  type Branding {
+    name: String!
+    "Where the logo is served. Null when there is none."
+    logoUrl: String
   }
 
   "What an application needs to be pointed at this provider."
@@ -51,6 +121,8 @@ export const TYPE_DEFS = /* GraphQL */ `
     discoveryUrl: String!
     "The scopes clients may ask for."
     scopes: [String!]!
+    "The token introspection endpoint."
+    introspectionUrl: String!
   }
 
   type Query {
@@ -66,6 +138,17 @@ export const TYPE_DEFS = /* GraphQL */ `
     users: [User!]!
     "One user."
     user(id: ID!): User!
+    "Every group a user or client names, by name."
+    groups: [Group!]!
+    "The signing keys."
+    keys: Keys!
+    "The provider's name and logo."
+    branding: Branding!
+  }
+
+  input ClaimInput {
+    name: String!
+    value: String!
   }
 
   "A client to add. A blank clientId gets a random one."
@@ -73,33 +156,42 @@ export const TYPE_DEFS = /* GraphQL */ `
     clientId: String
     name: String!
     authMethod: ClientAuthMethod!
+    "May be empty for a client that only uses client credentials."
     redirectUris: [String!]!
     postLogoutRedirectUris: [String!]!
+    allowedGroups: [String!]
+    groupsClaim: String
+    allowClientCredentials: Boolean
   }
 
-  "A client's new settings."
+  "A client's new settings. A field left out keeps its value."
   input ClientInput {
     name: String!
     authMethod: ClientAuthMethod!
     redirectUris: [String!]!
     postLogoutRedirectUris: [String!]!
+    allowedGroups: [String!]
+    groupsClaim: String
+    allowClientCredentials: Boolean
   }
 
-  "A user to add."
+  "A user to add. Without a password they are invited, and set one through createPasswordLink's link."
   input NewUserInput {
     username: String!
-    password: String!
+    password: String
     email: String!
     name: String!
     groups: [String!]!
+    claims: [ClaimInput!]
   }
 
-  "A user's new details. The password is changed with setUserPassword."
+  "A user's new details. The password is changed with setUserPassword; claims left out are kept."
   input UserInput {
     username: String!
     email: String!
     name: String!
     groups: [String!]!
+    claims: [ClaimInput!]
   }
 
   type Mutation {
@@ -117,7 +209,25 @@ export const TYPE_DEFS = /* GraphQL */ `
     updateUser(id: ID!, input: UserInput!): User!
     "Sets a user's password."
     setUserPassword(id: ID!, password: String!): User!
-    "Removes a user."
+    "Removes a user, and ends their sessions and tokens."
     deleteUser(id: ID!): User!
+    "Disables or enables a user. Disabling ends their sessions and tokens."
+    setUserDisabled(id: ID!, disabled: Boolean!): User!
+    "Ends one of a user's sessions, and the tokens it gave clients."
+    endUserSession(id: ID!, sessionId: ID!): User!
+    "Ends every session and token of a user."
+    signOutUser(id: ID!): User!
+    "Makes a link that sets a user's password, for an invite or a reset. Their previous link stops working."
+    createPasswordLink(id: ID!): PasswordLink!
+    "Renames a group in every user and client."
+    renameGroup(name: String!, newName: String!): Group!
+    "Takes a group off every user. Refused while a client is limited to it. Returns how many users had it."
+    deleteGroup(name: String!): Int!
+    "Makes new signing and cookie keys. The previous ones keep verifying what they signed."
+    rotateKeys: Keys!
+    "Names the provider on the sign-in page and in the sidebar."
+    setBrandingName(name: String!): Branding!
+    "Sets the logo from a base64 data URL (PNG, JPEG, WebP or SVG), or removes it with null."
+    setBrandingLogo(dataUrl: String): Branding!
   }
 `;

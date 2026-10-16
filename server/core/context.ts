@@ -1,12 +1,12 @@
-import type { ClientStore } from '../store/clients.ts';
-import type { PublicUser, UserStore } from '../store/users.ts';
+import type { PublicUser } from '../store/users.ts';
+import type { Services } from './services.ts';
 
-/** What every resolver is given. */
-export interface Context {
-  clients: ClientStore;
-  users: UserStore;
-  /** The provider's public URL, ending in `/oidc`. */
-  issuer: string;
+/** What every resolver is given: the services, and who is asking. */
+export interface Context
+  extends Pick<
+    Services,
+    'clients' | 'users' | 'issuer' | 'host' | 'sessions' | 'keys' | 'branding' | 'passwordLinks' | 'adminSessions'
+  > {
   /** The signed-in admin making the request. */
   viewer: PublicUser;
 }

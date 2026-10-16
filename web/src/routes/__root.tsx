@@ -1,26 +1,31 @@
-import { createLink, createRootRoute, Outlet, useRouterState } from '@tanstack/react-router';
+import { createLink, createRootRoute, Link, Outlet, useRouterState } from '@tanstack/react-router';
 import { RouteError } from '@/components/route-error';
 import { BarNavItem, Sidebar, SidebarNavItem, SidebarSection } from '@/components/sidebar';
 import { SidebarLayout } from '@/components/split-layout';
 import { Button } from '@/components/ui/button';
+import { Settings, UserRound } from '@/components/ui/icons';
 import { ThemePicker } from '@/components/ui/theme-picker';
 import { useThemePreference } from '@/components/ui/theme-preference';
 import { signOut, useViewer } from '@/core/admin';
-import { AppWindow, LayoutDashboard, LogOut, ShieldCheck, UsersRound } from '@/core/app-icons';
+import { AppWindow, LayoutDashboard, LogOut, Tags, UsersRound } from '@/core/app-icons';
+import { BrandIcon, useBrandName } from '@/core/brand';
 
 const SidebarLink = createLink(SidebarNavItem);
 const BarLink = createLink(BarNavItem);
 /**
- * The pages the provider sends a browser to: sign in, sign out, signed out and errors, and the first-admin
- * setup. They are for whoever is signing in to an app, so they are drawn without the admin shell.
+ * The pages the provider sends a browser to: sign in, sign out, signed out and errors, the first-admin setup, and
+ * a user's own account and password link. They are for whoever is signing in to an app, not only admins, so they
+ * are drawn without the admin shell.
  */
-const PROVIDER_PAGES = ['/login/', '/logout', '/logged-out', '/error', '/setup'];
+const PROVIDER_PAGES = ['/login/', '/logout', '/logged-out', '/error', '/setup', '/account', '/set-password'];
 
 /** The admin pages, in the order the sidebar lists them. */
 const PLACES = [
   { to: '/', label: 'Overview', Icon: LayoutDashboard },
   { to: '/clients', label: 'Clients', Icon: AppWindow },
   { to: '/users', label: 'Users', Icon: UsersRound },
+  { to: '/groups', label: 'Groups', Icon: Tags },
+  { to: '/settings', label: 'Settings', Icon: Settings },
 ] as const;
 
 export const Route = createRootRoute({
@@ -34,9 +39,24 @@ export const Route = createRootRoute({
 function Brand() {
   return (
     <div className="flex items-center gap-2 px-2 py-1 font-semibold text-sm">
-      <ShieldCheck className="size-4" aria-hidden />
-      Heautou
+      <BrandIcon className="size-4" />
+      {useBrandName()}
     </div>
+  );
+}
+
+/**
+ * The narrow bar's way to the signed-in user's own page.
+ */
+function AccountLink() {
+  return (
+    <Button
+      variant="ghost"
+      size="icon-sm"
+      aria-label="My account"
+      iconSlot={<UserRound />}
+      linkSlot={<Link to="/account" />}
+    />
   );
 }
 
@@ -79,6 +99,7 @@ function AdminShell({ pathname }: { pathname: string }) {
       actionSlot={
         <div className="flex items-center gap-1">
           <ThemePicker variant="compact" />
+          <AccountLink />
           <Button variant="ghost" size="icon-sm" aria-label={signOutLabel} iconSlot={<LogOut />} onClick={signOut} />
         </div>
       }
@@ -97,6 +118,7 @@ function AdminShell({ pathname }: { pathname: string }) {
           }
           footerSlot={
             <>
+              <SidebarLink to="/account" label="My account" iconSlot={<UserRound />} active={false} />
               <SidebarNavItem label={signOutLabel} iconSlot={<LogOut />} onClick={signOut} />
               <ThemePicker variant="compact" />
             </>

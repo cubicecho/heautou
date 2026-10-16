@@ -116,3 +116,71 @@ export async function adminGql(browser: Browser, query: string, variables: Recor
   });
   return res.json();
 }
+
+/** The tokens a confidential client gets for a user. */
+export interface Tokens {
+  access_token: string;
+  id_token: string;
+  refresh_token?: string;
+}
+
+/**
+ * Signs a user in to a confidential client and swaps the code for tokens.
+ *
+ * @param app - The running app.
+ * @param client - The client, with its secret.
+ * @param username - Who signs in.
+ * @param [scope] - What the client asks for.
+ * @param [browser] - The browser, so a test can sign in again with its session.
+ * @returns The tokens.
+ */
+export async function signInForTokens(
+  app: TestApp,
+  client: { clientId: string; clientSecret: string | null },
+  username: string,
+  scope = 'openid profile email groups',
+  browser: Browser = createBrowser(app.base),
+): Promise<Tokens> {
+  const { issuer } = app.services;
+  const authorize = new URL(`${issuer}/auth`);
+  authorize.search = new URLSearchParams({
+    client_id: client.clientId,
+    redirect_uri: REDIRECT_URI,
+    response_type: 'code',
+    scope,
+    ...(scope.includes('offline_access') ? { prompt: 'consent' } : {}),
+  }).toString();
+  const callback = await signIn(app, authorize.pathname + authorize.search, username, PASSWORD, browser);
+  const tokenRes = await fetch(`${issuer}/token`, {
+    method: 'POST',
+    headers: { authorization: basicAuth(client), 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'authorization_code',
+      code: callback.searchParams.get('code') ?? '',
+      redirect_uri: REDIRECT_URI,
+    }),
+  });
+  expect(tokenRes.status).toBe(HttpStatus.Ok);
+  return tokenRes.json();
+}
+
+/**
+ * Builds a client's HTTP Basic header.
+ *
+ * @param client - The client, with its secret.
+ * @returns The header's value.
+ */
+export function basicAuth(client: { clientId: string; clientSecret: string | null }): string {
+  return `Basic ${Buffer.from(`${client.clientId}:${client.clientSecret ?? ''}`).toString('base64')}`;
+}
+
+/**
+ * Reads a JWT's payload without checking it.
+ *
+ * @param jwt - The token.
+ * @returns Its claims.
+ */
+export function payloadOf(jwt: string): Record<string, unknown> {
+  const [, payload = ''] = jwt.split('.');
+  return JSON.parse(Buffer.from(payload, 'base64url').toString());
+}

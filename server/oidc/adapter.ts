@@ -2,22 +2,73 @@ import path from 'node:path';
 import type { Adapter, AdapterFactory, AdapterPayload, ResponseType } from 'oidc-provider';
 import { MS_PER_SECOND } from '../core/wire.ts';
 import { ClientAuthMethod, type ClientStore, type OidcClient } from '../store/clients.ts';
-import { openJsonFile } from '../store/json-file.ts';
+import { type JsonFile, openJsonFile } from '../store/json-file.ts';
 
 /** One stored artefact: a session, a code, a token, a grant. */
-interface StoredEntry {
+export interface StoredEntry {
   payload: AdapterPayload;
   /** When it stops being found, in epoch milliseconds. Null for never. */
   expiresAt: number | null;
 }
 
 /** Every artefact of one model, by id. */
-type ModelDocument = Record<string, StoredEntry>;
+export type ModelDocument = Record<string, StoredEntry>;
+
+/**
+ * The provider's model files, one per model, each opened once. The provider is rebuilt when its keys or claims
+ * change, and the session tools read the same files, so every reader must share one in-memory copy.
+ */
+export interface ModelFiles {
+  /**
+   * Opens a model's file, or returns the one already open.
+   *
+   * @param model - The model's name, such as `Session`.
+   * @returns Its document.
+   */
+  open: (model: string) => JsonFile<ModelDocument>;
+  /** The clock, in epoch milliseconds. */
+  now: () => number;
+}
+
+/**
+ * Opens model files under a directory as `<dir>/<Model>.json`.
+ *
+ * @param dir - The directory.
+ * @param [now] - The clock, in epoch milliseconds.
+ * @returns The files.
+ */
+export function createModelFiles(dir: string, now: () => number = Date.now): ModelFiles {
+  const opened = new Map<string, JsonFile<ModelDocument>>();
+  return {
+    open: (model) => {
+      const existing = opened.get(model);
+      if (existing !== undefined) {
+        return existing;
+      }
+      const file = openJsonFile<ModelDocument>(path.join(dir, `${model}.json`), {});
+      opened.set(model, file);
+      return file;
+    },
+    now,
+  };
+}
+
+/**
+ * Says whether a stored entry has not expired.
+ *
+ * @param entry - The entry.
+ * @param now - The time, in epoch milliseconds.
+ * @returns True until its expiry.
+ */
+export function isLive(entry: StoredEntry, now: number): boolean {
+  return entry.expiresAt === null || entry.expiresAt > now;
+}
 
 /** The model whose records are the operator's clients rather than the provider's own artefacts. */
 const CLIENT_MODEL = 'Client';
 /** The flows every client may use. */
-const GRANT_TYPES = ['authorization_code', 'refresh_token'];
+const SIGN_IN_GRANT_TYPES = ['authorization_code', 'refresh_token'];
+const CLIENT_CREDENTIALS = 'client_credentials';
 const RESPONSE_TYPES: ResponseType[] = ['code'];
 
 /**
@@ -28,6 +79,12 @@ const RESPONSE_TYPES: ResponseType[] = ['code'];
  */
 export function clientMetadata(client: OidcClient): AdapterPayload {
   const isPublic = client.authMethod === ClientAuthMethod.None;
+  // A client with no redirect URIs is a service that only gets tokens for itself.
+  const signsUsersIn = client.redirectUris.length > 0;
+  const grantTypes = [
+    ...(signsUsersIn ? SIGN_IN_GRANT_TYPES : []),
+    ...(client.allowClientCredentials && isPublic === false ? [CLIENT_CREDENTIALS] : []),
+  ];
   return {
     client_id: client.clientId,
     client_name: client.name,
@@ -35,8 +92,8 @@ export function clientMetadata(client: OidcClient): AdapterPayload {
     token_endpoint_auth_method: client.authMethod,
     redirect_uris: client.redirectUris,
     post_logout_redirect_uris: client.postLogoutRedirectUris,
-    grant_types: GRANT_TYPES,
-    response_types: RESPONSE_TYPES,
+    grant_types: grantTypes,
+    response_types: signsUsersIn ? RESPONSE_TYPES : [],
   };
 }
 
@@ -69,21 +126,18 @@ function createClientAdapter(clients: ClientStore, builtIns: AdapterPayload[]): 
 }
 
 /**
- * Keeps one model's artefacts in `<dir>/<Model>.json`.
+ * Keeps one model's artefacts in its file.
  *
- * @param file - The model's file.
+ * @param document - The model's file.
  * @param now - The clock, in epoch milliseconds.
  * @returns The adapter.
  *
  * @remarks
  * Expired entries are dropped whenever the file is written, so it only grows with live sessions and tokens.
  */
-function createFileAdapter(file: string, now: () => number): Adapter {
-  const document = openJsonFile<ModelDocument>(file, {});
-
-  const isLive = (entry: StoredEntry): boolean => entry.expiresAt === null || entry.expiresAt > now();
-
-  const live = (): [string, StoredEntry][] => Object.entries(document.read()).filter(([, entry]) => isLive(entry));
+function createFileAdapter(document: JsonFile<ModelDocument>, now: () => number): Adapter {
+  const live = (): [string, StoredEntry][] =>
+    Object.entries(document.read()).filter(([, entry]) => isLive(entry, now()));
 
   const write = (change: (entries: [string, StoredEntry][]) => [string, StoredEntry][]): void => {
     document.update(() => Object.fromEntries(change(live())));
@@ -99,7 +153,7 @@ function createFileAdapter(file: string, now: () => number): Adapter {
     },
     find: async (id) => {
       const entry = document.read()[id];
-      const isFound = entry !== undefined && isLive(entry);
+      const isFound = entry !== undefined && isLive(entry, now());
       return isFound ? entry.payload : undefined;
     },
     findByUid: async (uid) => findWhere((payload) => payload.uid === uid),
@@ -124,13 +178,11 @@ function createFileAdapter(file: string, now: () => number): Adapter {
 
 /** What the adapter factory is built from. */
 export interface AdapterSettings {
-  /** The directory the model files go in. */
-  dir: string;
+  /** The model files. */
+  files: ModelFiles;
   clients: ClientStore;
   /** Client metadata served before the store's, for the server's own clients. */
   builtInClients?: AdapterPayload[];
-  /** The clock, in epoch milliseconds. */
-  now?: () => number;
 }
 
 /**
@@ -140,11 +192,11 @@ export interface AdapterSettings {
  * @returns A factory the provider calls once per model.
  */
 export function createAdapterFactory(settings: AdapterSettings): AdapterFactory {
-  const { dir, clients, builtInClients = [], now = Date.now } = settings;
+  const { files, clients, builtInClients = [] } = settings;
   return (model) => {
     if (model === CLIENT_MODEL) {
       return createClientAdapter(clients, builtInClients);
     }
-    return createFileAdapter(path.join(dir, `${model}.json`), now);
+    return createFileAdapter(files.open(model), files.now);
   };
 }

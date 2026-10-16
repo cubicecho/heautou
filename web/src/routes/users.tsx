@@ -8,12 +8,15 @@ import { EmptyState } from '@/components/page';
 import { PageLayout } from '@/components/page-layout';
 import { QueryState } from '@/components/query-state';
 import { Alert } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { KeyRound, Pencil, Plus, Trash2 } from '@/components/ui/icons';
-import { useDeleteUser, useUsers } from '@/core/admin';
-import { UsersRound } from '@/core/app-icons';
+import { useDeleteUser, useSetUserDisabled, useUsers } from '@/core/admin';
+import { Ban, Link2, MonitorSmartphone, UserRoundCheck, UsersRound } from '@/core/app-icons';
 import { messageOf } from '@/core/lists';
 import { PasswordDialog } from '@/users/password-dialog';
+import { PasswordLinkDialog } from '@/users/password-link-dialog';
+import { SessionsDialog } from '@/users/sessions-dialog';
 import { UserFormDialog } from '@/users/user-form-dialog';
 
 export const Route = createFileRoute('/users')({ component: UsersPage });
@@ -23,7 +26,9 @@ type Dialog =
   | { kind: 'closed' }
   | { kind: 'new' }
   | { kind: 'edit'; user: UserFieldsFragment }
-  | { kind: 'password'; user: UserFieldsFragment };
+  | { kind: 'password'; user: UserFieldsFragment }
+  | { kind: 'link'; user: UserFieldsFragment }
+  | { kind: 'sessions'; user: UserFieldsFragment };
 
 /**
  * A line on who a user is: their name, email and groups, whichever they have.
@@ -37,11 +42,26 @@ function summaryOf(user: UserFieldsFragment): string {
 }
 
 /**
- * The users who can sign in, with add, edit, password and delete.
+ * The badges a user's row carries: whether they are disabled, or invited and not signed up yet.
+ *
+ * @param user - The user.
+ * @returns The badges, or null for a user with neither.
+ */
+function badgesOf(user: UserFieldsFragment) {
+  if (user.disabled) {
+    return <Badge variant="destructive">Disabled</Badge>;
+  }
+  return user.hasPassword ? null : <Badge variant="outline">Invited</Badge>;
+}
+
+/**
+ * The users who can sign in, with add, edit, password links, sessions, disable and delete.
  */
 function UsersPage() {
   const query = useUsers();
   const remove = useDeleteUser();
+  const setDisabled = useSetUserDisabled();
+  const failure = remove.error ?? setDisabled.error;
   const users = query.data ?? [];
   const [dialog, setDialog] = useState<Dialog>({ kind: 'closed' });
   const close = (open: boolean) => {
@@ -66,8 +86,8 @@ function UsersPage() {
       contentClassName="gap-4"
       contentSlot={
         <>
-          {remove.error === null ? null : (
-            <Alert variant="destructive" title="User not deleted" description={messageOf(remove.error)} />
+          {failure === null ? null : (
+            <Alert variant="destructive" title="User not changed" description={messageOf(failure)} />
           )}
           <QueryState
             query={query}
@@ -95,7 +115,9 @@ function UsersPage() {
               <ListItem
                 key={user.id}
                 title={user.username}
+                titleClassName={user.disabled ? 'text-foreground/60' : undefined}
                 description={summaryOf(user)}
+                meta={badgesOf(user)}
                 actionSlot={
                   <>
                     <Button
@@ -107,18 +129,59 @@ function UsersPage() {
                     />
                     <Button
                       aria-label={`Set ${user.username}'s password`}
+                      hint="Set password"
                       variant="outline"
                       size="icon-sm"
                       iconSlot={<KeyRound />}
                       onClick={() => setDialog({ kind: 'password', user })}
                     />
+                    <Button
+                      aria-label={
+                        user.hasPassword ? `Make a reset link for ${user.username}` : `Invite ${user.username}`
+                      }
+                      hint={user.hasPassword ? 'Reset link' : 'Invite link'}
+                      variant="outline"
+                      size="icon-sm"
+                      iconSlot={<Link2 />}
+                      onClick={() => setDialog({ kind: 'link', user })}
+                    />
+                    <Button
+                      aria-label={`${user.username}'s sessions`}
+                      hint="Sessions"
+                      variant="outline"
+                      size="icon-sm"
+                      iconSlot={<MonitorSmartphone />}
+                      onClick={() => setDialog({ kind: 'sessions', user })}
+                    />
+                    {user.disabled ? (
+                      <Button
+                        aria-label={`Enable ${user.username}`}
+                        hint="Enable"
+                        variant="outline"
+                        size="icon-sm"
+                        iconSlot={<UserRoundCheck />}
+                        onClick={() => setDisabled.mutate({ id: user.id, disabled: false })}
+                      />
+                    ) : (
+                      <ConfirmButton
+                        aria-label={`Disable ${user.username}`}
+                        hint="Disable"
+                        variant="destructive-outline"
+                        size="icon-sm"
+                        iconSlot={<Ban />}
+                        title={`Disable ${user.username}?`}
+                        description="They are signed out of every browser and application at once, and cannot sign in until enabled again."
+                        confirmLabel="Disable"
+                        onConfirm={() => setDisabled.mutate({ id: user.id, disabled: true })}
+                      />
+                    )}
                     <ConfirmButton
                       aria-label={`Delete ${user.username}`}
                       variant="destructive-outline"
                       size="icon-sm"
                       iconSlot={<Trash2 />}
                       title={`Delete ${user.username}?`}
-                      description="They can no longer sign in to any client. Sessions already signed in end when they next refresh."
+                      description="They can no longer sign in to any client, and their sessions and tokens end at once."
                       onConfirm={() => remove.mutate(user.id)}
                     />
                   </>
@@ -132,10 +195,17 @@ function UsersPage() {
               user={dialog.kind === 'edit' ? dialog.user : null}
               open
               onOpenChange={close}
+              onInvited={(user) => setDialog({ kind: 'link', user })}
             />
           ) : null}
           {dialog.kind === 'password' ? (
             <PasswordDialog key={dialog.user.id} user={dialog.user} open onOpenChange={close} />
+          ) : null}
+          {dialog.kind === 'link' ? (
+            <PasswordLinkDialog key={dialog.user.id} user={dialog.user} open onOpenChange={close} />
+          ) : null}
+          {dialog.kind === 'sessions' ? (
+            <SessionsDialog key={dialog.user.id} user={dialog.user} open onOpenChange={close} />
           ) : null}
         </>
       }

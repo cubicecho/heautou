@@ -9,8 +9,9 @@ import { sameOriginJson } from '../http/guards.ts';
 import { type LoginThrottle, sendTooMany } from '../http/rate-limit.ts';
 import type { ClientStore } from '../store/clients.ts';
 import type { UserStore } from '../store/users.ts';
+import type { ProviderHost } from './host.ts';
 import { PAGE_PARAM, pageUrl, WEB_PAGE } from './pages.ts';
-import { INTERACTION_PATH } from './provider.ts';
+import { INTERACTION_PATH, maySignIn } from './provider.ts';
 
 /** The prompts the provider asks this server to resolve. */
 const Prompt = { Login: 'login', Consent: 'consent' } as const;
@@ -26,7 +27,7 @@ const credentialsSchema = z.object({ username: z.string().trim(), password: z.st
 
 /** What the interaction routes use. */
 export interface InteractionDeps {
-  provider: Provider;
+  host: ProviderHost;
   clients: ClientStore;
   users: UserStore;
   /** The issuer's origin; the login POST must come from a page on it. */
@@ -96,12 +97,13 @@ async function grantEverythingAsked(provider: Provider, req: Request, res: Respo
  * password to `POST /interaction/:uid/login`, which answers with where the browser goes next.
  */
 export function createInteractionRouter(deps: InteractionDeps): Router {
-  const { provider, clients, users, throttle } = deps;
+  const { host, clients, users, throttle } = deps;
   const nameOf = (clientId: string): string =>
     clientId === ADMIN_DEFAULTS.clientId ? ADMIN_CLIENT_NAME : (clients.find(clientId)?.name ?? clientId);
   const router = Router();
 
   router.get(`${INTERACTION_PATH}/:uid`, async (req, res) => {
+    const provider = host.current();
     try {
       const { prompt, uid } = await provider.interactionDetails(req, res);
       if (prompt.name === Prompt.Login) {
@@ -121,7 +123,7 @@ export function createInteractionRouter(deps: InteractionDeps): Router {
 
   router.get(`${INTERACTION_PATH}/:uid/details`, async (req, res) => {
     try {
-      const { params } = await provider.interactionDetails(req, res);
+      const { params } = await host.current().interactionDetails(req, res);
       res.json({ clientName: nameOf(String(params.client_id)) });
     } catch (error) {
       sendError(res, HttpStatus.BadRequest, errorMessage(error));
@@ -142,6 +144,7 @@ export function createInteractionRouter(deps: InteractionDeps): Router {
       sendTooMany(res, wait);
       return;
     }
+    const provider = host.current();
     try {
       const user = await users.authenticate(username, password);
       if (user === null) {
@@ -150,6 +153,21 @@ export function createInteractionRouter(deps: InteractionDeps): Router {
         return;
       }
       throttle.succeed(username);
+      if (user.disabled) {
+        sendError(res, HttpStatus.Forbidden, `"${user.username}" is disabled. Ask an admin to enable it.`);
+        return;
+      }
+      const { params } = await provider.interactionDetails(req, res);
+      const clientId = String(params.client_id);
+      const client = clients.find(clientId);
+      if (maySignIn(user, client) === false) {
+        sendError(
+          res,
+          HttpStatus.Forbidden,
+          `"${user.username}" may not sign in to ${nameOf(clientId)}. It is only for ${client?.allowedGroups.join(', ')}.`,
+        );
+        return;
+      }
       const redirectTo = await provider.interactionResult(
         req,
         res,

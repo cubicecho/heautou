@@ -16,3 +16,5 @@ export type HttpStatus = (typeof HttpStatus)[keyof typeof HttpStatus];
 
 /** Milliseconds in a second. */
 export const MS_PER_SECOND = 1000;
+/** Bytes in a kilobyte, for sizes shown to people. */
+export const BYTES_PER_KB = 1024;
