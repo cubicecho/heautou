@@ -13,6 +13,8 @@ FROM builder AS test
 CMD ["npm", "test"]
 
 FROM node:26-slim AS runtime
+# Links the GHCR package to the repository, so it is listed there and takes the repository's permissions.
+LABEL org.opencontainers.image.source=https://github.com/cubicecho/heautou
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force

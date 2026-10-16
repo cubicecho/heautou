@@ -6,7 +6,7 @@
 name: heautou
 services:
   heautou:
-    image: vantreeseba/heautou:latest
+    image: ghcr.io/cubicecho/heautou:latest
     build: .
     restart: unless-stopped
     environment:

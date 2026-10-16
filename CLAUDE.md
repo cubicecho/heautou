@@ -18,6 +18,12 @@ docker compose up -d --build # the same, in a container, with the data in a name
 
 `.env.example` documents `ISSUER_URL`, `PORT`, `DATA_DIR` and `TRUST_PROXY`.
 
+## CI and releases
+
+`.github/workflows/ci.yml` lints, typechecks and tests, then builds the image and boots it with compose. When CI passes on
+`main`, `release.yml` runs semantic-release (conventional commits decide the version; `.releaserc.json`) and pushes
+`ghcr.io/cubicecho/heautou:<version>` and `:latest`, the tag `docker-compose.yml` pulls. Docker Hub is not published to yet.
+
 ## Layout
 
 - `server/core/` config getters, `defaults.ts` groups (token lifetimes, key sizes), coded errors, preflight, `services.ts` (opens the stores and builds the provider)

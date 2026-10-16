@@ -1,0 +1,48 @@
+name: CI
+on:
+  push: { branches: [main] }
+  pull_request:
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with: { node-version: 26, cache: npm }
+      - run: npm ci
+      # Generated files aren't in the tree, so codegen runs before anything reads them.
+      - run: npm run codegen
+      - name: Lint
+        run: npx biome ci .
+      - name: Typecheck
+        run: npm run check:types
+      - name: Test
+        run: npm test
+
+  boot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      # Loaded into the local daemon under the tag docker-compose.yml runs, so `up --no-build` uses it.
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: false
+          load: true
+          tags: ghcr.io/cubicecho/heautou:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      # --wait blocks until the app's healthcheck passes.
+      - name: Start the stack
+        run: docker compose up -d --no-build --wait --wait-timeout 180
+      - name: /healthz answers
+        run: curl -fsS http://127.0.0.1:3000/healthz
+      - name: Discovery answers
+        run: curl -fsS http://127.0.0.1:3000/oidc/.well-known/openid-configuration
+      - name: Logs
+        if: failure()
+        run: docker compose logs
