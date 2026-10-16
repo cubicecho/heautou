@@ -5,10 +5,8 @@ import { errorMessage } from '../core/errors.ts';
 import { HttpStatus } from '../core/wire.ts';
 import type { ClientStore } from '../store/clients.ts';
 import type { UserStore } from '../store/users.ts';
+import { PAGE_PARAM, pageUrl, WEB_PAGE } from './pages.ts';
 import { INTERACTION_PATH } from './provider.ts';
-
-/** The web app's sign-in page. It posts back to `/interaction/:uid/login`. */
-export const LOGIN_PAGE_PATH = '/login';
 
 /** The prompts the provider asks this server to resolve. */
 const Prompt = { Login: 'login', Consent: 'consent' } as const;
@@ -38,6 +36,19 @@ export interface InteractionDeps {
  */
 function sendError(res: Response, status: HttpStatus, message: string): void {
   res.status(status).json({ error: message });
+}
+
+/**
+ * Sends a browser that navigated here to the web app's error page.
+ *
+ * @param res - The response.
+ * @param message - What went wrong, for a person.
+ */
+function showError(res: Response, message: string): void {
+  res.redirect(
+    HttpStatus.SeeOther,
+    pageUrl(WEB_PAGE.error, { [PAGE_PARAM.error]: 'interaction_failed', [PAGE_PARAM.description]: message }),
+  );
 }
 
 /**
@@ -85,7 +96,7 @@ export function createInteractionRouter(deps: InteractionDeps): Router {
     try {
       const { prompt, uid } = await provider.interactionDetails(req, res);
       if (prompt.name === Prompt.Login) {
-        res.redirect(HttpStatus.SeeOther, `${LOGIN_PAGE_PATH}/${uid}`);
+        res.redirect(HttpStatus.SeeOther, `${WEB_PAGE.login}/${uid}`);
         return;
       }
       if (prompt.name === Prompt.Consent) {
@@ -93,9 +104,9 @@ export function createInteractionRouter(deps: InteractionDeps): Router {
         await provider.interactionFinished(req, res, { consent: { grantId } }, { mergeWithLastSubmission: true });
         return;
       }
-      sendError(res, HttpStatus.BadRequest, `This provider cannot answer the "${prompt.name}" prompt.`);
+      showError(res, `This provider cannot answer the "${prompt.name}" prompt.`);
     } catch (error) {
-      sendError(res, HttpStatus.BadRequest, errorMessage(error));
+      showError(res, errorMessage(error));
     }
   });
 

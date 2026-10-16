@@ -2,68 +2,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { HttpStatus } from '../../server/core/wire.ts';
 import { ClientAuthMethod } from '../../server/store/clients.ts';
 import { startTestApp, type TestApp } from '../helpers.ts';
-
-const REDIRECT_URI = 'http://app.example/callback';
-const PASSWORD = 'correct horse';
-/** More hops than a sign-in takes: authorize, login, consent, and back. */
-const MAX_HOPS = 10;
-
-/** A browser that keeps cookies by name and follows nothing on its own. */
-function createBrowser(base: string) {
-  const jar = new Map<string, string>();
-  const send = async (url: string, init: RequestInit = {}): Promise<Response> => {
-    const cookie = [...jar].map(([name, value]) => `${name}=${value}`).join('; ');
-    const headers = new Headers(init.headers);
-    headers.set('cookie', cookie);
-    const res = await fetch(new URL(url, base), { ...init, headers, redirect: 'manual' });
-    for (const line of res.headers.getSetCookie()) {
-      const [pair = ''] = line.split(';');
-      const at = pair.indexOf('=');
-      jar.set(pair.slice(0, at), pair.slice(at + 1));
-    }
-    return res;
-  };
-  return { send };
-}
-
-/**
- * Walks a browser from the authorize URL to the client's callback, signing in on the way.
- *
- * @param app - The running app.
- * @param authorizeUrl - Where the client sent the user.
- * @param username - Who signs in.
- * @param password - Their password.
- * @returns The callback URL the provider sent the browser to.
- */
-async function signIn(app: TestApp, authorizeUrl: string, username: string, password: string): Promise<URL> {
-  const browser = createBrowser(app.base);
-  let next = authorizeUrl;
-  for (let hop = 0; hop < MAX_HOPS; hop += 1) {
-    const loginUid = /^\/login\/([^/]+)$/.exec(next)?.[1];
-    if (loginUid !== undefined) {
-      const details = await (await browser.send(`/interaction/${loginUid}/details`)).json();
-      expect(details).toEqual({ clientName: 'Test app' });
-      const res = await browser.send(`/interaction/${loginUid}/login`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ username, password }),
-      });
-      expect(res.status).toBe(HttpStatus.Ok);
-      next = (await res.json()).redirectTo;
-      continue;
-    }
-    const res = await browser.send(next);
-    const location = res.headers.get('location');
-    if (location === null) {
-      throw new Error(`${next} answered ${res.status} without a redirect: ${await res.text()}`);
-    }
-    if (location.startsWith(REDIRECT_URI)) {
-      return new URL(location);
-    }
-    next = location.startsWith(app.base) ? location.slice(app.base.length) : location;
-  }
-  throw new Error('The sign-in never came back to the client.');
-}
+import { PASSWORD, REDIRECT_URI, signIn } from './browser.ts';
 
 describe('authorization code flow', () => {
   let app: TestApp;
@@ -172,6 +111,55 @@ describe('authorization code flow', () => {
       }),
     });
     expect(tokenRes.status).toBe(HttpStatus.Ok);
+  });
+
+  // Mealie v2 and other authlib-based apps: a client secret and PKCE together, and a second
+  // redirect URI with a query string.
+  it('signs a user into a confidential client that also uses PKCE', async () => {
+    const directUri = `${REDIRECT_URI}?direct=1`;
+    const client = app.services.clients.create({
+      name: 'Test app',
+      authMethod: ClientAuthMethod.SecretBasic,
+      redirectUris: [REDIRECT_URI, directUri],
+      postLogoutRedirectUris: [directUri],
+    });
+    const verifier = randomBytes(32).toString('base64url');
+    const query = new URLSearchParams({
+      client_id: client.clientId,
+      redirect_uri: REDIRECT_URI,
+      response_type: 'code',
+      scope: 'openid profile email groups',
+      state: 's-1',
+      code_challenge: createHash('sha256').update(verifier).digest('base64url'),
+      code_challenge_method: 'S256',
+    });
+    const callback = await signIn(app, `/oidc/auth?${query}`, 'ada', PASSWORD);
+    expect(callback.searchParams.get('iss')).toBe(issuer);
+
+    const exchange = (codeVerifier: string) =>
+      fetch(`${issuer}/token`, {
+        method: 'POST',
+        headers: {
+          authorization: `Basic ${Buffer.from(`${client.clientId}:${client.clientSecret}`).toString('base64')}`,
+          'content-type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          grant_type: 'authorization_code',
+          code: callback.searchParams.get('code') ?? '',
+          redirect_uri: REDIRECT_URI,
+          code_verifier: codeVerifier,
+        }),
+      });
+    const tokenRes = await exchange(verifier);
+    expect(tokenRes.status).toBe(HttpStatus.Ok);
+    const tokens = await tokenRes.json();
+    const me = await (
+      await fetch(`${issuer}/me`, { headers: { authorization: `Bearer ${tokens.access_token}` } })
+    ).json();
+    expect(me).toMatchObject({ email: 'ada@example.com', email_verified: true, groups: ['admins'] });
+
+    // The code is spent, and a wrong verifier would not have been taken anyway.
+    expect((await exchange(randomBytes(32).toString('base64url'))).status).toBe(HttpStatus.BadRequest);
   });
 
   it('turns away a wrong password', async () => {

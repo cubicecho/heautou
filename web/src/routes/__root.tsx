@@ -8,8 +8,11 @@ import { AppWindow, LayoutDashboard, ShieldCheck, UsersRound } from '@/core/app-
 
 const SidebarLink = createLink(SidebarNavItem);
 const BarLink = createLink(BarNavItem);
-/** Where the sign-in page lives. It is drawn without the admin shell. */
-const LOGIN_PATH_PREFIX = '/login/';
+/**
+ * The pages the provider sends a browser to: sign in, sign out, signed out and errors. They are for
+ * whoever is signing in to an app, so they are drawn without the admin shell.
+ */
+const PROVIDER_PAGES = ['/login/', '/logout', '/logged-out', '/error'];
 
 /** The admin pages, in the order the sidebar lists them. */
 const PLACES = [
@@ -41,8 +44,8 @@ function Brand() {
 function RootRoute() {
   useThemePreference();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
-  const isSignIn = pathname.startsWith(LOGIN_PATH_PREFIX);
-  if (isSignIn) {
+  const isProviderPage = PROVIDER_PAGES.some((page) => pathname.startsWith(page));
+  if (isProviderPage) {
     return <Outlet />;
   }
 

@@ -3,6 +3,7 @@ import { TOKEN_LIFETIME_DEFAULTS } from '../core/defaults.ts';
 import type { ClientStore } from '../store/clients.ts';
 import type { ProviderKeys } from '../store/keys.ts';
 import type { PublicUser, UserStore } from '../store/users.ts';
+import { createPageSources } from './pages.ts';
 
 /** The scopes clients may ask for. */
 export const SCOPES = ['openid', 'offline_access', 'profile', 'email', 'groups'] as const;
@@ -70,6 +71,8 @@ export function createProvider(deps: ProviderDeps): Provider {
   const { accessTokenSeconds, idTokenSeconds, refreshTokenSeconds, interactionSeconds, sessionSeconds, grantSeconds } =
     TOKEN_LIFETIME_DEFAULTS;
 
+  const { logoutSource, postLogoutSuccessSource, renderError } = createPageSources(deps.clients);
+
   const provider = new Provider(deps.issuer, {
     adapter: deps.adapter,
     clients: [],
@@ -77,6 +80,7 @@ export function createProvider(deps: ProviderDeps): Provider {
     cookies: { keys: deps.keys.cookieKeys },
     scopes: [...SCOPES],
     claims: CLAIMS_BY_SCOPE,
+    renderError,
     // Many self-hosted apps read the profile from the ID token and never call userinfo.
     conformIdTokenClaims: false,
     findAccount: async (_ctx, sub): Promise<Account | undefined> => {
@@ -90,7 +94,8 @@ export function createProvider(deps: ProviderDeps): Provider {
     features: {
       devInteractions: { enabled: false },
       revocation: { enabled: true },
-      rpInitiatedLogout: { enabled: true },
+      // The web app draws these pages; the provider's own are plain HTML.
+      rpInitiatedLogout: { enabled: true, logoutSource, postLogoutSuccessSource },
     },
     // A browser app may call the token endpoint from the origins it was registered to return to.
     clientBasedCORS: (_ctx, origin, client) => (client.redirectUris ?? []).some((uri) => originOf(uri) === origin),
