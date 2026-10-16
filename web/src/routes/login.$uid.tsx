@@ -8,6 +8,7 @@ import { PasswordField } from '@/components/password-field';
 import { Alert } from '@/components/ui/alert';
 import { FormElement } from '@/components/ui/form-element';
 import { ShieldCheck } from '@/core/app-icons';
+import { jsonReply, postJson } from '@/core/json-reply';
 import { messageOf } from '@/core/lists';
 
 export const Route = createFileRoute('/login/$uid')({ component: LoginPage });
@@ -16,23 +17,6 @@ const FORM_ID = 'login-form';
 
 const detailsSchema = z.object({ clientName: z.string() });
 const resultSchema = z.object({ redirectTo: z.string() });
-const errorSchema = z.object({ error: z.string() });
-
-/**
- * Reads a JSON reply from an interaction route, turning its `{error}` into a thrown Error.
- *
- * @param response - The reply.
- * @param schema - What a successful reply holds.
- * @returns The parsed body.
- */
-async function interactionReply<T>(response: Response, schema: z.ZodType<T>): Promise<T> {
-  const body: unknown = await response.json().catch(() => null);
-  if (response.ok) {
-    return schema.parse(body);
-  }
-  const failure = errorSchema.safeParse(body);
-  throw new Error(failure.success ? failure.data.error : `The provider answered ${response.status}.`);
-}
 
 /**
  * The sign-in page the provider sends a browser to. It names the client asking and, once the
@@ -45,7 +29,7 @@ function LoginPage() {
 
   const details = useQuery({
     queryKey: ['interaction', uid],
-    queryFn: async () => interactionReply(await fetch(`${base}/details`), detailsSchema),
+    queryFn: async () => jsonReply(await fetch(`${base}/details`), detailsSchema),
     retry: false,
   });
 
@@ -54,12 +38,7 @@ function LoginPage() {
     onSubmit: async ({ value }) => {
       setFailure(null);
       try {
-        const response = await fetch(`${base}/login`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify(value),
-        });
-        const { redirectTo } = await interactionReply(response, resultSchema);
+        const { redirectTo } = await jsonReply(await postJson(`${base}/login`, value), resultSchema);
         window.location.assign(redirectTo);
       } catch (error) {
         setFailure(messageOf(error));

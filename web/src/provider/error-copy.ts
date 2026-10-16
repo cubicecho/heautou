@@ -53,6 +53,17 @@ const COPY: Record<string, ErrorCopy> = {
     description: 'Go back to the app to try again.',
     isClientSetup: false,
   },
+  admin_required: {
+    title: 'That account can’t use the admin UI',
+    description:
+      'Only users in the heautou-admin group can manage Heautou. Sign in with one of them, or ask an admin to add you.',
+    isClientSetup: false,
+  },
+  admin_sign_in_failed: {
+    title: 'Signing in to the admin UI didn’t finish',
+    description: 'It took too long, or began in another tab or browser. Open the admin UI again to start over.',
+    isClientSetup: false,
+  },
   server_error: {
     title: 'Heautou hit a problem',
     description:

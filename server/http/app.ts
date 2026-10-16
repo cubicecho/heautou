@@ -1,7 +1,9 @@
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import express, { type Express } from 'express';
+import express, { type Express, type Request, type Response } from 'express';
 import { createYoga } from 'graphql-yoga';
+import { adminUrls } from '../admin/admin-client.ts';
+import { createAdminRouter, requireAdmin } from '../admin/routes.ts';
 import { isProduction, OIDC_MOUNT_PATH, trustProxy } from '../core/config.ts';
 import type { Context } from '../core/context.ts';
 import { HTTP_DEFAULTS } from '../core/defaults.ts';
@@ -10,45 +12,72 @@ import { graphqlLogger } from '../graphql/logger.ts';
 import { useOperationLimits } from '../graphql/operation-limits.ts';
 import { schema } from '../graphql/schema.ts';
 import { createInteractionRouter } from '../oidc/interactions.ts';
+import type { PublicUser } from '../store/users.ts';
+import { sameOriginJson } from './guards.ts';
+import { securityHeaders, webAppHeaders } from './headers.ts';
 import { healthHandler } from './health.ts';
+import { createLoginThrottle, limitRequests } from './rate-limit.ts';
 
 const GRAPHQL_ENDPOINT = '/graphql';
 const HEALTH_ENDPOINT = '/healthz';
 /** Every path but the server's own, so the web app's routes load index.html. */
-const WEB_ROUTES = /^(?!\/(graphql|healthz)$|\/(oidc|interaction)(\/|$)).*/;
+const WEB_ROUTES = /^(?!\/(graphql|healthz)$|\/(oidc|interaction|admin)(\/|$)).*/;
+/** The routes that start sign-ins or write files, limited per address. */
+const LIMITED_ROUTES = [`${OIDC_MOUNT_PATH}/auth`, '/interaction', '/admin'];
 /** Where `npm run build` puts the web app. */
 const WEB_DIST = fileURLToPath(new URL('../../dist', import.meta.url));
 
 /**
- * Builds the Express app: the provider, its sign-in routes, the admin API, health, and the built web app when
- * there is one. It does not listen.
+ * Builds the Express app: the provider, its sign-in routes, the admin sign-in and API, health, and the built
+ * web app when there is one. It does not listen.
+ *
+ * @remarks
+ * `/graphql` takes only same-origin JSON POSTs from a signed-in admin; see `sameOriginJson` and `requireAdmin`.
  *
  * @param services - The stores and the provider.
  * @returns The app.
  */
 export function createApp(services: Services): Express {
-  const yoga = createYoga<Record<string, never>, Context>({
+  const isDev = isProduction() === false;
+  const yoga = createYoga<{ req: Request; res: Response }, Context>({
     schema,
     graphqlEndpoint: GRAPHQL_ENDPOINT,
     logging: graphqlLogger,
-    graphiql: isProduction() === false,
+    graphiql: isDev,
+    // The guards below decide who may call; Yoga's own CORS would answer any origin.
+    cors: false,
     plugins: [useOperationLimits()],
-    context: () => ({ clients: services.clients, users: services.users, issuer: services.issuer }),
+    context: ({ res }) => ({
+      clients: services.clients,
+      users: services.users,
+      issuer: services.issuer,
+      viewer: res.locals.viewer as PublicUser,
+    }),
   });
+  const { origin } = adminUrls(services.issuer);
+  const throttle = createLoginThrottle();
 
   const app = express();
   app.disable('x-powered-by');
   app.set('trust proxy', trustProxy());
+  app.use(securityHeaders());
   app.get(HEALTH_ENDPOINT, healthHandler());
-  app.use(GRAPHQL_ENDPOINT, express.json({ limit: HTTP_DEFAULTS.bodyLimit }));
+  app.use(LIMITED_ROUTES, limitRequests());
+  app.use(
+    GRAPHQL_ENDPOINT,
+    sameOriginJson(origin, { allowHtmlGet: isDev }),
+    requireAdmin(services),
+    express.json({ limit: HTTP_DEFAULTS.bodyLimit }),
+  );
   app.all(GRAPHQL_ENDPOINT, (req, res) => yoga(req, res));
-  app.use(createInteractionRouter(services));
+  app.use(createAdminRouter({ ...services, throttle }));
+  app.use(createInteractionRouter({ ...services, origin, throttle }));
   app.use(OIDC_MOUNT_PATH, services.provider.callback());
 
   const hasWebBuild = existsSync(WEB_DIST);
   if (hasWebBuild) {
-    app.use(express.static(WEB_DIST));
-    app.get(WEB_ROUTES, (_req, res) => res.sendFile('index.html', { root: WEB_DIST }));
+    app.use(webAppHeaders(), express.static(WEB_DIST));
+    app.get(WEB_ROUTES, webAppHeaders(), (_req, res) => res.sendFile('index.html', { root: WEB_DIST }));
   }
   return app;
 }

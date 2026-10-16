@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { CREDENTIAL_DEFAULTS } from '../core/defaults.ts';
+import { ADMIN_DEFAULTS, CREDENTIAL_DEFAULTS } from '../core/defaults.ts';
 import { badInput, notFound } from '../core/errors.ts';
 import { parseInput } from '../core/validation.ts';
 import type { JsonFile } from './json-file.ts';
-import { hashPassword, verifyPassword } from './password.ts';
+import { dummyPasswordHash, hashPassword, verifyPassword } from './password.ts';
 
 /** Someone who can sign in through the provider. */
 export interface User {
@@ -25,6 +25,16 @@ export interface User {
 
 /** A user without the password hash: what leaves the store. */
 export type PublicUser = Omit<User, 'passwordHash'>;
+
+/**
+ * Says whether a user may use the admin UI.
+ *
+ * @param user - The user.
+ * @returns True when their groups hold `ADMIN_DEFAULTS.group`.
+ */
+export function isAdmin(user: Pick<User, 'groups'>): boolean {
+  return user.groups.includes(ADMIN_DEFAULTS.group);
+}
 
 const USERNAME_PATTERN = /^[A-Za-z0-9._@-]+$/;
 
@@ -52,14 +62,16 @@ export interface UserStore {
   update: (id: string, input: UserFields) => PublicUser;
   setPassword: (id: string, password: string) => PublicUser;
   remove: (id: string) => PublicUser;
+  /** Whether any user is an admin. While none is, the server offers a setup link instead of the admin UI. */
+  hasAdmin: () => boolean;
   /**
-   * Checks a sign-in.
+   * Checks a sign-in. An unknown username takes as long to refuse as a wrong password.
    *
    * @param username - What was typed as the username.
    * @param password - What was typed as the password.
    * @returns The user, or null when either is wrong.
    */
-  authenticate: (username: string, password: string) => PublicUser | null;
+  authenticate: (username: string, password: string) => Promise<PublicUser | null>;
 }
 
 /**
@@ -97,8 +109,25 @@ export function createUserStore(file: JsonFile<User[]>, now: () => Date = () => 
     }
   };
 
+  /**
+   * Refuses a change that would leave no admin, which would lock everyone out of the admin UI. A store
+   * with no admin yet may change freely: the setup link makes the first one.
+   */
+  const assertAdminRemains = (next: User[]): void => {
+    const isLosingLastAdmin = file.read().some(isAdmin) && next.some(isAdmin) === false;
+    if (isLosingLastAdmin) {
+      throw badInput(`groups: keep at least one user in "${ADMIN_DEFAULTS.group}", or no one can sign in here.`);
+    }
+  };
+
+  const write = (change: (users: User[]) => User[]): void => {
+    const next = change(file.read());
+    assertAdminRemains(next);
+    file.update(() => next);
+  };
+
   const replace = (next: User): PublicUser => {
-    file.update((users) => users.map((user) => (user.id === next.id ? next : user)));
+    write((users) => users.map((user) => (user.id === next.id ? next : user)));
     return toPublic(next);
   };
 
@@ -117,7 +146,7 @@ export function createUserStore(file: JsonFile<User[]>, now: () => Date = () => 
         passwordHash: hashPassword(password),
         createdAt: now().toISOString(),
       };
-      file.update((users) => [...users, user]);
+      write((users) => [...users, user]);
       return toPublic(user);
     },
     update: (id, input) => {
@@ -131,16 +160,14 @@ export function createUserStore(file: JsonFile<User[]>, now: () => Date = () => 
     },
     remove: (id) => {
       const user = load(id);
-      file.update((users) => users.filter((other) => other.id !== id));
+      write((users) => users.filter((other) => other.id !== id));
       return toPublic(user);
     },
-    authenticate: (username, password) => {
+    hasAdmin: () => file.read().some(isAdmin),
+    authenticate: async (username, password) => {
       const user = file.read().find((candidate) => candidate.username === username) ?? null;
-      if (user === null) {
-        return null;
-      }
-      const isMatch = verifyPassword(password, user.passwordHash);
-      return isMatch ? toPublic(user) : null;
+      const isMatch = await verifyPassword(password, user?.passwordHash ?? dummyPasswordHash());
+      return user !== null && isMatch ? toPublic(user) : null;
     },
   };
 }

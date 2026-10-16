@@ -95,3 +95,50 @@ export const KEY_DEFAULTS: Readonly<KeySettings> = Object.freeze({
   signingKeyBits: 2048,
   cookieKeyBytes: 32,
 });
+
+/** How the admin UI signs its operators in. It is a client of this provider, like any other app. */
+export interface AdminSettings {
+  /** The built-in client the admin UI signs in as. It is not in the client list and cannot be added there. */
+  clientId: string;
+  /** The `groups` entry that makes a user an admin. */
+  group: string;
+  /** How long an admin stays signed in to the admin UI, in seconds. */
+  sessionSeconds: number;
+  /** How long a started admin sign-in may take to come back, in seconds. */
+  loginSeconds: number;
+  /** Random bytes in an admin session token and in the setup token, before base64url. */
+  tokenBytes: number;
+}
+
+export const ADMIN_DEFAULTS: Readonly<AdminSettings> = Object.freeze({
+  clientId: 'heautou-admin',
+  group: 'heautou-admin',
+  sessionSeconds: 43_200,
+  loginSeconds: 3600,
+  tokenBytes: 32,
+});
+
+/** How hard the unauthenticated routes may be hit. Counted per client IP, and per username for sign-ins. */
+export interface RateLimitSettings {
+  /** Failed sign-ins from one IP before it is turned away until the window ends. */
+  failuresPerIp: number;
+  /** Failed sign-ins for one username before it is turned away until the window ends. */
+  failuresPerUsername: number;
+  /** The window failures are counted in, in seconds. */
+  failureWindowSeconds: number;
+  /** Requests from one IP to the sign-in routes per window. */
+  requestsPerIp: number;
+  /** The window requests are counted in, in seconds. */
+  requestWindowSeconds: number;
+  /** Most keys a counter remembers. Past it, the oldest are forgotten first. */
+  maxKeys: number;
+}
+
+export const RATE_LIMIT_DEFAULTS: Readonly<RateLimitSettings> = Object.freeze({
+  failuresPerIp: 10,
+  failuresPerUsername: 5,
+  failureWindowSeconds: 900,
+  requestsPerIp: 120,
+  requestWindowSeconds: 60,
+  maxKeys: 10_000,
+});

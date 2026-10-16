@@ -1,8 +1,12 @@
 import express, { type Request, type Response, Router } from 'express';
 import type Provider from 'oidc-provider';
 import { z } from 'zod';
+import { ADMIN_CLIENT_NAME } from '../admin/admin-client.ts';
+import { ADMIN_DEFAULTS, HTTP_DEFAULTS } from '../core/defaults.ts';
 import { errorMessage } from '../core/errors.ts';
 import { HttpStatus } from '../core/wire.ts';
+import { sameOriginJson } from '../http/guards.ts';
+import { type LoginThrottle, sendTooMany } from '../http/rate-limit.ts';
 import type { ClientStore } from '../store/clients.ts';
 import type { UserStore } from '../store/users.ts';
 import { PAGE_PARAM, pageUrl, WEB_PAGE } from './pages.ts';
@@ -25,6 +29,9 @@ export interface InteractionDeps {
   provider: Provider;
   clients: ClientStore;
   users: UserStore;
+  /** The issuer's origin; the login POST must come from a page on it. */
+  origin: string;
+  throttle: LoginThrottle;
 }
 
 /**
@@ -89,7 +96,9 @@ async function grantEverythingAsked(provider: Provider, req: Request, res: Respo
  * password to `POST /interaction/:uid/login`, which answers with where the browser goes next.
  */
 export function createInteractionRouter(deps: InteractionDeps): Router {
-  const { provider, clients, users } = deps;
+  const { provider, clients, users, throttle } = deps;
+  const nameOf = (clientId: string): string =>
+    clientId === ADMIN_DEFAULTS.clientId ? ADMIN_CLIENT_NAME : (clients.find(clientId)?.name ?? clientId);
   const router = Router();
 
   router.get(`${INTERACTION_PATH}/:uid`, async (req, res) => {
@@ -113,25 +122,34 @@ export function createInteractionRouter(deps: InteractionDeps): Router {
   router.get(`${INTERACTION_PATH}/:uid/details`, async (req, res) => {
     try {
       const { params } = await provider.interactionDetails(req, res);
-      const client = clients.find(String(params.client_id));
-      res.json({ clientName: client?.name ?? String(params.client_id) });
+      res.json({ clientName: nameOf(String(params.client_id)) });
     } catch (error) {
       sendError(res, HttpStatus.BadRequest, errorMessage(error));
     }
   });
 
-  router.post(`${INTERACTION_PATH}/:uid/login`, express.json(), async (req, res) => {
+  const loginBody = [sameOriginJson(deps.origin), express.json({ limit: HTTP_DEFAULTS.bodyLimit })];
+  router.post(`${INTERACTION_PATH}/:uid/login`, ...loginBody, async (req, res) => {
     const parsed = credentialsSchema.safeParse(req.body);
     if (parsed.success === false) {
       sendError(res, HttpStatus.BadRequest, 'Send a username and a password.');
       return;
     }
+    const { username, password } = parsed.data;
+    const ip = req.ip ?? '';
+    const wait = throttle.wait(ip, username);
+    if (wait > 0) {
+      sendTooMany(res, wait);
+      return;
+    }
     try {
-      const user = users.authenticate(parsed.data.username, parsed.data.password);
+      const user = await users.authenticate(username, password);
       if (user === null) {
+        throttle.fail(ip, username);
         sendError(res, HttpStatus.Unauthorized, 'That username and password do not match.');
         return;
       }
+      throttle.succeed(username);
       const redirectTo = await provider.interactionResult(
         req,
         res,

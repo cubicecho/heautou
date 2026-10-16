@@ -1,5 +1,6 @@
 // Boot only. Preflight is the first import: it exits with a sentence when the configuration is unusable.
 import './core/preflight.ts';
+import { adminUrls } from './admin/admin-client.ts';
 import { dataDir, issuerUrl, port, trustProxy, version } from './core/config.ts';
 import { openServices } from './core/services.ts';
 import { createApp } from './http/app.ts';
@@ -13,5 +14,10 @@ const server = createApp(services).listen(port(), LISTEN_HOST, () => {
   console.log(
     `[boot] heautou ${version()} on http://localhost:${port()}, issuer ${services.issuer}, data in ${dataDir()}`,
   );
+  if (services.setup.isNeeded()) {
+    console.log(
+      `[setup] No admin yet. Open ${adminUrls(services.issuer).base}/setup#token=${services.setup.token} to make one. The link changes on every restart.`,
+    );
+  }
   stopOnSignals(server);
 });

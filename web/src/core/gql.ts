@@ -4,15 +4,16 @@ import { print } from 'graphql';
 /** The browser talks to its own origin; Vite proxies `/graphql` to the server in dev. */
 const ENDPOINT = '/graphql';
 
+/** Where the server starts an admin sign-in; `?return=` is where it comes back to. */
+const ADMIN_LOGIN = '/admin/login';
+/** What `/graphql` answers when the admin session is missing or over. */
+const HTTP_UNAUTHORIZED = 401;
+
 interface GraphQLResponse<T> {
   data?: T;
   errors?: { message: string }[];
-}
-
-/** What a subscription calls back with. */
-export interface SubscriptionHandlers<TResult> {
-  next: (data: TResult) => void;
-  error?: (error: Error) => void;
+  /** Set instead when the server refused the request before GraphQL saw it. */
+  error?: string;
 }
 
 /**
@@ -32,6 +33,9 @@ function errorOf(errors: { message: string }[]): Error {
  * @param variables - Its variables, left out when it takes none.
  * @returns The response's `data`.
  * @throws When the response carries errors or no data.
+ *
+ * @remarks
+ * Without an admin session the server answers 401, and the browser is sent to sign in, coming back to this page.
  */
 export async function request<TResult, TVariables>(
   document: TypedDocumentNode<TResult, TVariables>,
@@ -43,7 +47,15 @@ export async function request<TResult, TVariables>(
     body: JSON.stringify({ query: print(document), variables }),
   });
 
-  const body = (await response.json()) as GraphQLResponse<TResult>;
+  if (response.status === HTTP_UNAUTHORIZED) {
+    const here = `${window.location.pathname}${window.location.search}`;
+    window.location.assign(`${ADMIN_LOGIN}?return=${encodeURIComponent(here)}`);
+    throw new Error('Your admin session ended. Signing in again…');
+  }
+  const body = ((await response.json().catch(() => null)) ?? {}) as GraphQLResponse<TResult>;
+  if (body.error !== undefined) {
+    throw new Error(body.error);
+  }
   // GraphQL reports failures in the body with a 200, so the status alone proves nothing.
   if (body.errors?.length) {
     throw errorOf(body.errors);
@@ -52,43 +64,4 @@ export async function request<TResult, TVariables>(
     throw new Error(`GraphQL returned no data (HTTP ${response.status})`);
   }
   return body.data;
-}
-
-/**
- * Opens one subscription over server-sent events.
- *
- * @param document - The typed subscription.
- * @param variables - Its variables.
- * @param handlers - Called for each payload and each failure.
- * @returns The unsubscribe; call it on unmount.
- *
- * @remarks
- * Yoga answers `GET /graphql?query=…` with an SSE stream, which `EventSource` reads and
- * reconnects by itself, so a dropped connection is reported and left to recover.
- */
-export function subscribe<TResult, TVariables>(
-  document: TypedDocumentNode<TResult, TVariables>,
-  variables: TVariables,
-  handlers: SubscriptionHandlers<TResult>,
-): () => void {
-  const params = new URLSearchParams({
-    query: print(document),
-    variables: JSON.stringify(variables ?? {}),
-  });
-  const source = new EventSource(`${ENDPOINT}?${params}`);
-
-  source.addEventListener('next', (message) => {
-    const body = JSON.parse(message.data) as GraphQLResponse<TResult>;
-    if (body.errors?.length) {
-      handlers.error?.(errorOf(body.errors));
-      return;
-    }
-    if (body.data !== undefined) {
-      handlers.next(body.data);
-    }
-  });
-  source.addEventListener('complete', () => source.close());
-  source.onerror = () => handlers.error?.(new Error('lost the connection to the server'));
-
-  return () => source.close();
 }

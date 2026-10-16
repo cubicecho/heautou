@@ -25,6 +25,12 @@ query Provider {
   }
 }
 
+query Viewer {
+  viewer {
+    ...UserFields
+  }
+}
+
 query Clients {
   clients {
     ...ClientFields

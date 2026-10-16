@@ -31,6 +31,7 @@ export default defineConfig({
       '/healthz': API_ORIGIN,
       '/oidc': API_ORIGIN,
       '/interaction': API_ORIGIN,
+      '/admin': API_ORIGIN,
     },
   },
 });

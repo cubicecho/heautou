@@ -1,4 +1,5 @@
 import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { z } from 'zod';
 import {
   type ClientInput,
   ClientsDocument,
@@ -15,11 +16,14 @@ import {
   UpdateUserDocument,
   type UserInput,
   UsersDocument,
+  ViewerDocument,
 } from '@/__generated__/graphql';
 import { request } from '@/core/gql';
+import { jsonReply, postJson } from '@/core/json-reply';
 
 /** The react-query keys of the admin API's lists. */
 const KEYS = {
+  viewer: ['viewer'],
   provider: ['provider'],
   clients: ['clients'],
   users: ['users'],
@@ -34,6 +38,25 @@ const KEYS = {
  */
 function refetching(queryClient: QueryClient, key: readonly string[]) {
   return () => queryClient.invalidateQueries({ queryKey: key });
+}
+
+const signOutSchema = z.object({ redirectTo: z.string() });
+
+/**
+ * Reads the signed-in admin.
+ *
+ * @returns The query.
+ */
+export function useViewer() {
+  return useQuery({ queryKey: KEYS.viewer, queryFn: async () => (await request(ViewerDocument)).viewer });
+}
+
+/**
+ * Ends the admin session, then sends the browser to the provider to sign out there too.
+ */
+export async function signOut(): Promise<void> {
+  const { redirectTo } = await jsonReply(await postJson('/admin/logout', {}), signOutSchema);
+  window.location.assign(redirectTo);
 }
 
 /**

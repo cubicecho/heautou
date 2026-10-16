@@ -9,8 +9,9 @@ A minimal OpenID Connect provider for self-hosted setups. It gives your apps one
 - **Flat-file storage.** Everything is in a few JSON files in one folder. There is no database.
 
 > [!WARNING]
-> This is insecure on purpose. The admin UI has no login, and client secrets and signing keys are stored
-> as plain text. Run it only on a network you trust, and never expose the admin UI to the internet.
+> Heautou is built for a home or office network you trust. The admin UI needs a sign-in, but client secrets
+> and signing keys are stored as plain text in the data folder, and nothing has been audited. Don't expose
+> it to the internet. See [Security](#security).
 
 ## Quick start (Docker Compose)
 
@@ -42,7 +43,16 @@ A minimal OpenID Connect provider for self-hosted setups. It gives your apps one
    docker compose up -d
    ```
 
-4. Open `http://<your-host>:3000`.
+4. Make the first admin. While there is none, Heautou prints a one-time setup link in its log:
+
+   ```sh
+   docker compose logs heautou | grep setup
+   ```
+
+   Open the link, which looks like `http://<your-host>:3000/setup#token=…`, and choose a username and password.
+   The link changes on every restart and stops working once there is an admin.
+
+5. Open `http://<your-host>:3000` and sign in as that admin.
 
 Your clients, users and keys are kept in the `heautou-data` volume, so they survive restarts and upgrades.
 To upgrade, run `docker compose pull && docker compose up -d`.
@@ -59,7 +69,8 @@ docker run -d --name heautou --restart unless-stopped \
 ## Connecting an app
 
 1. **Add a user.** Under **Users**, choose **New user** and set a username and password. Name, email and
-   groups are optional; they are put into the user's tokens.
+   groups are optional; they are put into the user's tokens. Only users in the `heautou-admin` group can
+   use the admin UI; everyone else can only sign in to your apps.
 2. **Add a client.** Under **Clients**, choose **New client**:
    - **Name:** what the sign-in page shows, such as "Grafana".
    - **Redirect URIs:** the app's callback URL. The app's OIDC docs give it, and it must match exactly.
@@ -106,9 +117,34 @@ Set these as environment variables, under `environment:` in Compose.
 
 ### Behind a reverse proxy (HTTPS)
 
-Point the proxy at port 3000, set `ISSUER_URL` to the HTTPS address, for example
-`https://auth.example.home/oidc`, and set `TRUST_PROXY=1`. Some apps refuse an `http` issuer, so
-HTTPS is worth setting up even at home.
+Over plain HTTP, passwords, session cookies and tokens cross your network readable, and some apps refuse
+an `http` issuer. Heautou has no TLS of its own: put a reverse proxy in front that holds the certificate,
+and point it at Heautou's port.
+
+1. Set `ISSUER_URL` to the HTTPS address, for example `https://auth.example.home/oidc`. There is one issuer:
+   apps, browsers and the admin UI all use this address, so stop using the plain `http://host:3000` one.
+2. Set `TRUST_PROXY=1`, so Heautou believes the proxy's `X-Forwarded-Proto` and `X-Forwarded-For`. Without
+   it, Heautou thinks every request comes from the proxy, and its rate limits lump everyone together.
+3. Have the proxy pass the original `Host` header and set `X-Forwarded-Proto: https`.
+4. Only the proxy should reach Heautou's port. Docker publishes ports past host firewalls such as `ufw`,
+   so if the proxy is on the same machine, bind the port to loopback: `ports: ["127.0.0.1:3000:3000"]`.
+   If it is on another machine, allow only the proxy's address to the port.
+
+Heautou logs a warning at start-up while its issuer is `http://` on anything but `localhost`.
+
+With HAProxy, using a certificate for the name (a DNS-01 certificate from Let's Encrypt works for a name only
+your LAN resolves):
+
+```haproxy
+frontend https
+    bind :443 ssl crt /etc/haproxy/certs/auth.example.home.pem
+    http-request set-header X-Forwarded-Proto https
+    use_backend heautou if { req.hdr(host) -i auth.example.home }
+
+backend heautou
+    option forwardfor
+    server heautou 192.168.1.10:3000
+```
 
 ## Your data
 
@@ -117,10 +153,29 @@ Everything lives in the data folder, which is the `heautou-data` volume in Docke
 - `clients.json`: apps and their secrets
 - `users.json`: users, with hashed passwords
 - `keys.json`: the token signing keys
+- `admin-sessions.json`: signed-in admin browsers (hashed tokens)
 - `oidc/`: sessions, codes and tokens
 
-Back up the folder to back up Heautou. Deleting `keys.json` makes new keys on the next start, and
+Heautou makes its files readable by its own user only (mode 0600). Back up the folder to back up Heautou. Deleting `keys.json` makes new keys on the next start, and
 every app has to sign in again.
+
+## Security
+
+What Heautou does:
+
+- **The admin UI signs in through Heautou itself.** It is a built-in client, and only users in the
+  `heautou-admin` group get in. Taking someone out of the group signs them out of the admin UI. Heautou refuses
+  to remove the last admin.
+- **The admin API takes only same-origin JSON.** `/graphql` answers only `POST` with `Content-Type:
+  application/json` from pages on the issuer's origin, so another website can't drive it through your browser.
+  Open the admin UI at the issuer's address: requests from any other address are refused.
+- **Password guessing is slowed.** Sign-ins are limited to 5 failures per username and 10 per address in
+  15 minutes, and sign-in routes to 120 requests a minute per address. Unknown usernames take as long to
+  refuse as wrong passwords.
+- **The pages can't be framed**, send no referrer, and the web app runs only its own scripts.
+
+What it does not do: encrypt the data folder (anyone who can read it has the signing keys and client
+secrets), terminate TLS, keep an audit log, or limit redirect URIs to `https`.
 
 ## Running from source
 

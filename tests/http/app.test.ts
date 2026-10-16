@@ -1,26 +1,22 @@
 import { ErrorCode } from '../../server/core/errors.ts';
 import { HttpStatus } from '../../server/core/wire.ts';
 import { startTestApp, type TestApp } from '../helpers.ts';
+import { adminGql, type Browser, signInAsAdmin } from '../oidc/browser.ts';
 
 const CLIENT_FIELDS = '{ clientId name clientSecret authMethod redirectUris }';
 
 describe('app', () => {
   let app: TestApp;
+  let admin: Browser;
 
   beforeAll(async () => {
     app = await startTestApp();
+    admin = await signInAsAdmin(app);
   });
 
   afterAll(() => app.close());
 
-  const gql = async (query: string, variables: Record<string, unknown> = {}) => {
-    const res = await fetch(`${app.base}/graphql`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ query, variables }),
-    });
-    return res.json();
-  };
+  const gql = (query: string, variables: Record<string, unknown> = {}) => adminGql(admin, query, variables);
 
   it('answers health checks', async () => {
     const res = await fetch(`${app.base}/healthz`);

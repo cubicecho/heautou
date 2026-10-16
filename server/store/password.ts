@@ -1,4 +1,4 @@
-import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
+import { randomBytes, scrypt, scryptSync, timingSafeEqual } from 'node:crypto';
 import { CREDENTIAL_DEFAULTS } from '../core/defaults.ts';
 
 /** What a stored password hash starts with, so a later scheme can be told apart. */
@@ -11,6 +11,9 @@ const ENCODING = 'base64url';
  *
  * @param password - The password as typed.
  * @returns `scrypt$<salt>$<hash>`, to store in place of the password.
+ *
+ * @remarks
+ * Synchronous: only an admin, already signed in, sets a password. Checking one is what strangers can ask for.
  */
 export function hashPassword(password: string): string {
   const { passwordSaltBytes, passwordHashBytes } = CREDENTIAL_DEFAULTS;
@@ -20,19 +23,52 @@ export function hashPassword(password: string): string {
 }
 
 /**
+ * Runs scrypt on the libuv thread pool, so a burst of sign-ins does not stall every other request.
+ *
+ * @param password - The password as typed.
+ * @param salt - The stored salt.
+ * @param length - The stored hash's length.
+ * @returns The derived key.
+ */
+function scryptAsync(password: string, salt: Buffer, length: number): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    scrypt(password, salt, length, (error, key) => {
+      if (error === null) {
+        resolve(key);
+      } else {
+        reject(error);
+      }
+    });
+  });
+}
+
+/**
  * Checks a password against a stored hash.
  *
  * @param password - The password as typed.
  * @param stored - What `hashPassword` returned for the real one.
  * @returns True when they match.
  */
-export function verifyPassword(password: string, stored: string): boolean {
+export async function verifyPassword(password: string, stored: string): Promise<boolean> {
   const [scheme, salt, hash] = stored.split(SEPARATOR);
   const isReadable = scheme === SCHEME && salt !== undefined && hash !== undefined;
   if (isReadable === false) {
     return false;
   }
   const expected = Buffer.from(hash, ENCODING);
-  const actual = scryptSync(password, Buffer.from(salt, ENCODING), expected.length);
+  const actual = await scryptAsync(password, Buffer.from(salt, ENCODING), expected.length);
   return timingSafeEqual(actual, expected);
+}
+
+let dummy: string | undefined;
+
+/**
+ * A hash no password matches, to check an unknown username against. The check then takes as long as for a
+ * real user, so the time a sign-in takes does not say which usernames exist.
+ *
+ * @returns The hash, made on first use.
+ */
+export function dummyPasswordHash(): string {
+  dummy ??= hashPassword(randomBytes(CREDENTIAL_DEFAULTS.passwordSaltBytes).toString(ENCODING));
+  return dummy;
 }

@@ -45,12 +45,17 @@ export function clientMetadata(client: OidcClient): AdapterPayload {
  * web app, never by the provider, so its writes are ignored.
  *
  * @param clients - The client store.
+ * @param builtIns - Clients the server itself is, such as the admin UI. They are not in the store.
  * @returns The adapter.
  */
-function createClientAdapter(clients: ClientStore): Adapter {
+function createClientAdapter(clients: ClientStore, builtIns: AdapterPayload[]): Adapter {
   const ignore = async (): Promise<void> => {};
   return {
     find: async (id) => {
+      const builtIn = builtIns.find((candidate) => candidate.client_id === id);
+      if (builtIn !== undefined) {
+        return builtIn;
+      }
       const client = clients.find(id);
       return client === null ? undefined : clientMetadata(client);
     },
@@ -117,18 +122,28 @@ function createFileAdapter(file: string, now: () => number): Adapter {
   };
 }
 
+/** What the adapter factory is built from. */
+export interface AdapterSettings {
+  /** The directory the model files go in. */
+  dir: string;
+  clients: ClientStore;
+  /** Client metadata served before the store's, for the server's own clients. */
+  builtInClients?: AdapterPayload[];
+  /** The clock, in epoch milliseconds. */
+  now?: () => number;
+}
+
 /**
  * Builds the provider's adapter: clients from the client store, everything else in flat files.
  *
- * @param dir - The directory the model files go in.
- * @param clients - The client store.
- * @param [now] - The clock, in epoch milliseconds.
+ * @param settings - Where the files go, the clients, and the clock.
  * @returns A factory the provider calls once per model.
  */
-export function createAdapterFactory(dir: string, clients: ClientStore, now: () => number = Date.now): AdapterFactory {
+export function createAdapterFactory(settings: AdapterSettings): AdapterFactory {
+  const { dir, clients, builtInClients = [], now = Date.now } = settings;
   return (model) => {
     if (model === CLIENT_MODEL) {
-      return createClientAdapter(clients);
+      return createClientAdapter(clients, builtInClients);
     }
     return createFileAdapter(path.join(dir, `${model}.json`), now);
   };

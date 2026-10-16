@@ -1,3 +1,4 @@
+import { ADMIN_DEFAULTS } from '../../server/core/defaults.ts';
 import { HttpStatus } from '../../server/core/wire.ts';
 import type { TestApp } from '../helpers.ts';
 
@@ -40,6 +41,7 @@ export function createBrowser(base: string) {
  * @param username - Who signs in.
  * @param password - Their password.
  * @param browser - The browser to sign in with, so its cookies can be used after. A fresh one by default.
+ * @param callback - Where the client wants the browser back; the walk stops at the first redirect there.
  * @returns The callback URL the provider sent the browser to.
  */
 export async function signIn(
@@ -48,6 +50,7 @@ export async function signIn(
   username: string,
   password: string,
   browser: Browser = createBrowser(app.base),
+  callback: string = REDIRECT_URI,
 ): Promise<URL> {
   let next = authorizeUrl;
   for (let hop = 0; hop < MAX_HOPS; hop += 1) {
@@ -69,10 +72,47 @@ export async function signIn(
     if (location === null) {
       throw new Error(`${next} answered ${res.status} without a redirect: ${await res.text()}`);
     }
-    if (location.startsWith(REDIRECT_URI)) {
+    if (location.startsWith(callback)) {
       return new URL(location);
     }
     next = location.startsWith(app.base) ? location.slice(app.base.length) : location;
   }
   throw new Error('The sign-in never came back to the client.');
+}
+
+/**
+ * Signs a browser in to the admin UI, adding the admin first when there is none by that name.
+ *
+ * @param app - The running app.
+ * @param [username] - The admin's username.
+ * @returns The browser, holding the admin session cookie.
+ */
+export async function signInAsAdmin(app: TestApp, username = 'root'): Promise<Browser> {
+  const { users } = app.services;
+  const exists = users.list().some((user) => user.username === username);
+  if (exists === false) {
+    users.create({ username, password: PASSWORD, email: '', name: '', groups: [ADMIN_DEFAULTS.group] });
+  }
+  const browser = createBrowser(app.base);
+  const callback = await signIn(app, '/admin/login', username, PASSWORD, browser, `${app.base}/admin/callback`);
+  const res = await browser.send(callback.pathname + callback.search);
+  expect(res.status).toBe(HttpStatus.SeeOther);
+  return browser;
+}
+
+/**
+ * Sends a GraphQL operation the way the admin UI does.
+ *
+ * @param browser - A browser, signed in or not.
+ * @param query - The operation.
+ * @param [variables] - Its variables.
+ * @returns The parsed reply.
+ */
+export async function adminGql(browser: Browser, query: string, variables: Record<string, unknown> = {}) {
+  const res = await browser.send('/graphql', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ query, variables }),
+  });
+  return res.json();
 }

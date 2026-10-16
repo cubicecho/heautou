@@ -71,6 +71,15 @@ const resolvers = {
       scopes: SCOPES,
     }),
     /**
+     * Resolves `Query.viewer`.
+     *
+     * @param _parent - Unused.
+     * @param _args - Unused.
+     * @param ctx - Request context.
+     * @returns The signed-in admin.
+     */
+    viewer: (_parent: unknown, _args: unknown, ctx: Context): PublicUser => ctx.viewer,
+    /**
      * Resolves `Query.clients`.
      *
      * @param _parent - Unused.

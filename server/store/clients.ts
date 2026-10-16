@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { CREDENTIAL_DEFAULTS } from '../core/defaults.ts';
+import { ADMIN_DEFAULTS, CREDENTIAL_DEFAULTS } from '../core/defaults.ts';
 import { badInput, notFound } from '../core/errors.ts';
 import { parseInput } from '../core/validation.ts';
 import type { JsonFile } from './json-file.ts';
@@ -118,7 +118,8 @@ export function createClientStore(file: JsonFile<OidcClient[]>, now: () => Date 
     find,
     create: (input) => {
       const { clientId = randomUUID(), ...fields } = parseInput(newClientSchema, input);
-      if (find(clientId) !== null) {
+      const isTaken = find(clientId) !== null || clientId === ADMIN_DEFAULTS.clientId;
+      if (isTaken) {
         throw badInput(`clientId: "${clientId}" is already taken.`);
       }
       const client = withSecretFor({ ...fields, clientId, clientSecret: null, createdAt: now().toISOString() });

@@ -56,6 +56,8 @@ export const TYPE_DEFS = /* GraphQL */ `
   type Query {
     "The provider's own URLs."
     provider: ProviderInfo!
+    "The admin signed in to this UI."
+    viewer: User!
     "Every client, oldest first."
     clients: [Client!]!
     "One client."
