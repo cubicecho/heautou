@@ -12,6 +12,7 @@ import {
   DeleteUserDocument,
   EndUserSessionDocument,
   GroupsDocument,
+  HttpRedirectsDocument,
   KeysDocument,
   type NewClientInput,
   type NewUserInput,
@@ -23,6 +24,7 @@ import {
   RotateKeysDocument,
   SetBrandingLogoDocument,
   SetBrandingNameDocument,
+  SetHttpRedirectsDocument,
   SetUserDisabledDocument,
   SetUserPasswordDocument,
   SignOutUserDocument,
@@ -48,6 +50,7 @@ const KEYS = {
   keys: ['keys'],
   branding: ['branding'],
   pairings: ['pairings'],
+  httpRedirects: ['httpRedirects'],
 } as const;
 
 /** How often a waiting pairing is asked about, in milliseconds. */
@@ -398,6 +401,36 @@ export function useRotateKeys() {
   return useMutation({
     mutationFn: async () => (await request(RotateKeysDocument)).rotateKeys,
     onSuccess: (keys) => queryClient.setQueryData(KEYS.keys, keys),
+  });
+}
+
+/**
+ * Reads whether redirect URIs may be plain http.
+ *
+ * @returns The query.
+ */
+export function useHttpRedirects() {
+  return useQuery({
+    queryKey: KEYS.httpRedirects,
+    queryFn: async () => (await request(HttpRedirectsDocument)).httpRedirects,
+  });
+}
+
+/**
+ * Allows or refuses plain http redirect URIs, or with null follows the issuer again. The clients are read again, since
+ * which of them break the rule changes with it.
+ *
+ * @returns The mutation.
+ */
+export function useSetHttpRedirects() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (allowed: boolean | null) =>
+      (await request(SetHttpRedirectsDocument, { allowed })).setHttpRedirects,
+    onSuccess: async (setting) => {
+      queryClient.setQueryData(KEYS.httpRedirects, setting);
+      await queryClient.invalidateQueries({ queryKey: KEYS.clients });
+    },
   });
 }
 

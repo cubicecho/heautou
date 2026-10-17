@@ -18,6 +18,8 @@ import {
 import { deleteGroup, type Group, listGroups, renameGroup } from '../store/groups.ts';
 import type { ProviderKeys } from '../store/keys.ts';
 import type { Pairing, PairingInput } from '../store/pairings.ts';
+import { refusedRedirectUris } from '../store/redirect-uris.ts';
+import type { HttpRedirectSetting } from '../store/settings.ts';
 import type { NewUser, PublicUser, UserFields } from '../store/users.ts';
 import { TYPE_DEFS } from './type-defs.ts';
 
@@ -181,6 +183,21 @@ const resolvers = {
     ADMIN: CLIENT_SOURCE_ADMIN,
     PAIRED: CLIENT_SOURCE_PAIRED,
   },
+  Client: {
+    /**
+     * Resolves `Client.refusedRedirectUris`.
+     *
+     * @param client - The client.
+     * @param _args - Unused.
+     * @param ctx - Request context.
+     * @returns Its URIs the redirect rule refuses now, for a client saved before the rule or the setting changed.
+     */
+    refusedRedirectUris: (client: OidcClient, _args: unknown, ctx: Context): string[] =>
+      refusedRedirectUris(client, {
+        allowsHttp: ctx.settings.httpRedirects().isAllowed,
+        isPublic: client.authMethod === ClientAuthMethod.None,
+      }),
+  },
   User: {
     /**
      * Resolves `User.claims`.
@@ -291,6 +308,16 @@ const resolvers = {
      * @returns The name and logo URL.
      */
     branding: (_parent: unknown, _args: unknown, ctx: Context): BrandingView => brandingView(ctx.branding.read()),
+    /**
+     * Resolves `Query.httpRedirects`.
+     *
+     * @param _parent - Unused.
+     * @param _args - Unused.
+     * @param ctx - Request context.
+     * @returns Whether plain http redirect URIs are allowed, and why.
+     */
+    httpRedirects: (_parent: unknown, _args: unknown, ctx: Context): HttpRedirectSetting =>
+      ctx.settings.httpRedirects(),
     /**
      * Resolves `Query.pairing`.
      *
@@ -529,6 +556,16 @@ const resolvers = {
      */
     setBrandingLogo: (_parent: unknown, args: { dataUrl?: string | null }, ctx: Context): BrandingView =>
       brandingView(ctx.branding.setLogo(args.dataUrl ?? null)),
+    /**
+     * Resolves `Mutation.setHttpRedirects`.
+     *
+     * @param _parent - Unused.
+     * @param args - Whether to allow them, or null to follow the issuer.
+     * @param ctx - Request context.
+     * @returns The setting.
+     */
+    setHttpRedirects: (_parent: unknown, args: { allowed?: boolean | null }, ctx: Context): HttpRedirectSetting =>
+      ctx.settings.setHttpRedirects(args.allowed ?? null),
   },
 };
 

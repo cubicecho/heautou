@@ -9,6 +9,8 @@ import {
   type OidcClient,
 } from '../store/clients.ts';
 import type { Pairing, PairingInput, PairingStore } from '../store/pairings.ts';
+import { redirectProblem } from '../store/redirect-uris.ts';
+import type { SettingsStore } from '../store/settings.ts';
 
 /** The registration policy every setup URL's initial access token carries. */
 export const PAIRING_POLICY = 'heautou-pairing';
@@ -155,6 +157,7 @@ function stored(write: () => OidcClient): OidcClient {
 export interface PairingPolicyDeps {
   clients: ClientStore;
   pairings: PairingStore;
+  settings: SettingsStore;
 }
 
 /**
@@ -163,7 +166,7 @@ export interface PairingPolicyDeps {
  * token. On an RFC 7592 update it writes the new metadata over the client. Either way the secret in the response is
  * the store's.
  *
- * @param deps - The client and pairing stores.
+ * @param deps - The client, pairing and settings stores.
  * @returns The policy, for `features.registration.policies`.
  */
 export function createPairingPolicy(
@@ -171,6 +174,17 @@ export function createPairingPolicy(
 ): (ctx: KoaContextWithOIDC, metadata: ClientMetadata) => Promise<void> {
   return async (ctx, metadata) => {
     const fields = clientFieldsFrom(metadata);
+    // The client store checks this too, but RFC 7591 names its own error for a redirect URI.
+    const redirect = redirectProblem(fields, {
+      allowsHttp: deps.settings.httpRedirects().isAllowed,
+      isPublic: fields.authMethod === ClientAuthMethod.None,
+    });
+    if (redirect !== null) {
+      const refused = new errors.InvalidRedirectUri();
+      // Its own description is about authorization requests, so say what is wrong with the registration instead.
+      refused.error_description = redirect.message;
+      throw refused;
+    }
     // The provider checks the metadata again once the policy returns, but by then the token would be spent.
     await ctx.oidc.provider.Client.validate(metadata);
     const initialToken = ctx.oidc.entities.InitialAccessToken;

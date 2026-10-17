@@ -59,6 +59,7 @@ export function createApp(services: Services): Express {
       passwordLinks: services.passwordLinks,
       adminSessions: services.adminSessions,
       pairings: services.pairings,
+      settings: services.settings,
       viewer: res.locals.viewer as PublicUser,
     }),
   });

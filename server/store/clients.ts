@@ -5,6 +5,7 @@ import { badInput, notFound } from '../core/errors.ts';
 import { parseInput } from '../core/validation.ts';
 import { DEFAULT_GROUPS_CLAIM, groupsClaimSchema, replaceGroupIn, withoutBlanks } from './claims.ts';
 import type { JsonFile } from './json-file.ts';
+import { redirectProblem } from './redirect-uris.ts';
 import type { SecretMapper } from './sealed-file.ts';
 
 /** How a client proves who it is at the token endpoint. */
@@ -129,6 +130,14 @@ export interface ClientStore {
   replaceGroup: (from: string, to: string | null) => void;
 }
 
+/** What the client store is built with besides its file. */
+export interface ClientStoreOptions {
+  /** The clock, for `createdAt`. */
+  now?: () => Date;
+  /** Whether plain http redirect URIs are allowed on any host. Asked on every save; refused when left out. */
+  allowsHttpRedirects?: () => boolean;
+}
+
 /**
  * Fills in what a file written by an older version lacks.
  *
@@ -181,13 +190,24 @@ export const clientSecretsIn: SecretMapper<OidcClient[]> = (clients, change) =>
   );
 
 /**
- * Builds the client store over a JSON file.
+ * Builds the client store over a JSON file. Redirect URIs are checked against the https rule
+ * (`redirect-uris.ts`) when a client is saved; clients already in the file are read as they are.
  *
  * @param file - The file holding every client.
- * @param [now] - The clock, for `createdAt`.
+ * @param [options] - The clock and whether plain http redirect URIs are allowed.
  * @returns The store.
  */
-export function createClientStore(file: JsonFile<OidcClient[]>, now: () => Date = () => new Date()): ClientStore {
+export function createClientStore(file: JsonFile<OidcClient[]>, options: ClientStoreOptions = {}): ClientStore {
+  const { now = () => new Date(), allowsHttpRedirects = () => false } = options;
+  const checkRedirects = (client: Pick<OidcClient, 'authMethod' | 'redirectUris' | 'postLogoutRedirectUris'>) => {
+    const problem = redirectProblem(client, {
+      allowsHttp: allowsHttpRedirects(),
+      isPublic: client.authMethod === ClientAuthMethod.None,
+    });
+    if (problem !== null) {
+      throw badInput(`${problem.field}: ${problem.message}.`);
+    }
+  };
   const stored = (): OidcClient[] => file.read().map(withDefaults);
   const find = (clientId: string): OidcClient | null => stored().find((client) => client.clientId === clientId) ?? null;
 
@@ -213,6 +233,7 @@ export function createClientStore(file: JsonFile<OidcClient[]>, now: () => Date 
       if (isTaken) {
         throw badInput(`clientId: "${clientId}" is already taken.`);
       }
+      checkRedirects(fields);
       const client = withSecretFor({ ...fields, clientId, clientSecret: null, createdAt: now().toISOString() });
       file.update(() => [...stored(), client]);
       return client;
@@ -223,6 +244,7 @@ export function createClientStore(file: JsonFile<OidcClient[]>, now: () => Date 
       const { allowedGroups, groupsClaim, allowClientCredentials, logoUri } = current;
       const merged = { allowedGroups, groupsClaim, allowClientCredentials, logoUri, ...withoutBlanks(input) };
       const fields = parseInput(clientFieldsSchema, merged);
+      checkRedirects(fields);
       return replace(withSecretFor({ ...current, ...fields }));
     },
     rotateSecret: (clientId) => {

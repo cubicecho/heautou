@@ -4,6 +4,7 @@ import { DEFAULT_GROUPS_CLAIM } from '../store/claims.ts';
 import { ClientAuthMethod, type ClientStore, type OidcClient } from '../store/clients.ts';
 import type { ProviderKeys } from '../store/keys.ts';
 import type { PairingStore } from '../store/pairings.ts';
+import type { SettingsStore } from '../store/settings.ts';
 import type { PublicUser, UserStore } from '../store/users.ts';
 import { createPageSources } from './pages.ts';
 import { createPairingPolicy, PAIRING_POLICY } from './pairing.ts';
@@ -92,6 +93,8 @@ export interface ProviderDeps {
   users: UserStore;
   /** The setup URLs apps register with. */
   pairings: PairingStore;
+  /** The operator's settings, for whether a paired app may register plain http redirect URIs. */
+  settings: SettingsStore;
   keys: ProviderKeys;
   /** Persists the provider's sessions, codes and tokens. */
   adapter: AdapterFactory;

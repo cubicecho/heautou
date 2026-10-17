@@ -41,6 +41,8 @@ export const TYPE_DEFS = /* GraphQL */ `
     source: ClientSource!
     "The logo the app gave when it paired. Null for none."
     logoUri: String
+    "Its redirect and post-logout URIs the redirect rule refuses now. Saved before the rule applied, they still work; saving the client again needs them changed."
+    refusedRedirectUris: [String!]!
     "When it was added, as an ISO 8601 string."
     createdAt: String!
   }
@@ -147,6 +149,15 @@ export const TYPE_DEFS = /* GraphQL */ `
     signingKeys: [SigningKey!]!
   }
 
+  "Whether redirect URIs may be plain http on any host. https, loopback http and a native app's own scheme are always allowed."
+  type HttpRedirects {
+    isAllowed: Boolean!
+    "False while the operator has not chosen, so it follows the issuer: allowed when the issuer is plain http."
+    isSet: Boolean!
+    "Whether ISSUER_URL is plain http."
+    isIssuerHttp: Boolean!
+  }
+
   "What the sign-in page and the sidebar show the provider as."
   type Branding {
     name: String!
@@ -185,6 +196,8 @@ export const TYPE_DEFS = /* GraphQL */ `
     keys: Keys!
     "The provider's name and logo."
     branding: Branding!
+    "Whether redirect URIs may be plain http."
+    httpRedirects: HttpRedirects!
     "A pairing. Null once it has expired or been cancelled."
     pairing(id: ID!): Pairing
   }
@@ -282,5 +295,7 @@ export const TYPE_DEFS = /* GraphQL */ `
     setBrandingName(name: String!): Branding!
     "Sets the logo from a base64 data URL (PNG, JPEG, WebP or SVG), or removes it with null."
     setBrandingLogo(dataUrl: String): Branding!
+    "Allows or refuses plain http redirect URIs for clients saved from now on. Null follows the issuer again."
+    setHttpRedirects(allowed: Boolean): HttpRedirects!
   }
 `;

@@ -48,6 +48,29 @@ describe('client store', () => {
     expect(() => store.create({ ...FIELDS, redirectUris: ['not a url'] })).toThrow(/redirectUris/);
   });
 
+  it('refuses a plain http redirect URI unless the operator allows it, checking it on save only', () => {
+    const file = path.join(tempDir(), 'clients.json');
+    let allowsHttp = true;
+    const store = createClientStore(openJsonFile<OidcClient[]>(file, []), { allowsHttpRedirects: () => allowsHttp });
+    const http = { ...FIELDS, redirectUris: ['http://nas.lan:31001/login'] };
+    const { clientId } = store.create(http);
+    allowsHttp = false;
+    expect(store.find(clientId)?.redirectUris).toEqual(http.redirectUris);
+    expect(() => store.update(clientId, http)).toThrow(/redirectUris: .*plain http/);
+    expect(() => store.create(http)).toThrow(/plain http/);
+    expect(() => store.create({ ...FIELDS, postLogoutRedirectUris: ['http://nas.lan/bye'] })).toThrow(
+      /postLogoutRedirectUris/,
+    );
+    expect(store.create({ ...FIELDS, redirectUris: ['http://localhost:8080/cb'] }).clientId).toBeTruthy();
+  });
+
+  it("takes a native app's own scheme for a public client only", () => {
+    const { store } = freshStore();
+    const native = { ...FIELDS, redirectUris: ['com.example.app:/callback'] };
+    expect(() => store.create(native)).toThrow(/public/);
+    expect(store.create({ ...native, authMethod: ClientAuthMethod.None }).clientSecret).toBeNull();
+  });
+
   it('drops the secret for a public client and makes one when it turns confidential', () => {
     const { store } = freshStore();
     const { clientId } = store.create(FIELDS);

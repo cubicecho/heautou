@@ -1,12 +1,10 @@
 // Runs before anything listens, so a misconfigured instance fails with a sentence, not a stack trace.
 import { accessSync, constants, mkdirSync } from 'node:fs';
 import { DIR_MODE } from '../store/json-file.ts';
+import { LOOPBACK_HOSTS } from '../store/redirect-uris.ts';
 import { dataDir, isProduction, issuerUrl, secretKeys } from './config.ts';
 import { errorMessage } from './errors.ts';
 import { SecretKeyError } from './secret-box.ts';
-
-/** Hosts a plain-HTTP issuer is fine on: nothing crosses a network. */
-const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 
 try {
   const issuer = new URL(issuerUrl());

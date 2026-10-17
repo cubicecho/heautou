@@ -11,7 +11,7 @@ A minimal OpenID Connect provider for self-hosted setups. It gives your apps one
 
 > [!WARNING]
 > Heautou is built for a home or office network you trust. The admin UI needs a sign-in, but client secrets
-> and signing keys are stored as plain text in the data folder, and nothing has been audited. Don't expose
+> and signing keys are plain text in the data folder unless you set `SECRET_KEY`, and nothing has been audited. Don't expose
 > it to the internet. See [Security](#security).
 
 ## Quick start (Docker Compose)
@@ -255,11 +255,16 @@ What Heautou does:
   cancelled. Registration is rate-limited like sign-in.
 - **Secrets can be sealed at rest.** With `SECRET_KEY` set, client secrets and the private signing and cookie
   keys are encrypted in the data folder, under a key kept outside it.
+- **Redirect URIs must be `https`.** Plain `http` is allowed on `localhost`, `127.0.0.1` and `[::1]`, and a
+  native app's own scheme (such as `com.example.app:/callback`) is allowed for a public client. To allow plain
+  `http` on any host, turn on **Allow plain http** under Settings. Until you choose, it follows `ISSUER_URL`:
+  allowed when that is `http://`, refused when it is `https://`. Clients saved before it was refused keep working
+  and are marked in the client list.
 - **The pages can't be framed**, send no referrer, and the web app runs only its own scripts.
 
 What it does not do: seal anything without `SECRET_KEY` (then anyone who can read the data folder has the
-signing keys and client secrets), seal the live sessions, codes and tokens in `oidc/`, terminate TLS, keep an
-audit log, or limit redirect URIs to `https`.
+signing keys and client secrets), seal the live sessions, codes and tokens in `oidc/`, terminate TLS, or keep an
+audit log.
 
 ## Running from source
 

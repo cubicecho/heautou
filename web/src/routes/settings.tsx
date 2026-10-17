@@ -14,7 +14,16 @@ import { FilePickerButton } from '@/components/ui/file-picker';
 import type { PickedFile } from '@/components/ui/file-picker-base';
 import { FormElement } from '@/components/ui/form-element';
 import { RefreshCw, Trash2 } from '@/components/ui/icons';
-import { useBranding, useKeys, useRotateKeys, useSetBrandingLogo, useSetBrandingName } from '@/core/admin';
+import { Switch } from '@/components/ui/switch';
+import {
+  useBranding,
+  useHttpRedirects,
+  useKeys,
+  useRotateKeys,
+  useSetBrandingLogo,
+  useSetBrandingName,
+  useSetHttpRedirects,
+} from '@/core/admin';
 import { ImageUp } from '@/core/app-icons';
 import { messageOf } from '@/core/lists';
 import { formatAgo, formatBytes, formatDateTime } from '@/lib/format';
@@ -196,20 +205,74 @@ function KeysSection() {
 }
 
 /**
- * The provider's own settings: its branding and its keys.
+ * Whether clients may be sent back to plain http redirect URIs.
+ */
+function RedirectUrisSection() {
+  const setting = useHttpRedirects();
+  const save = useSetHttpRedirects();
+  const current = setting.data;
+  const issuerNote = current?.isIssuerHttp
+    ? 'Left alone it follows the issuer, which is plain http, so it is allowed.'
+    : 'Left alone it follows the issuer, which is https, so it is refused.';
+
+  return (
+    <Section
+      title="Redirect URIs"
+      description="Where an application may be sent back to after a sign-in or sign-out. https is always allowed, and so is plain http on localhost."
+      surface="card"
+      contentSlot={
+        <div className="grid gap-4">
+          {setting.isError ? (
+            <QueryError error={setting.error} onRetry={setting.refetch} what="the redirect URI setting" />
+          ) : null}
+          <SettingRow
+            title="Allow plain http"
+            description={`Lets a client be saved with an http:// redirect URI on any host. Clients saved before it was turned off keep working, and are marked in the list. ${issuerNote}`}
+            actionSlot={({ titleId }) => (
+              <div className="flex items-center gap-2">
+                {current?.isSet ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    content="Follow the issuer"
+                    disabled={save.isPending}
+                    onClick={() => save.mutate(null)}
+                  />
+                ) : null}
+                <Switch
+                  aria-labelledby={titleId}
+                  checked={current?.isAllowed ?? false}
+                  disabled={current === undefined || save.isPending}
+                  onCheckedChange={(checked) => save.mutate(checked)}
+                />
+              </div>
+            )}
+          />
+          {save.error === null ? null : (
+            <Alert variant="destructive" title="Setting not saved" description={messageOf(save.error)} />
+          )}
+        </div>
+      }
+    />
+  );
+}
+
+/**
+ * The provider's own settings: its branding, its redirect URI rule and its keys.
  */
 function SettingsPage() {
   const branding = useBranding();
   return (
     <PageLayout
       title="Settings"
-      description="How the provider presents itself, and the keys it signs with."
+      description="How the provider presents itself, where it sends applications back to, and the keys it signs with."
       width="prose"
       contentClassName="gap-6"
       contentSlot={
         <>
           {/* The name field starts from the saved name, so it waits for it. */}
           {branding.isPending ? null : <BrandingSection />}
+          <RedirectUrisSection />
           <KeysSection />
         </>
       }

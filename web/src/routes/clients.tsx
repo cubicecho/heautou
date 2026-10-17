@@ -46,6 +46,13 @@ function ClientCredentials({ client }: { client: ClientFieldsFragment }) {
 
   return (
     <div className="flex flex-col gap-4">
+      {client.refusedRedirectUris.length === 0 ? null : (
+        <Alert
+          variant="warning"
+          title="Redirect URIs no longer allowed"
+          description={`The client still works, but cannot be saved until these use https: ${client.refusedRedirectUris.join(', ')}. Plain http can be allowed under Settings.`}
+        />
+      )}
       <DescriptionList
         contentSlot={[
           <PropertyRow
@@ -197,6 +204,7 @@ function ClientsPage() {
                     <Badge variant="outline">{client.authMethod === 'NONE' ? 'Public' : 'Confidential'}</Badge>
                     {client.allowedGroups.length === 0 ? null : <Badge variant="secondary">Limited</Badge>}
                     {client.source === 'PAIRED' ? <Badge variant="secondary">Paired</Badge> : null}
+                    {client.refusedRedirectUris.length === 0 ? null : <Badge variant="warning">http redirect</Badge>}
                   </>
                 }
                 meta={<span className="font-mono text-foreground/60 text-xs">{client.clientId}</span>}
