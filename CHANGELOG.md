@@ -1,3 +1,10 @@
+# [1.7.0](https://github.com/cubicecho/heautou/compare/v1.6.0...v1.7.0) (2026-10-17)
+
+
+### Features
+
+* require https redirect URIs unless allowed ([59381ca](https://github.com/cubicecho/heautou/commit/59381cad994ef86c4f6c72ef9d8d18f3eded613f))
+
 # [1.6.0](https://github.com/cubicecho/heautou/compare/v1.5.0...v1.6.0) (2026-10-17)
 
 
