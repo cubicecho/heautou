@@ -1,3 +1,10 @@
+# [1.8.0](https://github.com/cubicecho/heautou/compare/v1.7.0...v1.8.0) (2026-10-17)
+
+
+### Features
+
+* add an audit log ([925696b](https://github.com/cubicecho/heautou/commit/925696b9430549a895690bc86b3d1465cf734702))
+
 # [1.7.0](https://github.com/cubicecho/heautou/compare/v1.6.0...v1.7.0) (2026-10-17)
 
 
