@@ -1,12 +1,13 @@
 import express, { type Response, Router } from 'express';
 import { z } from 'zod';
-import { BRANDING_DEFAULTS, HTTP_DEFAULTS } from '../core/defaults.ts';
+import { ADMIN_DEFAULTS, AUDIT_DEFAULTS, BRANDING_DEFAULTS, HTTP_DEFAULTS } from '../core/defaults.ts';
 import { errorMessage } from '../core/errors.ts';
 import { HttpStatus } from '../core/wire.ts';
 import { sameOriginJson, sendRefusal } from '../http/guards.ts';
 import { type LoginThrottle, sendTooMany } from '../http/rate-limit.ts';
 import type { SessionTools } from '../oidc/sessions.ts';
 import type { AdminSessionStore } from '../store/admin-sessions.ts';
+import { type AuditLog, type AuditTarget, AuditType, actorOf, SIGN_IN_TYPES } from '../store/audit.ts';
 import type { BrandingStore } from '../store/branding.ts';
 import type { ClientStore } from '../store/clients.ts';
 import type { PasswordLinkStore } from '../store/password-links.ts';
@@ -24,6 +25,7 @@ export interface AccountDeps {
   branding: BrandingStore;
   issuer: string;
   throttle: LoginThrottle;
+  audit: AuditLog;
 }
 
 const changePasswordSchema = z.object({ currentPassword: z.string(), newPassword: z.string() });
@@ -53,15 +55,24 @@ function sendDeadLink(res: Response): void {
  * @remarks
  * `GET /admin/account` says who is signed in, with their sessions, or 401. `POST /admin/account/password` changes
  * their password given the current one, and `POST /admin/account/sign-out-everywhere` ends every session and token.
+ * `GET /admin/account/activity` lists their last `AUDIT_DEFAULTS.accountEntries` sign-ins.
  * `POST /admin/password-link` names a link's user and `POST /admin/password-link/set` sets the password with it;
  * the token travels in the body, never in a URL. `GET /admin/branding` and `/admin/branding/logo` are public: the
  * sign-in page shows them.
  */
 export function createAccountRouter(deps: AccountDeps): Router {
-  const { users, clients, adminSessions, passwordLinks, sessions, branding, issuer, throttle } = deps;
+  const { users, clients, adminSessions, passwordLinks, sessions, branding, issuer, throttle, audit } = deps;
   const urls = adminUrls(issuer);
   const json = [sameOriginJson(urls.origin), express.json({ limit: HTTP_DEFAULTS.bodyLimit })];
   const clientName = (clientId: string): string => sessionClientName(clientId, clients, branding.read());
+  /**
+   * Names the client a sign-in was for: as it is called now, or as it was called when it has since been removed.
+   *
+   * @param target - The entry's target.
+   * @returns The name.
+   */
+  const targetName = (target: AuditTarget): string =>
+    target.id === ADMIN_DEFAULTS.clientId || clients.find(target.id) !== null ? clientName(target.id) : target.name;
   const router = Router();
 
   router.get(ADMIN_PATH.account, (req, res) => {
@@ -81,6 +92,24 @@ export function createAccountRouter(deps: AccountDeps): Router {
       sessions: sessions.sessionsOf(id).map(({ clientIds, ...session }) => ({
         ...session,
         clientNames: clientIds.map(clientName),
+      })),
+    });
+  });
+
+  router.get(ADMIN_PATH.accountActivity, (req, res) => {
+    const user = signedInUser(deps, req);
+    if (user === null) {
+      sendRefusal(res, HttpStatus.Unauthorized, 'Sign in first.');
+      return;
+    }
+    const { entries } = audit.list({ first: AUDIT_DEFAULTS.accountEntries, types: SIGN_IN_TYPES, userId: user.id });
+    res.json({
+      entries: entries.map(({ id, at, type, ip, target }) => ({
+        id,
+        at,
+        type,
+        ip,
+        clientName: target === undefined ? null : targetName(target),
       })),
     });
   });
@@ -105,6 +134,7 @@ export function createAccountRouter(deps: AccountDeps): Router {
     const checked = await users.authenticate(user.username, parsed.data.currentPassword);
     if (checked === null) {
       throttle.fail(ip, user.username);
+      audit.record({ type: AuditType.AccountPasswordFailed, actor: actorOf(user), ip: req.ip ?? null });
       sendRefusal(res, HttpStatus.Forbidden, 'That is not your current password.');
       return;
     }
@@ -112,6 +142,7 @@ export function createAccountRouter(deps: AccountDeps): Router {
       users.setPassword(user.id, parsed.data.newPassword);
       passwordLinks.cancelFor(user.id);
       throttle.succeed(user.username);
+      audit.record({ type: AuditType.AccountPasswordChanged, actor: actorOf(user), ip: req.ip ?? null });
       res.json({ ok: true });
     } catch (caught) {
       sendRefusal(res, HttpStatus.BadRequest, errorMessage(caught));
@@ -123,6 +154,7 @@ export function createAccountRouter(deps: AccountDeps): Router {
     if (user !== null) {
       sessions.revokeAccount(user.id);
       adminSessions.removeUser(user.id);
+      audit.record({ type: AuditType.AccountSignedOutEverywhere, actor: actorOf(user), ip: req.ip ?? null });
     }
     res.clearCookie(COOKIE.session, sessionCookieOptions(issuer));
     res.json({ redirectTo: `${ADMIN_PATH.login}?return=${encodeURIComponent(WEB_APP_PAGE.account)}` });
@@ -147,14 +179,21 @@ export function createAccountRouter(deps: AccountDeps): Router {
     }
     const { token, password } = parsed.data;
     const userId = passwordLinks.find(token);
-    if (userId === null || users.find(userId) === null) {
+    const user = userId === null ? null : users.find(userId);
+    if (user === null) {
       sendDeadLink(res);
       return;
     }
     try {
       // Checked before the link is used up, so a password that is too short can be fixed and sent again.
-      users.setPassword(userId, password);
+      users.setPassword(user.id, password);
       passwordLinks.consume(token);
+      audit.record({
+        type: AuditType.PasswordLinkUsed,
+        actor: actorOf(user),
+        ip: req.ip ?? null,
+        detail: { link: user.hasPassword ? 'reset' : 'invite' },
+      });
       res.json({ redirectTo: `${ADMIN_PATH.login}?return=${encodeURIComponent(WEB_APP_PAGE.account)}` });
     } catch (caught) {
       sendRefusal(res, HttpStatus.BadRequest, errorMessage(caught));

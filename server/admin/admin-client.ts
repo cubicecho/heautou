@@ -23,6 +23,8 @@ export const ADMIN_PATH = {
   accountPassword: '/admin/account/password',
   /** Ends every session of the signed-in user (POST). */
   accountSignOut: '/admin/account/sign-out-everywhere',
+  /** The signed-in user's recent sign-ins, from the audit log. */
+  accountActivity: '/admin/account/activity',
   /** Says whose a password link is (POST), and sets the password with it (POST to `/set`). */
   passwordLink: '/admin/password-link',
   passwordLinkSet: '/admin/password-link/set',

@@ -1,6 +1,7 @@
 import { PAIRING_DEFAULTS } from '../../server/core/defaults.ts';
 import { HttpStatus, MS_PER_SECOND } from '../../server/core/wire.ts';
 import { SETUP_URL_NAME, SETUP_URL_TOKEN } from '../../server/oidc/pairing.ts';
+import { AuditType } from '../../server/store/audit.ts';
 import { CLIENT_SOURCE_PAIRED, ClientAuthMethod } from '../../server/store/clients.ts';
 import { startTestApp, type TestApp } from '../helpers.ts';
 import {
@@ -162,6 +163,15 @@ describe('pairing an app with a setup URL', () => {
 
     expect((await manage('DELETE', updated.registration_access_token)).status).toBe(HttpStatus.NoContent);
     expect(app.services.clients.find(registered.client_id)).toBeNull();
+    const recorded = app.services.audit
+      .list({ first: 3 })
+      .entries.filter((entry) => entry.target?.id === registered.client_id);
+    expect(recorded.map((entry) => entry.type)).toEqual([
+      AuditType.RegistrationDeleted,
+      AuditType.RegistrationUpdated,
+      AuditType.PairingCompleted,
+    ]);
+    expect(JSON.stringify(recorded)).not.toContain(registered.registration_access_token);
   });
 
   it('turns away a setup URL that is missing, cancelled or expired', async () => {
@@ -229,6 +239,13 @@ describe('pairing an app with a setup URL', () => {
 
     const reset = await adminGql(admin, setHttpRedirects, { allowed: null });
     expect(reset.data.setHttpRedirects).toEqual({ isAllowed: true, isSet: false, isIssuerHttp: true });
+    const changes = app.services.audit
+      .list({ first: 50, types: [AuditType.HttpRedirectsSet] })
+      .entries.map((entry) => entry.detail);
+    expect(changes).toEqual([
+      { httpRedirects: 'allowed', chosenBy: 'issuer' },
+      { httpRedirects: 'refused', chosenBy: 'operator' },
+    ]);
   });
 
   it('gives a public client no secret', async () => {

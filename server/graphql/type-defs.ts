@@ -1,3 +1,6 @@
+import { AUDIT_DEFAULTS } from '../core/defaults.ts';
+import { AUDIT_TYPES, AuditTargetKind } from '../store/audit.ts';
+
 /** The admin API the web app uses to set up clients and users. */
 export const TYPE_DEFS = /* GraphQL */ `
   "How a client proves who it is at the token endpoint."
@@ -177,6 +180,60 @@ export const TYPE_DEFS = /* GraphQL */ `
     introspectionUrl: String!
   }
 
+  "What an audit log entry records."
+  enum AuditType {
+    ${AUDIT_TYPES.map((type) => type.toUpperCase()).join('\n    ')}
+  }
+
+  "What kind of thing an audit log entry is about."
+  enum AuditTargetKind {
+    ${Object.values(AuditTargetKind)
+      .map((kind) => kind.toUpperCase())
+      .join('\n    ')}
+  }
+
+  "Who did it: the signed-in user, or for a sign-in the account it was for."
+  type AuditActor {
+    userId: ID!
+    "Their username at the time."
+    username: String!
+  }
+
+  "What it was done to."
+  type AuditTarget {
+    kind: AuditTargetKind!
+    id: ID!
+    "Its name at the time, so the entry still reads after a rename or delete."
+    name: String!
+  }
+
+  "One fact an entry keeps, such as the username a failed sign-in tried."
+  type AuditDetail {
+    name: String!
+    value: String!
+  }
+
+  "One thing that happened."
+  type AuditEntry {
+    id: ID!
+    "When, as an ISO 8601 string."
+    at: String!
+    type: AuditType!
+    "Null when nobody is known, such as a sign-in with an unknown username or an app managing its own registration."
+    actor: AuditActor
+    "The client's address."
+    ip: String
+    target: AuditTarget
+    detail: [AuditDetail!]!
+  }
+
+  "A page of the audit log, newest first."
+  type AuditPage {
+    entries: [AuditEntry!]!
+    "Pass as after for the next page. Null at the end."
+    nextCursor: String
+  }
+
   type Query {
     "The provider's own URLs."
     provider: ProviderInfo!
@@ -200,6 +257,11 @@ export const TYPE_DEFS = /* GraphQL */ `
     httpRedirects: HttpRedirects!
     "A pairing. Null once it has expired or been cancelled."
     pairing(id: ID!): Pairing
+    """
+    The audit log, newest first. first is at most ${AUDIT_DEFAULTS.maxPageSize}; after is the nextCursor of the page
+    before. userId keeps entries done by that user or to them.
+    """
+    auditLog(first: Int, after: String, type: AuditType, userId: ID): AuditPage!
   }
 
   input ClaimInput {

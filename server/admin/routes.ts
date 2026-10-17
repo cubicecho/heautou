@@ -10,6 +10,7 @@ import { type LoginThrottle, sendTooMany } from '../http/rate-limit.ts';
 import type { ProviderHost } from '../oidc/host.ts';
 import { PAGE_PARAM, pageUrl, WEB_PAGE } from '../oidc/pages.ts';
 import type { AdminSessionStore } from '../store/admin-sessions.ts';
+import { type AuditLog, AuditType, actorOf, userTarget } from '../store/audit.ts';
 import type { KeyStore } from '../store/keys.ts';
 import { isAdmin, type PublicUser, type UserStore } from '../store/users.ts';
 import { ADMIN_PATH, adminUrls, WEB_APP_PAGE } from './admin-client.ts';
@@ -63,6 +64,7 @@ export interface AdminDeps {
   keys: KeyStore;
   issuer: string;
   throttle: LoginThrottle;
+  audit: AuditLog;
 }
 
 /**
@@ -162,7 +164,7 @@ function showError(res: Response, error: string, description: string): void {
  * first admin: a new user without a token for a while after boot, otherwise with the token from the server log.
  */
 export function createAdminRouter(deps: AdminDeps): Router {
-  const { host, users, adminSessions, setup, keys, issuer, throttle } = deps;
+  const { host, users, adminSessions, setup, keys, issuer, throttle, audit } = deps;
   const urls = adminUrls(issuer);
   const guard = sameOriginJson(urls.origin);
   const cookieBase: CookieOptions = { httpOnly: true, secure: urls.isHttps };
@@ -242,6 +244,7 @@ export function createAdminRouter(deps: AdminDeps): Router {
         showError(res, AdminError.disabled, 'That account is disabled or was removed. Ask an admin.');
         return;
       }
+      audit.record({ type: AuditType.WebSignedIn, actor: actorOf(user), ip: req.ip ?? null });
       res.cookie(COOKIE.session, adminSessions.create(user.id), {
         ...sessionCookie,
         maxAge: ADMIN_DEFAULTS.sessionSeconds * MS_PER_SECOND,
@@ -255,6 +258,11 @@ export function createAdminRouter(deps: AdminDeps): Router {
   router.post(ADMIN_PATH.logout, guard, (req, res) => {
     const cookie = readCookie(req, COOKIE.session);
     if (cookie !== null) {
+      const userId = adminSessions.find(cookie);
+      const user = userId === null ? null : users.find(userId);
+      if (user !== null) {
+        audit.record({ type: AuditType.WebSignedOut, actor: actorOf(user), ip: req.ip ?? null });
+      }
       adminSessions.remove(cookie);
     }
     res.clearCookie(COOKIE.session, sessionCookie);
@@ -308,7 +316,14 @@ export function createAdminRouter(deps: AdminDeps): Router {
     }
     try {
       if (existing === null) {
-        users.create({ username, password, email: '', name: '', groups: [ADMIN_DEFAULTS.group] });
+        const created = users.create({ username, password, email: '', name: '', groups: [ADMIN_DEFAULTS.group] });
+        audit.record({
+          type: AuditType.AdminSetUp,
+          actor: null,
+          ip: req.ip ?? null,
+          target: userTarget(created),
+          detail: { how: hasToken ? 'token' : 'window', user: 'new' },
+        });
       } else {
         const user = await users.authenticate(username, password);
         if (user === null) {
@@ -318,6 +333,13 @@ export function createAdminRouter(deps: AdminDeps): Router {
         }
         const { email, name, groups } = user;
         users.update(user.id, { username, email, name, groups: [...groups, ADMIN_DEFAULTS.group] });
+        audit.record({
+          type: AuditType.AdminSetUp,
+          actor: actorOf(user),
+          ip: req.ip ?? null,
+          target: userTarget(user),
+          detail: { how: 'token', user: 'existing' },
+        });
       }
       res.json({ redirectTo: ADMIN_PATH.login });
     } catch (caught) {

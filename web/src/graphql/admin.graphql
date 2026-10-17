@@ -246,3 +246,28 @@ mutation SetBrandingLogo($dataUrl: String) {
     logoUrl
   }
 }
+
+query AuditLog($first: Int, $after: String, $type: AuditType, $userId: ID) {
+  auditLog(first: $first, after: $after, type: $type, userId: $userId) {
+    entries {
+      id
+      at
+      type
+      actor {
+        userId
+        username
+      }
+      ip
+      target {
+        kind
+        id
+        name
+      }
+      detail {
+        name
+        value
+      }
+    }
+    nextCursor
+  }
+}

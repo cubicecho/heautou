@@ -192,3 +192,25 @@ export interface PairingSettings {
 export const PAIRING_DEFAULTS: Readonly<PairingSettings> = Object.freeze({
   linkSeconds: 600,
 });
+
+/** How the audit log is kept and read. */
+export interface AuditSettings {
+  /** Largest the current file may grow before it is rotated, in bytes. */
+  maxFileBytes: number;
+  /** How many rotated files are kept besides the current one. The oldest is dropped past it. */
+  keptFiles: number;
+  /** Entries in one page of the admin's activity list, unless the request asks for fewer. */
+  pageSize: number;
+  /** Most entries one page may ask for. */
+  maxPageSize: number;
+  /** How many of their own sign-ins a user sees on their account page. */
+  accountEntries: number;
+}
+
+export const AUDIT_DEFAULTS: Readonly<AuditSettings> = Object.freeze({
+  maxFileBytes: 1_048_576,
+  keptFiles: 2,
+  pageSize: 50,
+  maxPageSize: 200,
+  accountEntries: 20,
+});

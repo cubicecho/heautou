@@ -7,7 +7,7 @@ import { Settings, UserRound } from '@/components/ui/icons';
 import { ThemePicker } from '@/components/ui/theme-picker';
 import { useThemePreference } from '@/components/ui/theme-preference';
 import { signOut, useViewer } from '@/core/admin';
-import { AppWindow, LayoutDashboard, LogOut, Tags, UsersRound } from '@/core/app-icons';
+import { Activity, AppWindow, LayoutDashboard, LogOut, Tags, UsersRound } from '@/core/app-icons';
 import { BrandIcon, useBrandName } from '@/core/brand';
 
 const SidebarLink = createLink(SidebarNavItem);
@@ -25,6 +25,7 @@ const PLACES = [
   { to: '/clients', label: 'Clients', Icon: AppWindow },
   { to: '/users', label: 'Users', Icon: UsersRound },
   { to: '/groups', label: 'Groups', Icon: Tags },
+  { to: '/activity', label: 'Activity', Icon: Activity },
   { to: '/settings', label: 'Settings', Icon: Settings },
 ] as const;
 

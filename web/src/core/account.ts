@@ -25,6 +25,21 @@ const accountSchema = z.object({
     }),
   ),
 });
+const activitySchema = z.object({
+  entries: z.array(
+    z.object({
+      id: z.string(),
+      at: z.string(),
+      type: z.string(),
+      ip: z.string().nullable(),
+      clientName: z.string().nullable(),
+    }),
+  ),
+});
+
+/** One of the signed-in user's recent sign-ins. */
+export type SignInEntry = z.infer<typeof activitySchema>['entries'][number];
+
 const okSchema = z.object({ ok: z.literal(true) });
 const redirectSchema = z.object({ redirectTo: z.string() });
 const linkSchema = z.object({ username: z.string(), isInvite: z.boolean() });
@@ -45,6 +60,19 @@ export function useAccount() {
       }
       return jsonReply(response, accountSchema);
     },
+    retry: false,
+  });
+}
+
+/**
+ * Reads the signed-in user's recent sign-ins, newest first.
+ *
+ * @returns The query.
+ */
+export function useAccountActivity() {
+  return useQuery({
+    queryKey: [...KEY, 'activity'],
+    queryFn: async () => (await jsonReply(await fetch('/admin/account/activity'), activitySchema)).entries,
     retry: false,
   });
 }

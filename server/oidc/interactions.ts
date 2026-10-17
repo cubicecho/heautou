@@ -7,6 +7,7 @@ import { errorMessage } from '../core/errors.ts';
 import { HttpStatus } from '../core/wire.ts';
 import { sameOriginJson } from '../http/guards.ts';
 import { type LoginThrottle, sendTooMany } from '../http/rate-limit.ts';
+import { type AuditEvent, type AuditLog, AuditTargetKind, AuditType, actorOf } from '../store/audit.ts';
 import type { ClientStore } from '../store/clients.ts';
 import type { UserStore } from '../store/users.ts';
 import type { ProviderHost } from './host.ts';
@@ -33,6 +34,7 @@ export interface InteractionDeps {
   /** The issuer's origin; the login POST must come from a page on it. */
   origin: string;
   throttle: LoginThrottle;
+  audit: AuditLog;
 }
 
 /**
@@ -86,6 +88,23 @@ async function grantEverythingAsked(provider: Provider, req: Request, res: Respo
 }
 
 /**
+ * Reads which client a sign-in is for, without failing the sign-in when the interaction is gone.
+ *
+ * @param provider - The provider.
+ * @param req - The interaction request.
+ * @param res - Its response.
+ * @returns The client's id, or null when the interaction has expired or is unknown.
+ */
+async function clientIdOf(provider: Provider, req: Request, res: Response): Promise<string | null> {
+  try {
+    const { params } = await provider.interactionDetails(req, res);
+    return String(params.client_id);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Builds the routes the provider sends a browser to mid-sign-in.
  *
  * @param deps - The provider and the stores.
@@ -97,7 +116,7 @@ async function grantEverythingAsked(provider: Provider, req: Request, res: Respo
  * password to `POST /interaction/:uid/login`, which answers with where the browser goes next.
  */
 export function createInteractionRouter(deps: InteractionDeps): Router {
-  const { host, clients, users, throttle } = deps;
+  const { host, clients, users, throttle, audit } = deps;
   const nameOf = (clientId: string): string =>
     clientId === ADMIN_DEFAULTS.clientId ? ADMIN_CLIENT_NAME : (clients.find(clientId)?.name ?? clientId);
   const router = Router();
@@ -139,32 +158,53 @@ export function createInteractionRouter(deps: InteractionDeps): Router {
     }
     const { username, password } = parsed.data;
     const ip = req.ip ?? '';
+    const provider = host.current();
+    const clientId = await clientIdOf(provider, req, res);
+    const named = users.list().find((candidate) => candidate.username === username) ?? null;
+    /**
+     * Records how the sign-in went, against the client it was for.
+     *
+     * @param type - How it went.
+     * @param [detail] - What else to keep.
+     */
+    const record = (type: AuditType, detail?: AuditEvent['detail']): void => {
+      audit.record({
+        type,
+        actor: named === null ? null : actorOf(named),
+        ip: req.ip ?? null,
+        target: clientId === null ? undefined : { kind: AuditTargetKind.Client, id: clientId, name: nameOf(clientId) },
+        detail: named === null ? { username, ...detail } : detail,
+      });
+    };
     const wait = throttle.wait(ip, username);
     if (wait > 0) {
+      record(AuditType.SignInThrottled);
       sendTooMany(res, wait);
       return;
     }
-    const provider = host.current();
     try {
       const user = await users.authenticate(username, password);
       if (user === null) {
         throttle.fail(ip, username);
+        record(AuditType.SignInFailed);
         sendError(res, HttpStatus.Unauthorized, 'That username and password do not match.');
         return;
       }
       throttle.succeed(username);
       if (user.disabled) {
+        record(AuditType.SignInRefused, { reason: 'disabled' });
         sendError(res, HttpStatus.Forbidden, `"${user.username}" is disabled. Ask an admin to enable it.`);
         return;
       }
       const { params } = await provider.interactionDetails(req, res);
-      const clientId = String(params.client_id);
-      const client = clients.find(clientId);
+      const signInClientId = String(params.client_id);
+      const client = clients.find(signInClientId);
       if (maySignIn(user, client) === false) {
+        record(AuditType.SignInRefused, { reason: 'not_in_allowed_groups' });
         sendError(
           res,
           HttpStatus.Forbidden,
-          `"${user.username}" may not sign in to ${nameOf(clientId)}. It is only for ${client?.allowedGroups.join(', ')}.`,
+          `"${user.username}" may not sign in to ${nameOf(signInClientId)}. It is only for ${client?.allowedGroups.join(', ')}.`,
         );
         return;
       }
@@ -174,6 +214,7 @@ export function createInteractionRouter(deps: InteractionDeps): Router {
         { login: { accountId: user.id } },
         { mergeWithLastSubmission: false },
       );
+      record(AuditType.SignInSucceeded);
       res.json({ redirectTo });
     } catch (error) {
       sendError(res, HttpStatus.BadRequest, errorMessage(error));

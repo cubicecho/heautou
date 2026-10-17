@@ -48,7 +48,7 @@ export function createApp(services: Services): Express {
     // The guards below decide who may call; Yoga's own CORS would answer any origin.
     cors: false,
     plugins: [useOperationLimits()],
-    context: ({ res }): Context => ({
+    context: ({ req, res }): Context => ({
       clients: services.clients,
       users: services.users,
       issuer: services.issuer,
@@ -60,7 +60,9 @@ export function createApp(services: Services): Express {
       adminSessions: services.adminSessions,
       pairings: services.pairings,
       settings: services.settings,
+      audit: services.audit,
       viewer: res.locals.viewer as PublicUser,
+      ip: req.ip ?? null,
     }),
   });
   const { origin } = adminUrls(services.issuer);

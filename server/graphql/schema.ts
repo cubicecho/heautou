@@ -6,6 +6,16 @@ import { notFound } from '../core/errors.ts';
 import { type StartedPairing, startPairing } from '../oidc/pairing.ts';
 import { SCOPES } from '../oidc/provider.ts';
 import type { SessionInfo } from '../oidc/sessions.ts';
+import {
+  AUDIT_TYPES,
+  type AuditEntry,
+  type AuditEvent,
+  type AuditTarget,
+  AuditTargetKind,
+  AuditType,
+  actorOf,
+  userTarget,
+} from '../store/audit.ts';
 import { type ClaimEntry, claimEntries, withoutBlanks } from '../store/claims.ts';
 import {
   CLIENT_SOURCE_ADMIN,
@@ -59,6 +69,9 @@ interface GroupView {
 const PAIRING_WAITING = 'WAITING' as const;
 const PAIRING_PAIRED = 'PAIRED' as const;
 
+/** How much of a pairing's id names it in the audit log. */
+const PAIRING_NAME_LENGTH = 8;
+
 /** What `Pairing` resolves from. */
 interface PairingView {
   id: string;
@@ -98,6 +111,102 @@ function pairingView(ctx: Context, pairing: Pairing): PairingView {
 function refreshed<T>(ctx: Context, value: T): T {
   ctx.host.refresh();
   return value;
+}
+
+/**
+ * Records what the signed-in admin did, and passes the resolver's value on. Only changes that worked get here.
+ *
+ * @param ctx - Request context.
+ * @param type - What they did.
+ * @param target - What they did it to.
+ * @param value - What the resolver returns.
+ * @param [detail] - What else to keep. Never a password, token, secret or setup URL.
+ * @returns The value.
+ */
+function audited<T>(ctx: Context, type: AuditType, target: AuditTarget, value: T, detail?: AuditEvent['detail']): T {
+  ctx.audit.record({ type, actor: actorOf(ctx.viewer), ip: ctx.ip, target, detail });
+  return value;
+}
+
+/**
+ * Names a client as an entry's target.
+ *
+ * @param client - The client.
+ * @returns The target.
+ */
+function clientTarget(client: OidcClient): AuditTarget {
+  return { kind: AuditTargetKind.Client, id: client.clientId, name: client.name };
+}
+
+/**
+ * Names a group as an entry's target. A group's name is its id.
+ *
+ * @param name - The group.
+ * @returns The target.
+ */
+function groupTarget(name: string): AuditTarget {
+  return { kind: AuditTargetKind.Group, id: name, name };
+}
+
+/**
+ * Names a pairing as an entry's target.
+ *
+ * @param pairing - The pairing.
+ * @returns The target.
+ */
+function pairingTarget(pairing: Pairing): AuditTarget {
+  return {
+    kind: AuditTargetKind.Pairing,
+    id: pairing.id,
+    name: `Setup URL ${pairing.id.slice(0, PAIRING_NAME_LENGTH)}`,
+  };
+}
+
+/** The target of key rotations. */
+const KEYS_TARGET: AuditTarget = Object.freeze({ kind: AuditTargetKind.Keys, id: 'signing', name: 'Signing keys' });
+/** The target of settings changes. */
+const SETTINGS_TARGET: AuditTarget = Object.freeze({
+  kind: AuditTargetKind.Settings,
+  id: 'settings',
+  name: 'Settings',
+});
+/** The target of branding changes. */
+const BRANDING_TARGET: AuditTarget = Object.freeze({
+  kind: AuditTargetKind.Branding,
+  id: 'branding',
+  name: 'Branding',
+});
+
+/**
+ * Maps a vocabulary's GraphQL enum names, the values in capitals, to the values the files use.
+ *
+ * @param values - The vocabulary.
+ * @returns The enum's resolver.
+ */
+function enumOf(values: readonly string[]): Record<string, string> {
+  return Object.fromEntries(values.map((value) => [value.toUpperCase(), value]));
+}
+
+/** What `AuditEntry` resolves from. */
+interface AuditEntryView extends Omit<AuditEntry, 'detail'> {
+  detail: { name: string; value: string }[];
+}
+
+/** What `AuditPage` resolves from. */
+interface AuditPageView {
+  entries: AuditEntryView[];
+  nextCursor: string | null;
+}
+
+/**
+ * Describes an entry for the admin UI: its detail as name and value pairs.
+ *
+ * @param entry - The stored entry.
+ * @returns What `AuditEntry` resolves from.
+ */
+function auditEntryView(entry: AuditEntry): AuditEntryView {
+  const { detail, ...rest } = entry;
+  return { ...rest, detail: Object.entries(detail ?? {}).map(([name, value]) => ({ name, value })) };
 }
 
 /**
@@ -198,6 +307,8 @@ const resolvers = {
         isPublic: client.authMethod === ClientAuthMethod.None,
       }),
   },
+  AuditType: enumOf(AUDIT_TYPES),
+  AuditTargetKind: enumOf(Object.values(AuditTargetKind)),
   User: {
     /**
      * Resolves `User.claims`.
@@ -330,6 +441,27 @@ const resolvers = {
       const pairing = ctx.pairings.find(args.id);
       return pairing === null ? null : pairingView(ctx, pairing);
     },
+    /**
+     * Resolves `Query.auditLog`.
+     *
+     * @param _parent - Unused.
+     * @param args - The page and the filters.
+     * @param ctx - Request context.
+     * @returns A page of entries, newest first.
+     */
+    auditLog: (
+      _parent: unknown,
+      args: { first?: number | null; after?: string | null; type?: AuditType | null; userId?: string | null },
+      ctx: Context,
+    ): AuditPageView => {
+      const page = ctx.audit.list({
+        first: args.first ?? undefined,
+        after: args.after,
+        types: args.type === null || args.type === undefined ? null : [args.type],
+        userId: args.userId,
+      });
+      return { entries: page.entries.map(auditEntryView), nextCursor: page.nextCursor };
+    },
   },
   Mutation: {
     /**
@@ -340,8 +472,10 @@ const resolvers = {
      * @param ctx - Request context.
      * @returns The new client, with its secret.
      */
-    createClient: (_parent: unknown, args: { input: NewClient }, ctx: Context): OidcClient =>
-      refreshed(ctx, ctx.clients.create(args.input)),
+    createClient: (_parent: unknown, args: { input: NewClient }, ctx: Context): OidcClient => {
+      const client = ctx.clients.create(args.input);
+      return audited(ctx, AuditType.ClientCreated, clientTarget(client), refreshed(ctx, client));
+    },
     /**
      * Resolves `Mutation.updateClient`.
      *
@@ -350,8 +484,10 @@ const resolvers = {
      * @param ctx - Request context.
      * @returns The changed client.
      */
-    updateClient: (_parent: unknown, args: { clientId: string; input: ClientFields }, ctx: Context): OidcClient =>
-      refreshed(ctx, ctx.clients.update(args.clientId, args.input)),
+    updateClient: (_parent: unknown, args: { clientId: string; input: ClientFields }, ctx: Context): OidcClient => {
+      const client = ctx.clients.update(args.clientId, args.input);
+      return audited(ctx, AuditType.ClientUpdated, clientTarget(client), refreshed(ctx, client));
+    },
     /**
      * Resolves `Mutation.rotateClientSecret`.
      *
@@ -360,8 +496,10 @@ const resolvers = {
      * @param ctx - Request context.
      * @returns The client, with its new secret.
      */
-    rotateClientSecret: (_parent: unknown, args: { clientId: string }, ctx: Context): OidcClient =>
-      ctx.clients.rotateSecret(args.clientId),
+    rotateClientSecret: (_parent: unknown, args: { clientId: string }, ctx: Context): OidcClient => {
+      const client = ctx.clients.rotateSecret(args.clientId);
+      return audited(ctx, AuditType.ClientSecretRotated, clientTarget(client), client);
+    },
     /**
      * Resolves `Mutation.deleteClient`.
      *
@@ -370,8 +508,10 @@ const resolvers = {
      * @param ctx - Request context.
      * @returns The removed client.
      */
-    deleteClient: (_parent: unknown, args: { clientId: string }, ctx: Context): OidcClient =>
-      refreshed(ctx, ctx.clients.remove(args.clientId)),
+    deleteClient: (_parent: unknown, args: { clientId: string }, ctx: Context): OidcClient => {
+      const client = ctx.clients.remove(args.clientId);
+      return audited(ctx, AuditType.ClientDeleted, clientTarget(client), refreshed(ctx, client));
+    },
     /**
      * Resolves `Mutation.startPairing`.
      *
@@ -391,7 +531,12 @@ const resolvers = {
         withoutBlanks(args.input),
         ctx.branding.read().name,
       );
-      return { pairing: pairingView(ctx, started), setupUrl: started.setupUrl };
+      const view = { pairing: pairingView(ctx, started), setupUrl: started.setupUrl };
+      // The setup URL holds the token, so only who may sign in is kept.
+      return audited(ctx, AuditType.PairingStarted, pairingTarget(started), view, {
+        allowedGroups: started.allowedGroups.join(', '),
+        groupsClaim: started.groupsClaim,
+      });
     },
     /**
      * Resolves `Mutation.cancelPairing`.
@@ -401,7 +546,13 @@ const resolvers = {
      * @param ctx - Request context.
      * @returns Whether it was still there to cancel.
      */
-    cancelPairing: (_parent: unknown, args: { id: string }, ctx: Context): boolean => ctx.pairings.cancel(args.id),
+    cancelPairing: (_parent: unknown, args: { id: string }, ctx: Context): boolean => {
+      const pairing = ctx.pairings.find(args.id);
+      const wasCancelled = ctx.pairings.cancel(args.id);
+      return pairing === null || wasCancelled === false
+        ? wasCancelled
+        : audited(ctx, AuditType.PairingCancelled, pairingTarget(pairing), wasCancelled);
+    },
     /**
      * Resolves `Mutation.createUser`.
      *
@@ -410,8 +561,10 @@ const resolvers = {
      * @param ctx - Request context.
      * @returns The new user.
      */
-    createUser: (_parent: unknown, args: { input: NewUser }, ctx: Context): PublicUser =>
-      refreshed(ctx, ctx.users.create(args.input)),
+    createUser: (_parent: unknown, args: { input: NewUser }, ctx: Context): PublicUser => {
+      const user = ctx.users.create(args.input);
+      return audited(ctx, AuditType.UserCreated, userTarget(user), refreshed(ctx, user));
+    },
     /**
      * Resolves `Mutation.updateUser`.
      *
@@ -420,8 +573,10 @@ const resolvers = {
      * @param ctx - Request context.
      * @returns The changed user.
      */
-    updateUser: (_parent: unknown, args: { id: string; input: UserFields }, ctx: Context): PublicUser =>
-      refreshed(ctx, ctx.users.update(args.id, args.input)),
+    updateUser: (_parent: unknown, args: { id: string; input: UserFields }, ctx: Context): PublicUser => {
+      const user = ctx.users.update(args.id, args.input);
+      return audited(ctx, AuditType.UserUpdated, userTarget(user), refreshed(ctx, user));
+    },
     /**
      * Resolves `Mutation.setUserPassword`.
      *
@@ -433,7 +588,7 @@ const resolvers = {
     setUserPassword: (_parent: unknown, args: { id: string; password: string }, ctx: Context): PublicUser => {
       const user = ctx.users.setPassword(args.id, args.password);
       ctx.passwordLinks.cancelFor(user.id);
-      return user;
+      return audited(ctx, AuditType.UserPasswordSet, userTarget(user), user);
     },
     /**
      * Resolves `Mutation.deleteUser`.
@@ -447,7 +602,7 @@ const resolvers = {
       const user = ctx.users.remove(args.id);
       signOutEverywhere(ctx, user.id);
       ctx.passwordLinks.cancelFor(user.id);
-      return refreshed(ctx, user);
+      return audited(ctx, AuditType.UserDeleted, userTarget(user), refreshed(ctx, user));
     },
     /**
      * Resolves `Mutation.setUserDisabled`.
@@ -462,7 +617,7 @@ const resolvers = {
       if (user.disabled) {
         signOutEverywhere(ctx, user.id);
       }
-      return user;
+      return audited(ctx, user.disabled ? AuditType.UserDisabled : AuditType.UserEnabled, userTarget(user), user);
     },
     /**
      * Resolves `Mutation.endUserSession`.
@@ -478,7 +633,7 @@ const resolvers = {
       if (ctx.sessions.endSession(user.id, args.sessionId) === false) {
         throw notFound(`"${user.username}" has no session "${args.sessionId}".`);
       }
-      return user;
+      return audited(ctx, AuditType.UserSessionEnded, userTarget(user), user, { sessionId: args.sessionId });
     },
     /**
      * Resolves `Mutation.signOutUser`.
@@ -491,7 +646,7 @@ const resolvers = {
     signOutUser: (_parent: unknown, args: { id: string }, ctx: Context): PublicUser => {
       const user = loadUser(ctx, args.id);
       signOutEverywhere(ctx, user.id);
-      return user;
+      return audited(ctx, AuditType.UserSignedOut, userTarget(user), user);
     },
     /**
      * Resolves `Mutation.createPasswordLink`.
@@ -505,7 +660,11 @@ const resolvers = {
       const user = loadUser(ctx, args.id);
       const { token, expiresAt } = ctx.passwordLinks.issue(user.id);
       const url = `${adminUrls(ctx.issuer).base}${WEB_APP_PAGE.setPassword}#token=${token}`;
-      return { url, expiresAt: new Date(expiresAt).toISOString() };
+      // The URL holds the token, so only that a link was made is kept.
+      return audited(ctx, AuditType.PasswordLinkCreated, userTarget(user), {
+        url,
+        expiresAt: new Date(expiresAt).toISOString(),
+      });
     },
     /**
      * Resolves `Mutation.renameGroup`.
@@ -515,8 +674,10 @@ const resolvers = {
      * @param ctx - Request context.
      * @returns The renamed group.
      */
-    renameGroup: (_parent: unknown, args: { name: string; newName: string }, ctx: Context): GroupView =>
-      groupView(ctx, renameGroup(ctx, args.name, args.newName)),
+    renameGroup: (_parent: unknown, args: { name: string; newName: string }, ctx: Context): GroupView => {
+      const group = groupView(ctx, renameGroup(ctx, args.name, args.newName));
+      return audited(ctx, AuditType.GroupRenamed, groupTarget(group.name), group, { from: args.name });
+    },
     /**
      * Resolves `Mutation.deleteGroup`.
      *
@@ -525,7 +686,10 @@ const resolvers = {
      * @param ctx - Request context.
      * @returns How many users were in it.
      */
-    deleteGroup: (_parent: unknown, args: { name: string }, ctx: Context): number => deleteGroup(ctx, args.name),
+    deleteGroup: (_parent: unknown, args: { name: string }, ctx: Context): number => {
+      const members = deleteGroup(ctx, args.name);
+      return audited(ctx, AuditType.GroupDeleted, groupTarget(args.name), members, { members: String(members) });
+    },
     /**
      * Resolves `Mutation.rotateKeys`.
      *
@@ -534,8 +698,10 @@ const resolvers = {
      * @param ctx - Request context.
      * @returns The keys after the rotation.
      */
-    rotateKeys: (_parent: unknown, _args: unknown, ctx: Context): KeysView =>
-      refreshed(ctx, keysView(ctx.keys.rotate())),
+    rotateKeys: (_parent: unknown, _args: unknown, ctx: Context): KeysView => {
+      const keys = refreshed(ctx, keysView(ctx.keys.rotate()));
+      return audited(ctx, AuditType.KeysRotated, KEYS_TARGET, keys, { kid: keys.signingKeys[0]?.kid ?? '' });
+    },
     /**
      * Resolves `Mutation.setBrandingName`.
      *
@@ -544,8 +710,10 @@ const resolvers = {
      * @param ctx - Request context.
      * @returns The branding.
      */
-    setBrandingName: (_parent: unknown, args: { name: string }, ctx: Context): BrandingView =>
-      brandingView(ctx.branding.setName(args.name)),
+    setBrandingName: (_parent: unknown, args: { name: string }, ctx: Context): BrandingView => {
+      const branding = ctx.branding.setName(args.name);
+      return audited(ctx, AuditType.BrandingNameSet, BRANDING_TARGET, brandingView(branding), { name: branding.name });
+    },
     /**
      * Resolves `Mutation.setBrandingLogo`.
      *
@@ -554,8 +722,12 @@ const resolvers = {
      * @param ctx - Request context.
      * @returns The branding.
      */
-    setBrandingLogo: (_parent: unknown, args: { dataUrl?: string | null }, ctx: Context): BrandingView =>
-      brandingView(ctx.branding.setLogo(args.dataUrl ?? null)),
+    setBrandingLogo: (_parent: unknown, args: { dataUrl?: string | null }, ctx: Context): BrandingView => {
+      const branding = ctx.branding.setLogo(args.dataUrl ?? null);
+      return audited(ctx, AuditType.BrandingLogoSet, BRANDING_TARGET, brandingView(branding), {
+        logo: branding.logo === null ? 'removed' : 'set',
+      });
+    },
     /**
      * Resolves `Mutation.setHttpRedirects`.
      *
@@ -564,8 +736,13 @@ const resolvers = {
      * @param ctx - Request context.
      * @returns The setting.
      */
-    setHttpRedirects: (_parent: unknown, args: { allowed?: boolean | null }, ctx: Context): HttpRedirectSetting =>
-      ctx.settings.setHttpRedirects(args.allowed ?? null),
+    setHttpRedirects: (_parent: unknown, args: { allowed?: boolean | null }, ctx: Context): HttpRedirectSetting => {
+      const setting = ctx.settings.setHttpRedirects(args.allowed ?? null);
+      return audited(ctx, AuditType.HttpRedirectsSet, SETTINGS_TARGET, setting, {
+        httpRedirects: setting.isAllowed ? 'allowed' : 'refused',
+        chosenBy: setting.isSet ? 'operator' : 'issuer',
+      });
+    },
   },
 };
 

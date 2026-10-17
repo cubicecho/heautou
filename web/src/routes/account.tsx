@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
+import { auditTypeLabel } from '@/activity/audit-types';
 import { useAppForm } from '@/components/app-form';
 import { CenteredLayout } from '@/components/centered-layout';
 import { ConfirmButton } from '@/components/confirm-button';
@@ -13,7 +14,7 @@ import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { FormElement } from '@/components/ui/form-element';
 import { Spinner } from '@/components/ui/spinner';
-import { useAccount, useChangePassword, useSignOutEverywhere } from '@/core/account';
+import { useAccount, useAccountActivity, useChangePassword, useSignOutEverywhere } from '@/core/account';
 import { signOut } from '@/core/admin';
 import { LogOut } from '@/core/app-icons';
 import { BrandIcon, useBrandName } from '@/core/brand';
@@ -76,6 +77,43 @@ function ChangePassword() {
 }
 
 /**
+ * The signed-in user's recent sign-ins, failed ones too, so a guess at their password shows.
+ */
+function RecentSignIns() {
+  const activity = useAccountActivity();
+  const entries = activity.data ?? [];
+
+  return (
+    <Section
+      title="Recent sign-ins"
+      description="Where your account signed in lately, and the attempts that failed."
+      contentSlot={
+        activity.isError ? (
+          <QueryError error={activity.error} onRetry={activity.refetch} what="your sign-ins" />
+        ) : activity.isPending ? (
+          <Spinner />
+        ) : (
+          <div className="grid gap-2">
+            {entries.length === 0 ? <EmptyState compact title="No sign-ins recorded yet." /> : null}
+            <List
+              label="Recent sign-ins"
+              contentSlot={entries.map((entry) => (
+                <ListItem
+                  key={entry.id}
+                  title={joinStats(auditTypeLabel(entry.type), entry.clientName)}
+                  description={joinStats(formatDateTime(entry.at), entry.ip !== null && `from ${entry.ip}`)}
+                  meta={formatAgo(entry.at)}
+                />
+              ))}
+            />
+          </div>
+        )
+      }
+    />
+  );
+}
+
+/**
  * A user's own page: who they are, their password and where they are signed in. Every user can reach it, not only
  * admins.
  */
@@ -109,6 +147,7 @@ function AccountPage() {
               ]}
             />
             <ChangePassword />
+            <RecentSignIns />
             <Section
               title="Where you are signed in"
               description="Each browser signed in as you. Signing out everywhere ends them all, this one too."

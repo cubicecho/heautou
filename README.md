@@ -230,6 +230,7 @@ Everything lives in the data folder, which is the `heautou-data` volume in Docke
 - `admin-sessions.json`: browsers signed in to the admin UI or the account page (hashed tokens)
 - `password-links.json`: open invite and reset links (hashed tokens)
 - `branding.json`: the name and logo
+- `audit.jsonl`: the activity log, one entry a line; at 1 MB it moves to `audit.1.jsonl`, and two old files are kept
 - `oidc/`: sessions, codes and tokens. These are not sealed: they are short-lived, and the provider looks
   tokens up by their value, so they sit in the clear until they expire.
 
@@ -260,11 +261,13 @@ What Heautou does:
   `http` on any host, turn on **Allow plain http** under Settings. Until you choose, it follows `ISSUER_URL`:
   allowed when that is `http://`, refused when it is `https://`. Clients saved before it was refused keep working
   and are marked in the client list.
+- **Sign-ins and changes are logged.** Every sign-in, failed or refused one, admin change, password link use
+  and account change goes in `audit.jsonl`, shown on the Activity page; each user sees their own sign-ins on
+  their account page. Passwords, tokens, client secrets and setup URLs are never written to it.
 - **The pages can't be framed**, send no referrer, and the web app runs only its own scripts.
 
 What it does not do: seal anything without `SECRET_KEY` (then anyone who can read the data folder has the
-signing keys and client secrets), seal the live sessions, codes and tokens in `oidc/`, terminate TLS, or keep an
-audit log.
+signing keys and client secrets), seal the live sessions, codes and tokens in `oidc/`, or terminate TLS.
 
 ## Running from source
 
