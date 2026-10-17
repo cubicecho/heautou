@@ -1,6 +1,6 @@
 import express, { type Response, Router } from 'express';
 import { z } from 'zod';
-import { ADMIN_DEFAULTS, BRANDING_DEFAULTS, HTTP_DEFAULTS } from '../core/defaults.ts';
+import { BRANDING_DEFAULTS, HTTP_DEFAULTS } from '../core/defaults.ts';
 import { errorMessage } from '../core/errors.ts';
 import { HttpStatus } from '../core/wire.ts';
 import { sameOriginJson, sendRefusal } from '../http/guards.ts';
@@ -11,7 +11,7 @@ import type { BrandingStore } from '../store/branding.ts';
 import type { ClientStore } from '../store/clients.ts';
 import type { PasswordLinkStore } from '../store/password-links.ts';
 import { isAdmin, type UserStore } from '../store/users.ts';
-import { ADMIN_CLIENT_NAME, ADMIN_PATH, adminUrls, brandingView, WEB_APP_PAGE } from './admin-client.ts';
+import { ADMIN_PATH, adminUrls, brandingView, sessionClientName, WEB_APP_PAGE } from './admin-client.ts';
 import { COOKIE, sessionCookieOptions, signedInUser } from './routes.ts';
 
 /** What the account, password link and branding routes use. */
@@ -61,8 +61,7 @@ export function createAccountRouter(deps: AccountDeps): Router {
   const { users, clients, adminSessions, passwordLinks, sessions, branding, issuer, throttle } = deps;
   const urls = adminUrls(issuer);
   const json = [sameOriginJson(urls.origin), express.json({ limit: HTTP_DEFAULTS.bodyLimit })];
-  const clientName = (clientId: string): string =>
-    clientId === ADMIN_DEFAULTS.clientId ? ADMIN_CLIENT_NAME : (clients.find(clientId)?.name ?? clientId);
+  const clientName = (clientId: string): string => sessionClientName(clientId, clients, branding.read());
   const router = Router();
 
   router.get(ADMIN_PATH.account, (req, res) => {

@@ -69,7 +69,11 @@ describe('the account page', () => {
       username: 'ada',
       isAdmin: false,
       groups: ['family'],
-      sessions: [{ clientNames: ['Heautou admin'] }],
+      sessions: [{ clientNames: ['Heautou'] }],
+    });
+    app.services.branding.setName('Home');
+    expect(await (await browser.send('/admin/account')).json()).toMatchObject({
+      sessions: [{ clientNames: ['Home'] }],
     });
     expect((await createBrowser(app.base).send('/admin/account')).status).toBe(HttpStatus.Unauthorized);
   });

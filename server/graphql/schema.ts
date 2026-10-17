@@ -1,8 +1,7 @@
 import type { GraphQLSchema } from 'graphql';
 import { createSchema } from 'graphql-yoga';
-import { ADMIN_CLIENT_NAME, adminUrls, type BrandingView, brandingView, WEB_APP_PAGE } from '../admin/admin-client.ts';
+import { adminUrls, type BrandingView, brandingView, sessionClientName, WEB_APP_PAGE } from '../admin/admin-client.ts';
 import type { Context } from '../core/context.ts';
-import { ADMIN_DEFAULTS } from '../core/defaults.ts';
 import { notFound } from '../core/errors.ts';
 import { SCOPES } from '../oidc/provider.ts';
 import type { SessionInfo } from '../oidc/sessions.ts';
@@ -155,9 +154,7 @@ const resolvers = {
     sessions: (user: PublicUser, _args: unknown, ctx: Context): SessionView[] =>
       ctx.sessions.sessionsOf(user.id).map(({ clientIds, ...session }) => ({
         ...session,
-        clientNames: clientIds.map((clientId) =>
-          clientId === ADMIN_DEFAULTS.clientId ? ADMIN_CLIENT_NAME : (ctx.clients.find(clientId)?.name ?? clientId),
-        ),
+        clientNames: clientIds.map((clientId) => sessionClientName(clientId, ctx.clients, ctx.branding.read())),
       })),
   },
   Query: {

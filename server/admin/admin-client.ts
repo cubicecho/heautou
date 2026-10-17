@@ -2,6 +2,7 @@ import type { AdapterPayload } from 'oidc-provider';
 import { OIDC_MOUNT_PATH } from '../core/config.ts';
 import { ADMIN_DEFAULTS } from '../core/defaults.ts';
 import type { Branding } from '../store/branding.ts';
+import type { ClientStore } from '../store/clients.ts';
 
 /** What the sign-in page calls the admin UI. */
 export const ADMIN_CLIENT_NAME = 'Heautou admin';
@@ -97,4 +98,17 @@ export interface BrandingView {
 export function brandingView(branding: Branding): BrandingView {
   const { name, logo } = branding;
   return { name, logoUrl: logo === null ? null : `${ADMIN_PATH.logo}?v=${encodeURIComponent(logo.updatedAt)}` };
+}
+
+/**
+ * Names the client a session signed in to, as a user's session list shows it. The admin UI is also the account
+ * page every user signs in to, so it goes by the provider's own name rather than "Heautou admin".
+ *
+ * @param clientId - The client.
+ * @param clients - The client store.
+ * @param branding - The stored branding.
+ * @returns The client's name, or its ID when it was removed.
+ */
+export function sessionClientName(clientId: string, clients: ClientStore, branding: Branding): string {
+  return clientId === ADMIN_DEFAULTS.clientId ? branding.name : (clients.find(clientId)?.name ?? clientId);
 }
