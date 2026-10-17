@@ -14,6 +14,7 @@ import { type KeyStore, openKeyStore, type ProviderKeys, privateKeysIn } from '.
 import { createPairingStore, type PairingDocument, type PairingStore } from '../store/pairings.ts';
 import { createPasswordLinkStore, type PasswordLinkDocument, type PasswordLinkStore } from '../store/password-links.ts';
 import { openSealedFile } from '../store/sealed-file.ts';
+import { createSettingsStore, type SettingsDocument, type SettingsStore } from '../store/settings.ts';
 import { createUserStore, type User, type UserStore } from '../store/users.ts';
 import { createSecretBox, type SecretKeys } from './secret-box.ts';
 
@@ -26,6 +27,7 @@ const DATA_FILES = {
   passwordLinks: 'password-links.json',
   branding: 'branding.json',
   pairings: 'pairings.json',
+  settings: 'settings.json',
   /** A directory: one file per provider model (sessions, codes, tokens...). */
   oidc: 'oidc',
 } as const;
@@ -54,6 +56,8 @@ export interface Services {
   /** Setup URLs handed out for apps to pair with. */
   pairings: PairingStore;
   branding: BrandingStore;
+  /** The operator's settings, such as whether plain http redirect URIs are allowed. */
+  settings: SettingsStore;
   /** Guards making the first admin; its token is logged at boot while one is needed. */
   setup: SetupGate;
   keys: KeyStore;
@@ -83,7 +87,13 @@ export function openServices(settings: ServiceSettings): Services {
     clientSecretsIn(clientFile.read(), box.open);
     privateKeysIn(keyFile.read(), box.open);
   }
-  const clients = createClientStore(openSealedFile(clientFile, box, clientSecretsIn));
+  const providerSettings = createSettingsStore(
+    openJsonFile<SettingsDocument>(at(DATA_FILES.settings), {}),
+    settings.issuer,
+  );
+  const clients = createClientStore(openSealedFile(clientFile, box, clientSecretsIn), {
+    allowsHttpRedirects: () => providerSettings.httpRedirects().isAllowed,
+  });
   const users = createUserStore(openJsonFile<User[]>(at(DATA_FILES.users), []));
   const keys = openKeyStore(openSealedFile(keyFile, box, privateKeysIn));
   if (keys.isDue()) {
@@ -105,6 +115,7 @@ export function openServices(settings: ServiceSettings): Services {
       clients,
       users,
       pairings,
+      settings: providerSettings,
       keys: keys.current(),
       adapter,
       isProxied: settings.isProxied,
@@ -130,6 +141,7 @@ export function openServices(settings: ServiceSettings): Services {
     passwordLinks,
     pairings,
     branding,
+    settings: providerSettings,
     setup,
     keys,
     host,

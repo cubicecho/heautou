@@ -1,7 +1,7 @@
 import { PAIRING_DEFAULTS } from '../../server/core/defaults.ts';
 import { HttpStatus, MS_PER_SECOND } from '../../server/core/wire.ts';
 import { SETUP_URL_NAME, SETUP_URL_TOKEN } from '../../server/oidc/pairing.ts';
-import { CLIENT_SOURCE_PAIRED } from '../../server/store/clients.ts';
+import { CLIENT_SOURCE_PAIRED, ClientAuthMethod } from '../../server/store/clients.ts';
 import { startTestApp, type TestApp } from '../helpers.ts';
 import {
   adminGql,
@@ -190,6 +190,45 @@ describe('pairing an app with a setup URL', () => {
     const noRedirect = await register(pairing.endpoint, pairing.token, { ...APP_METADATA, redirect_uris: [] });
     expect(noRedirect.status).toBe(HttpStatus.BadRequest);
     expect((await register(pairing.endpoint, pairing.token)).status).toBe(HttpStatus.Created);
+  });
+
+  it('refuses a plain http redirect URI once the admin requires https, without spending the setup URL', async () => {
+    const httpRedirects = 'query { httpRedirects { isAllowed isSet isIssuerHttp } }';
+    const setHttpRedirects = /* GraphQL */ `
+      mutation ($allowed: Boolean) { setHttpRedirects(allowed: $allowed) { isAllowed isSet isIssuerHttp } }
+    `;
+    // The test issuer is plain http, so plain http redirect URIs are allowed until the admin says otherwise.
+    expect((await adminGql(admin, httpRedirects)).data.httpRedirects).toEqual({
+      isAllowed: true,
+      isSet: false,
+      isIssuerHttp: true,
+    });
+    const earlier = app.services.clients.create({
+      name: 'Old app',
+      authMethod: ClientAuthMethod.SecretBasic,
+      redirectUris: [REDIRECT_URI],
+      postLogoutRedirectUris: [],
+    });
+    const required = await adminGql(admin, setHttpRedirects, { allowed: false });
+    expect(required.data.setHttpRedirects).toEqual({ isAllowed: false, isSet: true, isIssuerHttp: true });
+
+    const pairing = await startPairing();
+    const refused = await register(pairing.endpoint, pairing.token);
+    expect(refused.status).toBe(HttpStatus.BadRequest);
+    const body = await refused.json();
+    expect(body.error).toBe('invalid_redirect_uri');
+    expect(body.error_description).toMatch(/plain http/);
+    const secure = { ...APP_METADATA, redirect_uris: ['https://app.example/callback'] };
+    expect((await register(pairing.endpoint, pairing.token, secure)).status).toBe(HttpStatus.Created);
+
+    // A client saved before the rule keeps working, and is flagged.
+    const { data } = await adminGql(admin, 'query ($id: ID!) { client(clientId: $id) { refusedRedirectUris } }', {
+      id: earlier.clientId,
+    });
+    expect(data.client.refusedRedirectUris).toEqual([REDIRECT_URI]);
+
+    const reset = await adminGql(admin, setHttpRedirects, { allowed: null });
+    expect(reset.data.setHttpRedirects).toEqual({ isAllowed: true, isSet: false, isIssuerHttp: true });
   });
 
   it('gives a public client no secret', async () => {

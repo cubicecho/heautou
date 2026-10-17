@@ -15,6 +15,7 @@ export interface Context
     | 'passwordLinks'
     | 'adminSessions'
     | 'pairings'
+    | 'settings'
   > {
   /** The signed-in admin making the request. */
   viewer: PublicUser;
