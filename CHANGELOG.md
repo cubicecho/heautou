@@ -1,3 +1,10 @@
+## [1.4.1](https://github.com/cubicecho/heautou/compare/v1.4.0...v1.4.1) (2026-10-17)
+
+
+### Bug Fixes
+
+* name the admin client by the brand in session lists ([7f11424](https://github.com/cubicecho/heautou/commit/7f11424618aadf35d197d2d25e3614197b1d96a4))
+
 # [1.4.0](https://github.com/cubicecho/heautou/compare/v1.3.0...v1.4.0) (2026-10-16)
 
 
