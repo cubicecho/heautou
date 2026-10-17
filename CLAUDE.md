@@ -16,7 +16,7 @@ npm run build && npm start   # one process on PORT (default 3000) serving dist/
 docker compose up -d --build # the same, in a container, with the data in a named volume
 ```
 
-`.env.example` documents `ISSUER_URL`, `PORT`, `DATA_DIR` and `TRUST_PROXY`. While there is no admin the app
+`.env.example` documents `ISSUER_URL`, `PORT`, `DATA_DIR`, `TRUST_PROXY` and `SECRET_KEY` (and its `_FILE` and `_PREVIOUS` forms). While there is no admin the app
 shows `/setup`: a new admin needs nothing for 10 minutes after boot (`ADMIN_DEFAULTS.setupWindowSeconds`); after that,
 or to promote an existing user, it needs the token the boot log prints.
 
@@ -28,8 +28,8 @@ or to promote an existing user, it needs the token the boot log prints.
 
 ## Layout
 
-- `server/core/` config getters, `defaults.ts` groups (token lifetimes, key sizes and rotation, link lifetimes, branding limits), coded errors, preflight, `services.ts` (opens the stores and builds the provider)
-- `server/store/` flat-file stores: `json-file.ts` (atomic whole-file writes, mode 0600), `clients.ts`, `users.ts` (scrypt password hashes, custom claims, disabled, the last-admin rule), `keys.ts` (signing and cookie keys, made on first boot, rotated every `KEY_DEFAULTS.rotationDays` keeping `keptKeys`), `admin-sessions.ts`, `password-links.ts` (invite and reset tokens, stored hashed), `branding.ts`, `groups.ts` (groups derived from users and clients: list, rename, delete), `claims.ts` (claim name rules), `pairings.ts` (setup URLs waiting for an app, the token stored hashed)
+- `server/core/` config getters, `defaults.ts` groups (token lifetimes, key sizes and rotation, link lifetimes, branding limits), coded errors, preflight, `secret-box.ts` (AES-256-GCM `enc:v1:` envelopes under `SECRET_KEY`), `services.ts` (opens the stores, sealing their secrets, and builds the provider)
+- `server/store/` flat-file stores: `json-file.ts` (atomic whole-file writes, mode 0600), `sealed-file.ts` (a JSON file whose secrets are sealed on disk and plain in memory; each store exports the `SecretMapper` that finds them), `clients.ts`, `users.ts` (scrypt password hashes, custom claims, disabled, the last-admin rule), `keys.ts` (signing and cookie keys, made on first boot, rotated every `KEY_DEFAULTS.rotationDays` keeping `keptKeys`), `admin-sessions.ts`, `password-links.ts` (invite and reset tokens, stored hashed), `branding.ts`, `groups.ts` (groups derived from users and clients: list, rename, delete), `claims.ts` (claim name rules), `pairings.ts` (setup URLs waiting for an app, the token stored hashed)
 - `server/admin/` the admin UI as a built-in client (`admin-client.ts`), its sign-in, callback, logout and setup routes and `requireAdmin` (`routes.ts`), the first-admin token (`setup.ts`), and `account.ts`: `/admin/account` (any signed-in user: profile, password, sessions), the password-link routes and `/admin/branding` and `/admin/logo`
 - `server/oidc/` `provider.ts` (oidc-provider config: scopes, claims, TTLs; `findAccount` turns away disabled users and those outside a client's `allowedGroups`), `host.ts` (rebuilds the provider when the keys or claim names change; read `services.host.current()` per request), `sessions.ts` (a user's sessions and tokens in the model files), `adapter.ts` (oidc-provider models as JSON files under `oidc/`; clients come from the client store), `interactions.ts` (login and automatic consent), `pairing.ts` (setup URLs and the dynamic registration policy that writes paired clients to the client store)
 - `server/graphql/` SDL, schema, operation limits, logger; `write-schema.ts` prints `schema.graphql`
@@ -74,6 +74,9 @@ same policy as an update. The host is rebuilt after each, so a new groups claim 
 Built for a trusted network. The admin UI and `/graphql` need an admin session, and `/graphql`, the admin POSTs and
 the login POST take only same-origin `application/json` POSTs (`sameOriginJson`); Yoga's CORS is off. Login failures
 are throttled per IP and per username; `/oidc/reg` shares the sign-in rate limit, and a setup URL is single use and
-lasts 10 minutes (its token sits in `oidc/` like other provider tokens until then). Client secrets and the private signing keys are still plain text in
-`DATA_DIR`; only user passwords, admin session tokens and password-link tokens are hashed. There is no TLS in the server: run it behind a
+lasts 10 minutes (its token sits in `oidc/` like other provider tokens until then). With `SECRET_KEY` set, client secrets and the private
+signing and cookie keys are sealed in `DATA_DIR` (re-sealed at boot when plain or under `SECRET_KEY_PREVIOUS`; a wrong
+or missing key stops boot without writing); without it they are plain text and boot warns. User passwords, admin
+session tokens and password-link tokens are hashed. The provider's own tokens in `oidc/` are neither: they are
+looked up by value. There is no TLS in the server: run it behind a
 proxy with `ISSUER_URL=https://…` and `TRUST_PROXY`. Not done yet: https-only redirect URIs, an audit log.

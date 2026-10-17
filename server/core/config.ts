@@ -1,7 +1,9 @@
 // Getters, not constants, so a test sees the current environment.
+import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { HTTP_DEFAULTS } from './defaults.ts';
+import { parseSecretKey, SecretKeyError, SecretKeyErrorCode, type SecretKeys } from './secret-box.ts';
 
 const NODE_ENV_PRODUCTION = 'production';
 /** The TRUST_PROXY value that trusts no hop. */
@@ -85,6 +87,46 @@ export const trustProxy = (): boolean | number | string => {
   }
   const isHopCount = HOP_COUNT.test(raw);
   return isHopCount ? Number(raw) : raw;
+};
+
+/**
+ * Reads one secret key from its variable, or from the file its `_FILE` variable names (a Docker secret). The file
+ * wins.
+ *
+ * @param name - The variable, such as `SECRET_KEY`.
+ * @returns The key, or null when neither is set.
+ * @throws SecretKeyError when the value is not 32 bytes of base64, or the file can't be read.
+ */
+function readSecretKey(name: string): Buffer | null {
+  const fileVariable = `${name}_FILE`;
+  const filePath = (process.env[fileVariable] ?? '').trim();
+  if (filePath !== '') {
+    return parseSecretKey(readFileSync(filePath, 'utf8'), `${fileVariable} (${filePath})`);
+  }
+  const raw = (process.env[name] ?? '').trim();
+  return raw === '' ? null : parseSecretKey(raw, name);
+}
+
+/**
+ * The keys client secrets and private keys are sealed with on disk.
+ *
+ * @returns `SECRET_KEY` (or `SECRET_KEY_FILE`) and `SECRET_KEY_PREVIOUS` (or `SECRET_KEY_PREVIOUS_FILE`), or null
+ * when no key is set and secrets stay plain text.
+ * @throws SecretKeyError when a key is malformed, or only a previous key is set.
+ */
+export const secretKeys = (): SecretKeys | null => {
+  const current = readSecretKey('SECRET_KEY');
+  const previous = readSecretKey('SECRET_KEY_PREVIOUS');
+  if (current === null) {
+    if (previous !== null) {
+      throw new SecretKeyError(
+        SecretKeyErrorCode.Malformed,
+        'SECRET_KEY_PREVIOUS is set without SECRET_KEY. Set SECRET_KEY to the new key.',
+      );
+    }
+    return null;
+  }
+  return { current, previous };
 };
 
 /**

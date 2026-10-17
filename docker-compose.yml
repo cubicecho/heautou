@@ -12,12 +12,24 @@ services:
     environment:
       ISSUER_URL: ${ISSUER_URL:-http://localhost:3000/oidc}
       TRUST_PROXY: ${TRUST_PROXY:-false}
+      # Seals client secrets and signing keys on disk; see .env.example. Unset keeps them plain text.
+      SECRET_KEY: ${SECRET_KEY:-}
       NODE_ENV: production
     ports:
       - "${PORT:-3000}:3000"
     volumes:
       # Clients, users, signing keys and sessions, as plain JSON.
       - heautou-data:/data
+    # Or keep the key in a Docker secret, outside the data volume:
+    #   openssl rand -base64 32 > secret_key && chmod 600 secret_key
+    # then uncomment these and the top-level secrets below, and drop SECRET_KEY above.
+    # environment:
+    #   SECRET_KEY_FILE: /run/secrets/heautou_secret_key
+    # secrets: [heautou_secret_key]
 
 volumes:
   heautou-data:
+
+# secrets:
+#   heautou_secret_key:
+#     file: ./secret_key

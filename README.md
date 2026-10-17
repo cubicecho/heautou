@@ -158,6 +158,36 @@ Set these as environment variables, under `environment:` in Compose.
 | `PORT`        | `3000`                        | The port the server listens on inside the container.                                              |
 | `DATA_DIR`    | `/data` (Docker)              | Where the JSON files are written.                                                                 |
 | `TRUST_PROXY` | `false`                       | Set to `1` behind one reverse proxy, so the forwarded `https` and host headers are believed.      |
+| `SECRET_KEY`  | none                          | Seals client secrets and signing keys on disk. 32 bytes of base64: `openssl rand -base64 32`.     |
+| `SECRET_KEY_FILE` | none                      | A file holding the key, such as a Docker secret. It wins over `SECRET_KEY`.                       |
+| `SECRET_KEY_PREVIOUS` | none                  | The old key while changing keys (`_FILE` works too). Remove it after one start.                   |
+
+### Sealing secrets at rest
+
+Without `SECRET_KEY`, client secrets and the private signing keys are plain text in the data folder, and Heautou
+logs a warning at start-up. Set the key and restart: the next start seals what is there, and everything written
+after that is sealed (AES-256-GCM). Keep the key **outside** the data folder (an env file or a Docker secret, not the
+volume), so a copy of the folder or a backup of it is not enough to read them.
+
+**Losing the key loses the client secrets and the signing keys.** Heautou refuses to start with the wrong key,
+and changes nothing, so put the right one back. If it is gone for good, delete `keys.json` (every app has to
+sign in again), give each confidential client a new secret by hand in `clients.json`, then start and rotate them.
+
+To change the key, set the new one as `SECRET_KEY` and the old one as `SECRET_KEY_PREVIOUS`, start once, then
+remove `SECRET_KEY_PREVIOUS`.
+
+With Compose, a Docker secret keeps the key out of the environment:
+
+```yaml
+services:
+  heautou:
+    environment:
+      SECRET_KEY_FILE: /run/secrets/heautou_secret_key
+    secrets: [heautou_secret_key]
+secrets:
+  heautou_secret_key:
+    file: ./secret_key   # openssl rand -base64 32 > secret_key && chmod 600 secret_key
+```
 
 ### Behind a reverse proxy (HTTPS)
 
@@ -194,13 +224,14 @@ backend heautou
 
 Everything lives in the data folder, which is the `heautou-data` volume in Docker:
 
-- `clients.json`: apps and their secrets
+- `clients.json`: apps and their secrets (sealed with `SECRET_KEY`)
 - `users.json`: users, with hashed passwords
-- `keys.json`: the token signing keys
+- `keys.json`: the token signing and cookie keys (their private halves sealed with `SECRET_KEY`)
 - `admin-sessions.json`: browsers signed in to the admin UI or the account page (hashed tokens)
 - `password-links.json`: open invite and reset links (hashed tokens)
 - `branding.json`: the name and logo
-- `oidc/`: sessions, codes and tokens
+- `oidc/`: sessions, codes and tokens. These are not sealed: they are short-lived, and the provider looks
+  tokens up by their value, so they sit in the clear until they expire.
 
 Heautou makes its files readable by its own user only (mode 0600). Back up the folder to back up Heautou. Deleting `keys.json` makes new keys on the next start, and
 every app has to sign in again.
@@ -222,10 +253,13 @@ What Heautou does:
   refuse as wrong passwords.
 - **Setup URLs are single use.** A pairing's token registers one client, lasts 10 minutes, and can be
   cancelled. Registration is rate-limited like sign-in.
+- **Secrets can be sealed at rest.** With `SECRET_KEY` set, client secrets and the private signing and cookie
+  keys are encrypted in the data folder, under a key kept outside it.
 - **The pages can't be framed**, send no referrer, and the web app runs only its own scripts.
 
-What it does not do: encrypt the data folder (anyone who can read it has the signing keys and client
-secrets), terminate TLS, keep an audit log, or limit redirect URIs to `https`.
+What it does not do: seal anything without `SECRET_KEY` (then anyone who can read the data folder has the
+signing keys and client secrets), seal the live sessions, codes and tokens in `oidc/`, terminate TLS, keep an
+audit log, or limit redirect URIs to `https`.
 
 ## Running from source
 

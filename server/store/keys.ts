@@ -2,6 +2,7 @@ import { generateKeyPairSync, randomBytes, randomUUID } from 'node:crypto';
 import type { JWK } from 'oidc-provider';
 import { KEY_DEFAULTS } from '../core/defaults.ts';
 import type { JsonFile } from './json-file.ts';
+import type { SecretMapper } from './sealed-file.ts';
 
 /** The keys the provider signs tokens and cookies with. */
 export interface ProviderKeys {
@@ -51,10 +52,47 @@ function generateCookieKey(): string {
   return randomBytes(KEY_DEFAULTS.cookieKeyBytes).toString('base64url');
 }
 
+/** The members of a JWK that are its private half. */
+const PRIVATE_JWK_MEMBERS = ['d', 'p', 'q', 'dp', 'dq', 'qi', 'k'] as const;
+
+/**
+ * Changes the private members of one JWK.
+ *
+ * @param jwk - The key.
+ * @param change - Seals or opens one member.
+ * @returns The key with its private members changed; the public ones are left readable.
+ */
+function mapPrivateMembers(jwk: JWK, change: (secret: string) => string): JWK {
+  const next = { ...jwk };
+  for (const member of PRIVATE_JWK_MEMBERS) {
+    const value = next[member];
+    if (typeof value === 'string') {
+      next[member] = change(value);
+    }
+  }
+  return next;
+}
+
+/**
+ * Finds the secrets in the key file: the private halves of the signing keys, and the cookie keys.
+ *
+ * @param keys - The keys as stored, or null before the first boot.
+ * @param change - Seals or opens one secret.
+ * @returns The keys with their secrets changed.
+ */
+export const privateKeysIn: SecretMapper<ProviderKeys | null> = (keys, change) =>
+  keys === null
+    ? null
+    : {
+        ...keys,
+        jwks: keys.jwks.map((jwk) => mapPrivateMembers(jwk, change)),
+        cookieKeys: keys.cookieKeys.map(change),
+      };
+
 /**
  * Opens the provider's keys, making and saving them on first boot.
  *
- * @param file - The file holding them. It holds private keys in plain text.
+ * @param file - The file holding them. Its private halves are sealed when `SECRET_KEY` is set.
  * @param [now] - The clock.
  * @returns The store.
  */

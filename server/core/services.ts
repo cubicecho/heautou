@@ -8,12 +8,14 @@ import { claimNamesIn, createProvider } from '../oidc/provider.ts';
 import { createSessionTools, type SessionTools } from '../oidc/sessions.ts';
 import { type AdminSessionDocument, type AdminSessionStore, createAdminSessionStore } from '../store/admin-sessions.ts';
 import { type Branding, type BrandingStore, createBrandingStore } from '../store/branding.ts';
-import { type ClientStore, createClientStore, type OidcClient } from '../store/clients.ts';
+import { type ClientStore, clientSecretsIn, createClientStore, type OidcClient } from '../store/clients.ts';
 import { openJsonFile } from '../store/json-file.ts';
-import { type KeyStore, openKeyStore, type ProviderKeys } from '../store/keys.ts';
+import { type KeyStore, openKeyStore, type ProviderKeys, privateKeysIn } from '../store/keys.ts';
 import { createPairingStore, type PairingDocument, type PairingStore } from '../store/pairings.ts';
 import { createPasswordLinkStore, type PasswordLinkDocument, type PasswordLinkStore } from '../store/password-links.ts';
+import { openSealedFile } from '../store/sealed-file.ts';
 import { createUserStore, type User, type UserStore } from '../store/users.ts';
+import { createSecretBox, type SecretKeys } from './secret-box.ts';
 
 /** The files under the data directory. */
 const DATA_FILES = {
@@ -38,6 +40,8 @@ export interface ServiceSettings {
   isProxied: boolean;
   /** The clock, in epoch milliseconds, for the setup window and the setup URLs. */
   now?: () => number;
+  /** The keys client secrets and private keys are sealed with. Unset or null keeps them plain text. */
+  secretKeys?: SecretKeys | null;
 }
 
 /** Everything the HTTP app is built from. */
@@ -64,14 +68,24 @@ export interface Services {
  * Opens the flat files and builds the provider on them. Keys are made on first use and rotated at boot once they
  * are `KEY_DEFAULTS.rotationDays` old. The admin UI is a built-in client of the provider.
  *
- * @param settings - Where the files are and the issuer.
+ * @param settings - Where the files are, the issuer and the secret key.
  * @returns The stores and the provider.
+ * @throws SecretKeyError when the stored secrets don't open with the key, or are sealed and no key is set.
  */
 export function openServices(settings: ServiceSettings): Services {
   const at = (name: string): string => path.join(settings.dataDir, name);
-  const clients = createClientStore(openJsonFile<OidcClient[]>(at(DATA_FILES.clients), []));
+  const sealingKeys = settings.secretKeys ?? null;
+  const box = sealingKeys === null ? null : createSecretBox(sealingKeys);
+  // Both files are opened, and so checked against the key, before either is re-sealed.
+  const clientFile = openJsonFile<OidcClient[]>(at(DATA_FILES.clients), []);
+  const keyFile = openJsonFile<ProviderKeys | null>(at(DATA_FILES.keys), null);
+  if (box !== null) {
+    clientSecretsIn(clientFile.read(), box.open);
+    privateKeysIn(keyFile.read(), box.open);
+  }
+  const clients = createClientStore(openSealedFile(clientFile, box, clientSecretsIn));
   const users = createUserStore(openJsonFile<User[]>(at(DATA_FILES.users), []));
-  const keys = openKeyStore(openJsonFile<ProviderKeys | null>(at(DATA_FILES.keys), null));
+  const keys = openKeyStore(openSealedFile(keyFile, box, privateKeysIn));
   if (keys.isDue()) {
     keys.rotate();
   }
