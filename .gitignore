@@ -12,3 +12,6 @@ data/
 
 # Claude Code worktrees and local state
 .claude/
+
+# The SECRET_KEY file the compose example makes
+secret_key

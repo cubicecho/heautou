@@ -43,7 +43,7 @@ function readOrFallback<T>(file: string, fallback: T): T {
 
 /**
  * Opens a JSON file as a document. Nothing here is encrypted or locked: one process owns the file, and
- * only its owner can read it.
+ * only its owner can read it. `openSealedFile` seals the secrets of the files that hold them.
  *
  * @typeParam T - The document's shape.
  * @param file - The file's path. Its directory is made when missing.

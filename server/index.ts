@@ -1,16 +1,47 @@
 // Boot only. Preflight is the first import: it exits with a sentence when the configuration is unusable.
 import './core/preflight.ts';
 import { adminUrls } from './admin/admin-client.ts';
-import { dataDir, issuerUrl, port, trustProxy, version } from './core/config.ts';
+import { dataDir, issuerUrl, port, secretKeys, trustProxy, version } from './core/config.ts';
 import { ADMIN_DEFAULTS } from './core/defaults.ts';
-import { openServices } from './core/services.ts';
+import { errorMessage } from './core/errors.ts';
+import { SecretKeyError } from './core/secret-box.ts';
+import { openServices, type Services } from './core/services.ts';
 import { createApp } from './http/app.ts';
 import { stopOnSignals } from './http/shutdown.ts';
 
 const LISTEN_HOST = '0.0.0.0';
 const SECONDS_PER_MINUTE = 60;
 
-const services = openServices({ dataDir: dataDir(), issuer: issuerUrl(), isProxied: trustProxy() !== false });
+const sealingKeys = secretKeys();
+
+/**
+ * Opens the data, stopping with a sentence when the secret key doesn't fit it.
+ *
+ * @returns The services.
+ */
+function openOrExit(): Services {
+  try {
+    return openServices({
+      dataDir: dataDir(),
+      issuer: issuerUrl(),
+      isProxied: trustProxy() !== false,
+      secretKeys: sealingKeys,
+    });
+  } catch (error) {
+    if (error instanceof SecretKeyError) {
+      console.error(`[boot] ${error.code}: ${errorMessage(error)}`);
+      process.exit(1);
+    }
+    throw error;
+  }
+}
+
+const services = openOrExit();
+if (sealingKeys === null) {
+  console.warn(
+    `[boot] SECRET_KEY is not set: client secrets and signing keys are stored in plain text in ${dataDir()}. Set SECRET_KEY or SECRET_KEY_FILE to seal them.`,
+  );
+}
 
 const server = createApp(services).listen(port(), LISTEN_HOST, () => {
   console.log(

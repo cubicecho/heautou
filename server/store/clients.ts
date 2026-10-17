@@ -5,6 +5,7 @@ import { badInput, notFound } from '../core/errors.ts';
 import { parseInput } from '../core/validation.ts';
 import { DEFAULT_GROUPS_CLAIM, groupsClaimSchema, replaceGroupIn, withoutBlanks } from './claims.ts';
 import type { JsonFile } from './json-file.ts';
+import type { SecretMapper } from './sealed-file.ts';
 
 /** How a client proves who it is at the token endpoint. */
 export const ClientAuthMethod = {
@@ -166,6 +167,18 @@ function withSecretFor(client: OidcClient): OidcClient {
   }
   return { ...client, clientSecret: client.clientSecret ?? newSecret() };
 }
+
+/**
+ * Finds the secrets in the client file: each confidential client's secret.
+ *
+ * @param clients - The clients as stored.
+ * @param change - Seals or opens one secret.
+ * @returns The clients with their secrets changed.
+ */
+export const clientSecretsIn: SecretMapper<OidcClient[]> = (clients, change) =>
+  clients.map((client) =>
+    typeof client.clientSecret === 'string' ? { ...client, clientSecret: change(client.clientSecret) } : client,
+  );
 
 /**
  * Builds the client store over a JSON file.

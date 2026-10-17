@@ -34,6 +34,8 @@ export interface TestApp {
   /** `http://127.0.0.1:<port>`. */
   base: string;
   services: Services;
+  /** Where its files are. */
+  dataDir: string;
   /** Stops the server and deletes the data directory. */
   close: () => Promise<void>;
 }
@@ -41,10 +43,10 @@ export interface TestApp {
 /**
  * Starts the whole app on a random port with an empty data directory. The issuer is that port's `/oidc`.
  *
- * @param [settings] - Overrides for the services, such as the clock.
+ * @param [settings] - Overrides for the services, such as the clock or the secret key.
  * @returns The running app.
  */
-export async function startTestApp(settings: Pick<ServiceSettings, 'now'> = {}): Promise<TestApp> {
+export async function startTestApp(settings: Pick<ServiceSettings, 'now' | 'secretKeys'> = {}): Promise<TestApp> {
   const dataDir = tempDir();
   const server = createServer();
   server.listen(0, '127.0.0.1');
@@ -57,5 +59,5 @@ export async function startTestApp(settings: Pick<ServiceSettings, 'now'> = {}):
     await new Promise<void>((resolve) => server.close(() => resolve()));
     rmSync(dataDir, { recursive: true, force: true });
   };
-  return { base, services, close };
+  return { base, services, dataDir, close };
 }

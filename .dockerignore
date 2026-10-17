@@ -17,3 +17,4 @@ data
 Dockerfile
 .dockerignore
 docker-compose.yml
+secret_key
