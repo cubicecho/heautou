@@ -1,3 +1,10 @@
+# [1.9.0](https://github.com/cubicecho/heautou/compare/v1.8.0...v1.9.0) (2026-10-17)
+
+
+### Features
+
+* live activity and app sign-ins in the audit log ([88cd92e](https://github.com/cubicecho/heautou/commit/88cd92e52d42e392bf54895f94676bc689e9a6d4))
+
 # [1.8.0](https://github.com/cubicecho/heautou/compare/v1.7.0...v1.8.0) (2026-10-17)
 
 
