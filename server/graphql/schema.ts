@@ -1,5 +1,5 @@
 import type { GraphQLSchema } from 'graphql';
-import { createSchema } from 'graphql-yoga';
+import { createSchema, Repeater } from 'graphql-yoga';
 import { adminUrls, type BrandingView, brandingView, sessionClientName, WEB_APP_PAGE } from '../admin/admin-client.ts';
 import type { Context } from '../core/context.ts';
 import { notFound } from '../core/errors.ts';
@@ -14,6 +14,8 @@ import {
   AuditTargetKind,
   AuditType,
   actorOf,
+  KEYS_TARGET,
+  matchesQuery,
   userTarget,
 } from '../store/audit.ts';
 import { type ClaimEntry, claimEntries, withoutBlanks } from '../store/claims.ts';
@@ -162,8 +164,6 @@ function pairingTarget(pairing: Pairing): AuditTarget {
   };
 }
 
-/** The target of key rotations. */
-const KEYS_TARGET: AuditTarget = Object.freeze({ kind: AuditTargetKind.Keys, id: 'signing', name: 'Signing keys' });
 /** The target of settings changes. */
 const SETTINGS_TARGET: AuditTarget = Object.freeze({
   kind: AuditTargetKind.Settings,
@@ -207,6 +207,72 @@ interface AuditPageView {
 function auditEntryView(entry: AuditEntry): AuditEntryView {
   const { detail, ...rest } = entry;
   return { ...rest, detail: Object.entries(detail ?? {}).map(([name, value]) => ({ name, value })) };
+}
+
+/** The entries after which a pairing may read differently. */
+const PAIRING_CHANGES: readonly AuditType[] = [AuditType.PairingCompleted, AuditType.PairingCancelled];
+
+/**
+ * Streams the entries recorded while a subscription is open.
+ *
+ * @param ctx - Request context.
+ * @param args - The filters, as `Query.auditLog` takes them.
+ * @returns The entries, each wrapped as the `auditEntryAdded` payload.
+ */
+function auditEntriesAdded(
+  ctx: Context,
+  args: { type?: AuditType | null; userId?: string | null },
+): Repeater<{ auditEntryAdded: AuditEntryView }> {
+  const query = { types: args.type === null || args.type === undefined ? null : [args.type], userId: args.userId };
+  return new Repeater(async (push, stop) => {
+    const off = ctx.audit.onRecord((entry) => {
+      if (matchesQuery(entry, query)) {
+        void push({ auditEntryAdded: auditEntryView(entry) });
+      }
+    });
+    await stop;
+    off();
+  });
+}
+
+/**
+ * Streams a pairing: as it is now, again when an app registers with it or it is cancelled, and null when it has
+ * expired or gone, which ends the stream.
+ *
+ * @param ctx - Request context.
+ * @param id - The pairing.
+ * @returns The pairing views, each wrapped as the `pairingChanged` payload.
+ */
+function pairingChanges(ctx: Context, id: string): Repeater<{ pairingChanged: PairingView | null }> {
+  return new Repeater(async (push, stop) => {
+    /**
+     * Sends the pairing as it is now, and ends the stream once it has stopped working.
+     *
+     * @returns Whether the stream goes on.
+     */
+    const send = (): boolean => {
+      const pairing = ctx.pairings.find(id);
+      void push({ pairingChanged: pairing === null ? null : pairingView(ctx, pairing) });
+      if (pairing === null) {
+        stop();
+        return false;
+      }
+      return true;
+    };
+    if (send() === false) {
+      return;
+    }
+    const expiry = ctx.pairings.find(id)?.expiresAt ?? Date.now();
+    const timer = setTimeout(send, Math.max(expiry - Date.now(), 0) + 1);
+    const off = ctx.audit.onRecord((entry) => {
+      if (PAIRING_CHANGES.includes(entry.type)) {
+        send();
+      }
+    });
+    await stop;
+    clearTimeout(timer);
+    off();
+  });
 }
 
 /**
@@ -461,6 +527,31 @@ const resolvers = {
         userId: args.userId,
       });
       return { entries: page.entries.map(auditEntryView), nextCursor: page.nextCursor };
+    },
+  },
+  Subscription: {
+    auditEntryAdded: {
+      /**
+       * Opens `Subscription.auditEntryAdded`.
+       *
+       * @param _parent - Unused.
+       * @param args - The filters.
+       * @param ctx - Request context.
+       * @returns The stream.
+       */
+      subscribe: (_parent: unknown, args: { type?: AuditType | null; userId?: string | null }, ctx: Context) =>
+        auditEntriesAdded(ctx, args),
+    },
+    pairingChanged: {
+      /**
+       * Opens `Subscription.pairingChanged`.
+       *
+       * @param _parent - Unused.
+       * @param args - The pairing.
+       * @param ctx - Request context.
+       * @returns The stream.
+       */
+      subscribe: (_parent: unknown, args: { id: string }, ctx: Context) => pairingChanges(ctx, args.id),
     },
   },
   Mutation: {

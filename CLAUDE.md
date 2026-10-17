@@ -29,9 +29,9 @@ or to promote an existing user, it needs the token the boot log prints.
 ## Layout
 
 - `server/core/` config getters, `defaults.ts` groups (token lifetimes, key sizes and rotation, link lifetimes, branding limits), coded errors, preflight, `secret-box.ts` (AES-256-GCM `enc:v1:` envelopes under `SECRET_KEY`), `services.ts` (opens the stores, sealing their secrets, and builds the provider)
-- `server/store/` flat-file stores: `json-file.ts` (atomic whole-file writes, mode 0600), `sealed-file.ts` (a JSON file whose secrets are sealed on disk and plain in memory; each store exports the `SecretMapper` that finds them), `clients.ts`, `users.ts` (scrypt password hashes, custom claims, disabled, the last-admin rule), `keys.ts` (signing and cookie keys, made on first boot, rotated every `KEY_DEFAULTS.rotationDays` keeping `keptKeys`), `admin-sessions.ts`, `password-links.ts` (invite and reset tokens, stored hashed), `branding.ts`, `settings.ts` (operator settings: plain http redirect URIs), `redirect-uris.ts` (the redirect URI rule), `groups.ts` (groups derived from users and clients: list, rename, delete), `claims.ts` (claim name rules), `pairings.ts` (setup URLs waiting for an app, the token stored hashed), `audit.ts` (the append-only `audit.jsonl`, rotated by size under `AUDIT_DEFAULTS`; a failed write is logged, never thrown)
+- `server/store/` flat-file stores: `json-file.ts` (atomic whole-file writes, mode 0600), `sealed-file.ts` (a JSON file whose secrets are sealed on disk and plain in memory; each store exports the `SecretMapper` that finds them), `clients.ts`, `users.ts` (scrypt password hashes, custom claims, disabled, the last-admin rule), `keys.ts` (signing and cookie keys, made on first boot, rotated every `KEY_DEFAULTS.rotationDays` keeping `keptKeys`), `admin-sessions.ts`, `password-links.ts` (invite and reset tokens, stored hashed), `branding.ts`, `settings.ts` (operator settings: plain http redirect URIs), `redirect-uris.ts` (the redirect URI rule), `groups.ts` (groups derived from users and clients: list, rename, delete), `claims.ts` (claim name rules), `pairings.ts` (setup URLs waiting for an app, the token stored hashed), `audit.ts` (the append-only `audit.jsonl`, rotated by size under `AUDIT_DEFAULTS`; a failed write is logged, never thrown; `onRecord` tells subscriptions)
 - `server/admin/` the admin UI as a built-in client (`admin-client.ts`), its sign-in, callback, logout and setup routes and `requireAdmin` (`routes.ts`), the first-admin token (`setup.ts`), and `account.ts`: `/admin/account` (any signed-in user: profile, password, sessions), the password-link routes and `/admin/branding` and `/admin/logo`
-- `server/oidc/` `provider.ts` (oidc-provider config: scopes, claims, TTLs; `findAccount` turns away disabled users and those outside a client's `allowedGroups`), `host.ts` (rebuilds the provider when the keys or claim names change; read `services.host.current()` per request), `sessions.ts` (a user's sessions and tokens in the model files), `adapter.ts` (oidc-provider models as JSON files under `oidc/`; clients come from the client store), `interactions.ts` (login and automatic consent), `pairing.ts` (setup URLs and the dynamic registration policy that writes paired clients to the client store)
+- `server/oidc/` `audit-events.ts` (the provider's events as audit entries), `provider.ts` (oidc-provider config: scopes, claims, TTLs; `findAccount` turns away disabled users and those outside a client's `allowedGroups`), `host.ts` (rebuilds the provider when the keys or claim names change; read `services.host.current()` per request), `sessions.ts` (a user's sessions and tokens in the model files), `adapter.ts` (oidc-provider models as JSON files under `oidc/`; clients come from the client store), `interactions.ts` (login and automatic consent), `pairing.ts` (setup URLs and the dynamic registration policy that writes paired clients to the client store)
 - `server/graphql/` SDL, schema, operation limits, logger; `write-schema.ts` prints `schema.graphql`
 - `server/http/` `createApp(services)`, health, shutdown, `guards.ts` (same-origin JSON POSTs), `rate-limit.ts`, `headers.ts` (security headers, the web app's CSP), `cookies.ts`; `server/index.ts` only boots
 - `web/src/components/` vendored cubeui and shadcn code: do not edit, reinstall with `npx shadcn@latest add @cubeui/<item>`
@@ -66,8 +66,8 @@ setup URL is `<issuer>#setup=<token>&name=<brand>`. The app POSTs RFC 7591 metad
 Bearer; the policy (`server/oidc/pairing.ts`) refuses what the client store can't hold, writes the client with
 `source: paired` and the pairing's groups, marks the pairing done and destroys the token. The client adapter's
 `upsert` only checks the client is in the store; `destroy` removes it, for an RFC 7592 DELETE. A PUT goes through the
-same policy as an update. The host is rebuilt after each, so a new groups claim is released. The dialog polls
-`pairing(id)` until it is PAIRED.
+same policy as an update. The host is rebuilt after each, so a new groups claim is released. The dialog follows
+the `pairingChanged(id)` subscription until it is PAIRED.
 
 ## Security model
 
@@ -84,4 +84,14 @@ operator allows plain http under Settings (`settings.json`; unset, it follows `I
 this on save, pairing answers `invalid_redirect_uri`, and clients saved before keep working but are flagged. Sign-ins, every admin
 mutation, password-link use, account changes, setup and DCR registration changes go in the audit log
 (`services.audit.record`), never with a password, token, secret or setup URL; `auditLog` on `/graphql` reads it and
-`/admin/account/activity` gives a user their own sign-ins.
+`/admin/account/activity` gives a user their own sign-ins. Every code the provider hands an app is an `app_signed_in`
+entry (from `authorization.success`, with the redirect URI and `via` password or session), so a sign-in that
+reused a session is logged too; the admin UI's own are `web_signed_in`. `server/oidc/audit-events.ts` also turns
+`authorization.error` into `app_sign_in_failed` (not the silent `prompt=none` checks), `grant.error` into
+`app_token_refused`, a client credentials `grant.success` into `machine_token_issued` and `end_session.success` into
+`app_signed_out`; a key rotation due at boot is a `keys_rotated` with no actor.
+
+Subscriptions are Yoga's server-sent events on the same `/graphql` POST (`Accept: text/event-stream`), behind the same
+guards, and the admin session is checked only when a stream opens. `auditEntryAdded` follows `audit.onRecord`;
+`pairingChanged` replaces polling in the pair dialog. The web app opens them with `subscribe` in `web/src/core/gql.ts`,
+which reopens a dropped stream; `useAuditFeed` puts new entries at the top of the Activity page's cached first page.

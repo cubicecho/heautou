@@ -1,7 +1,18 @@
-import { type QueryClient, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  type InfiniteData,
+  type QueryClient,
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
 import { z } from 'zod';
 import {
+  AuditEntryAddedDocument,
+  type AuditEntryFieldsFragment,
   AuditLogDocument,
+  type AuditLogQuery,
   type AuditType,
   CancelPairingDocument,
   type ClientInput,
@@ -18,6 +29,7 @@ import {
   KeysDocument,
   type NewClientInput,
   type NewUserInput,
+  PairingChangedDocument,
   PairingDocument,
   type PairingInput,
   ProviderDocument,
@@ -38,7 +50,7 @@ import {
   UsersDocument,
   ViewerDocument,
 } from '@/__generated__/graphql';
-import { request } from '@/core/gql';
+import { request, subscribe } from '@/core/gql';
 import { jsonReply, postJson } from '@/core/json-reply';
 
 /** The react-query keys of the admin API's lists. */
@@ -55,9 +67,6 @@ const KEYS = {
   httpRedirects: ['httpRedirects'],
   audit: ['audit'],
 } as const;
-
-/** How often a waiting pairing is asked about, in milliseconds. */
-const PAIRING_POLL_MS = 2000;
 
 /**
  * Builds a mutation hook's `onSuccess` that refetches one list.
@@ -302,16 +311,25 @@ export function useStartPairing() {
  */
 export function usePairing(id: string) {
   const queryClient = useQueryClient();
+  useEffect(
+    () =>
+      subscribe(
+        PairingChangedDocument,
+        { id },
+        {
+          onData: ({ pairingChanged }) => {
+            queryClient.setQueryData([...KEYS.pairings, id], pairingChanged);
+            if (pairingChanged?.status === 'PAIRED') {
+              void queryClient.invalidateQueries({ queryKey: KEYS.clients });
+            }
+          },
+        },
+      ),
+    [queryClient, id],
+  );
   return useQuery({
     queryKey: [...KEYS.pairings, id],
-    queryFn: async () => {
-      const { pairing } = await request(PairingDocument, { id });
-      if (pairing?.status === 'PAIRED') {
-        await queryClient.invalidateQueries({ queryKey: KEYS.clients });
-      }
-      return pairing;
-    },
-    refetchInterval: (query) => (query.state.data?.status === 'WAITING' ? PAIRING_POLL_MS : false),
+    queryFn: async () => (await request(PairingDocument, { id })).pairing,
   });
 }
 
@@ -500,4 +518,66 @@ export function useAuditLog(filters: AuditFilters) {
     initialPageParam: FIRST_PAGE,
     getNextPageParam: (page) => page.nextCursor,
   });
+}
+
+/** The audit log's pages as the query cache holds them. */
+type AuditPages = InfiniteData<AuditLogQuery['auditLog'], string | null>;
+
+/**
+ * Puts a new entry at the top of the cached first page, once.
+ *
+ * @param data - The cached pages.
+ * @param entry - The entry the server just recorded.
+ * @returns The pages with it.
+ */
+function withNewEntry(data: AuditPages | undefined, entry: AuditEntryFieldsFragment): AuditPages | undefined {
+  const [first, ...rest] = data?.pages ?? [];
+  if (
+    data === undefined ||
+    first === undefined ||
+    data.pages.some((page) => page.entries.some((e) => e.id === entry.id))
+  ) {
+    return data;
+  }
+  return { ...data, pages: [{ ...first, entries: [entry, ...first.entries] }, ...rest] };
+}
+
+/**
+ * Follows the audit log while a page shows it: each entry the server records that passes the filters is added to
+ * the top of `useAuditLog`'s first page. After a dropped stream opens again, the log is refetched for what was
+ * missed.
+ *
+ * @param filters - The same filters `useAuditLog` was given.
+ * @returns Whether the stream is open.
+ */
+export function useAuditFeed(filters: AuditFilters): boolean {
+  const queryClient = useQueryClient();
+  const [isLive, setLive] = useState(false);
+  const { type, userId } = filters;
+  useEffect(() => {
+    const queryKey = [...KEYS.audit, { type, userId }];
+    let hasOpened = false;
+    const close = subscribe(
+      AuditEntryAddedDocument,
+      { type, userId },
+      {
+        onOpen: () => {
+          setLive(true);
+          if (hasOpened) {
+            void queryClient.invalidateQueries({ queryKey });
+          }
+          hasOpened = true;
+        },
+        onData: ({ auditEntryAdded }) => {
+          queryClient.setQueryData<AuditPages>(queryKey, (data) => withNewEntry(data, auditEntryAdded));
+        },
+        onComplete: () => setLive(false),
+      },
+    );
+    return () => {
+      close();
+      setLive(false);
+    };
+  }, [queryClient, type, userId]);
+  return isLive;
 }

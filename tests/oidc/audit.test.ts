@@ -1,10 +1,14 @@
+import { KEY_DEFAULTS } from '../../server/core/defaults.ts';
+import { openServices } from '../../server/core/services.ts';
 import { HttpStatus } from '../../server/core/wire.ts';
 import { AuditType } from '../../server/store/audit.ts';
 import { ClientAuthMethod } from '../../server/store/clients.ts';
-import { startTestApp, type TestApp } from '../helpers.ts';
+import { startTestApp, type TestApp, tempDir } from '../helpers.ts';
 import {
   adminGql,
+  adminSubscribe,
   type Browser,
+  basicAuth,
   createBrowser,
   PASSWORD,
   REDIRECT_URI,
@@ -12,6 +16,9 @@ import {
   signInAsAdmin,
   signInForTokens,
 } from './browser.ts';
+
+/** One day, in milliseconds. */
+const DAY_MS = 86_400_000;
 
 const AUDIT_LOG = /* GraphQL */ `
   query ($first: Int, $after: String, $type: AuditType, $userId: ID) {
@@ -74,15 +81,123 @@ describe('the audit log', () => {
     const tokens = await signInForTokens(app, client, 'ada', 'openid');
     const ada = app.services.users.list().find((user) => user.username === 'ada');
     const { entries, text } = everything();
-    expect(entries[0]).toMatchObject({
-      type: AuditType.SignInSucceeded,
-      actor: { userId: ada?.id, username: 'ada' },
-      ip: expect.any(String),
-      target: { kind: 'client', id: client.clientId, name: 'Test app' },
-    });
+    expect(entries.slice(0, 2)).toMatchObject([
+      {
+        type: AuditType.AppSignedIn,
+        actor: { userId: ada?.id, username: 'ada' },
+        target: { kind: 'client', id: client.clientId, name: 'Test app' },
+        detail: { via: 'password', redirectUri: REDIRECT_URI },
+      },
+      {
+        type: AuditType.SignInSucceeded,
+        actor: { userId: ada?.id, username: 'ada' },
+        ip: expect.any(String),
+        target: { kind: 'client', id: client.clientId, name: 'Test app' },
+      },
+    ]);
     for (const secret of [PASSWORD, client.clientSecret ?? '', tokens.access_token, tokens.id_token]) {
       expect(text).not.toContain(secret);
     }
+  });
+
+  it('records an app sign-in that reused the session, with where the browser was sent', async () => {
+    const browser = createBrowser(app.base);
+    await signIn(app, authorizePath(), 'ada', PASSWORD, browser);
+    const before = everything().entries.length;
+    const callback = await signIn(app, authorizePath(), 'ada', 'never asked', browser);
+    expect(callback.searchParams.get('code')).toEqual(expect.any(String));
+    const { entries } = everything();
+    expect(entries.length).toBe(before + 1);
+    expect(entries[0]).toMatchObject({
+      type: AuditType.AppSignedIn,
+      actor: { username: 'ada' },
+      target: { id: client.clientId },
+      detail: { via: 'session', redirectUri: REDIRECT_URI },
+    });
+    // The admin UI's own sign-ins are WebSignedIn, not app sign-ins.
+    expect(entries.some((entry) => entry.type === AuditType.AppSignedIn && entry.target?.id === 'heautou-admin')).toBe(
+      false,
+    );
+  });
+
+  it('records a sign-in request or token request the provider refused, but not a silent session check', async () => {
+    const browser = createBrowser(app.base);
+    const wrongRedirect = `/oidc/auth?${new URLSearchParams({
+      client_id: client.clientId,
+      redirect_uri: 'http://elsewhere.example/callback',
+      response_type: 'code',
+      scope: 'openid',
+    })}`;
+    await browser.send(wrongRedirect);
+    expect(everything().entries[0]).toMatchObject({
+      type: AuditType.AppSignInFailed,
+      target: { id: client.clientId, name: 'Test app' },
+      detail: { error: 'invalid_redirect_uri', redirectUri: 'http://elsewhere.example/callback' },
+    });
+
+    const before = everything().entries.length;
+    const res = await browser.send(`${authorizePath()}&prompt=none`);
+    expect(res.headers.get('location')).toContain('error=login_required');
+    expect(everything().entries.length).toBe(before);
+
+    const tokenRes = await fetch(`${app.services.issuer}/token`, {
+      method: 'POST',
+      headers: {
+        authorization: basicAuth({ ...client, clientSecret: 'not-the-secret' }),
+        'content-type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({ grant_type: 'authorization_code', code: 'made-up', redirect_uri: REDIRECT_URI }),
+    });
+    expect(tokenRes.status).toBe(HttpStatus.Unauthorized);
+    const { entries, text } = everything();
+    expect(entries[0]).toMatchObject({
+      type: AuditType.AppTokenRefused,
+      actor: null,
+      target: { id: client.clientId },
+      detail: { error: 'invalid_client', grantType: 'authorization_code' },
+    });
+    expect(text).not.toContain('not-the-secret');
+  });
+
+  it('records keys rotated at boot once they are due', () => {
+    const dataDir = tempDir();
+    let time = Date.now();
+    const settings = { dataDir, issuer: 'http://127.0.0.1/oidc', isProxied: false, now: () => time };
+    expect(openServices(settings).audit.list({ types: [AuditType.KeysRotated] }).entries).toEqual([]);
+    time += (KEY_DEFAULTS.rotationDays + 1) * DAY_MS;
+    const reopened = openServices(settings);
+    expect(reopened.audit.list({ types: [AuditType.KeysRotated] }).entries).toMatchObject([
+      { actor: null, target: { kind: 'keys' }, detail: { reason: 'scheduled' } },
+    ]);
+  });
+
+  it('streams new entries to a subscription, filtered the way the log is', async () => {
+    const ada = app.services.users.list().find((user) => user.username === 'ada');
+    const subscription = /* GraphQL */ `
+      subscription ($type: AuditType, $userId: ID) {
+        auditEntryAdded(type: $type, userId: $userId) { type actor { username } target { name } }
+      }
+    `;
+    const all = await adminSubscribe(admin, subscription);
+    const failures = await adminSubscribe(admin, subscription, { type: 'SIGN_IN_FAILED', userId: ada?.id });
+    expect(all.res.status).toBe(HttpStatus.Ok);
+    expect(all.res.headers.get('content-type')).toMatch(/text\/event-stream/);
+    try {
+      await signInForTokens(app, client, 'ada', 'openid');
+      await expect(signIn(app, authorizePath(), 'ada', 'wrong horse')).rejects.toThrow();
+      expect((await all.subscription.next())?.data?.auditEntryAdded).toEqual({
+        type: 'SIGN_IN_SUCCEEDED',
+        actor: { username: 'ada' },
+        target: { name: 'Test app' },
+      });
+      expect((await all.subscription.next())?.data?.auditEntryAdded).toMatchObject({ type: 'APP_SIGNED_IN' });
+      expect((await failures.subscription.next())?.data?.auditEntryAdded).toMatchObject({ type: 'SIGN_IN_FAILED' });
+    } finally {
+      all.subscription.close();
+      failures.subscription.close();
+    }
+    const anonymous = await adminSubscribe(createBrowser(app.base), subscription);
+    expect(anonymous.res.status).toBe(HttpStatus.Unauthorized);
   });
 
   it('records a failed sign-in, by the account it named or by the username typed', async () => {
@@ -137,6 +252,7 @@ describe('the audit log', () => {
     expect(failed.data.auditLog.entries.map((entry: { type: string }) => entry.type)).toEqual([
       'SIGN_IN_FAILED',
       'SIGN_IN_FAILED',
+      'SIGN_IN_FAILED',
     ]);
     const first = await adminGql(admin, AUDIT_LOG, { userId: ada?.id, first: 1 });
     expect(first.data.auditLog.entries).toHaveLength(1);
@@ -169,11 +285,12 @@ describe('the audit log', () => {
     expect(entries[0]).toMatchObject({ type: AuditType.WebSignedIn, clientName: null });
     expect(entries).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ type: AuditType.SignInSucceeded, clientName: 'Test app' }),
+        expect.objectContaining({ type: AuditType.AppSignedIn, clientName: 'Test app' }),
         expect.objectContaining({ type: AuditType.SignInFailed, clientName: 'Test app' }),
       ]),
     );
     expect(entries.some((entry: { type: string }) => entry.type === AuditType.PasswordLinkCreated)).toBe(false);
+    expect(entries.some((entry: { type: string }) => entry.type === AuditType.SignInSucceeded)).toBe(false);
     expect((await createBrowser(app.base).send('/admin/account/activity')).status).toBe(HttpStatus.Unauthorized);
   });
 });

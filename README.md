@@ -220,6 +220,10 @@ backend heautou
     server heautou 192.168.1.10:3000
 ```
 
+The Activity page and the pair dialog follow the server with server-sent events on `/graphql`. A proxy that
+buffers responses holds them back: HAProxy and Caddy pass them straight through; with nginx, set
+`proxy_buffering off;` for `/graphql`.
+
 ## Your data
 
 Everything lives in the data folder, which is the `heautou-data` volume in Docker:
@@ -262,8 +266,11 @@ What Heautou does:
   allowed when that is `http://`, refused when it is `https://`. Clients saved before it was refused keep working
   and are marked in the client list.
 - **Sign-ins and changes are logged.** Every sign-in, failed or refused one, admin change, password link use
-  and account change goes in `audit.jsonl`, shown on the Activity page; each user sees their own sign-ins on
-  their account page. Passwords, tokens, client secrets and setup URLs are never written to it.
+  and account change goes in `audit.jsonl`, shown on the Activity page, which updates live while it is open; each
+  user sees their own sign-ins on their account page. Each time Heautou sends someone back to an app, it logs
+  "Signed in to an app" with the app, the redirect URI, and whether a password was typed or the session they
+  already had let them straight through. Refused sign-in and token requests from apps, sign-outs, machine
+  (client credentials) tokens and scheduled key rotations are logged too. Passwords, tokens, client secrets and setup URLs are never written to it.
 - **The pages can't be framed**, send no referrer, and the web app runs only its own scripts.
 
 What it does not do: seal anything without `SECRET_KEY` (then anyone who can read the data folder has the

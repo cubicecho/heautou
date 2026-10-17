@@ -6,6 +6,7 @@ import { CLIENT_SOURCE_PAIRED, ClientAuthMethod } from '../../server/store/clien
 import { startTestApp, type TestApp } from '../helpers.ts';
 import {
   adminGql,
+  adminSubscribe,
   type Browser,
   PASSWORD,
   payloadOf,
@@ -134,6 +135,31 @@ describe('pairing an app with a setup URL', () => {
     await expect(
       signInForTokens(app, { clientId: registered.client_id, clientSecret: registered.client_secret }, 'bob'),
     ).rejects.toThrow();
+  });
+
+  it('streams the pairing as it changes, and null once it is cancelled', async () => {
+    const watched = /* GraphQL */ `
+      subscription ($id: ID!) { pairingChanged(id: $id) { status client { name } } }
+    `;
+    const paired = await startPairing();
+    const watch = await adminSubscribe(admin, watched, { id: paired.id });
+    try {
+      expect((await watch.subscription.next())?.data?.pairingChanged).toEqual({ status: 'WAITING', client: null });
+      expect((await register(paired.endpoint, paired.token)).status).toBe(HttpStatus.Created);
+      expect((await watch.subscription.next())?.data?.pairingChanged).toEqual({
+        status: 'PAIRED',
+        client: { name: 'Telos' },
+      });
+    } finally {
+      watch.subscription.close();
+    }
+
+    const cancelled = await startPairing();
+    const ended = await adminSubscribe(admin, watched, { id: cancelled.id });
+    expect((await ended.subscription.next())?.data?.pairingChanged).toMatchObject({ status: 'WAITING' });
+    await adminGql(admin, 'mutation ($id: ID!) { cancelPairing(id: $id) }', { id: cancelled.id });
+    expect((await ended.subscription.next())?.data?.pairingChanged).toBeNull();
+    expect(await ended.subscription.next()).toBeNull();
   });
 
   it('lets the app update and remove itself', async () => {

@@ -10,7 +10,7 @@ import { PageLayout } from '@/components/page-layout';
 import { QueryState } from '@/components/query-state';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { type AuditFilters, useAuditLog, useUsers } from '@/core/admin';
+import { type AuditFilters, useAuditFeed, useAuditLog, useUsers } from '@/core/admin';
 import { Activity } from '@/core/app-icons';
 import { formatAgo, formatDateTime, joinStats } from '@/lib/format';
 
@@ -44,11 +44,13 @@ function pickOf(value: string): string | null {
 }
 
 /**
- * The audit log, newest first: sign-ins, admin changes and account changes, with a type and a user filter.
+ * The audit log, newest first: sign-ins, admin changes and account changes, with a type and a user filter. New
+ * entries appear while the page is open.
  */
 function ActivityPage() {
   const [filters, setFilters] = useState<AuditFilters>({ type: null, userId: null });
   const query = useAuditLog(filters);
+  const isLive = useAuditFeed(filters);
   const users = useUsers();
   const entries = query.data?.pages.flatMap((page) => page.entries) ?? [];
   const userOptions = (users.data ?? []).map((user) => ({ value: user.id, label: user.username }));
@@ -60,7 +62,10 @@ function ActivityPage() {
       description="Who signed in where, and every change made here. Passwords, secrets and links are never kept."
       contentClassName="gap-4"
       headerContentSlot={
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant={isLive ? 'positive' : 'outline'} title="New entries appear as they happen.">
+            {isLive ? 'Live' : 'Connecting…'}
+          </Badge>
           <Combobox
             className="w-56"
             options={AUDIT_TYPE_OPTIONS}

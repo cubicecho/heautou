@@ -6,7 +6,7 @@ import { DIR_MODE } from './json-file.ts';
 
 /** What happened. One flat vocabulary, so the log can be filtered by it and the UI can name each one. */
 export const AuditType = {
-  /** A user signed in to an application through the provider. */
+  /** A user's password was accepted on the provider's sign-in page. An app or web sign-in follows it. */
   SignInSucceeded: 'sign_in_succeeded',
   /** A provider sign-in with an unknown username or a wrong password. */
   SignInFailed: 'sign_in_failed',
@@ -14,6 +14,25 @@ export const AuditType = {
   SignInThrottled: 'sign_in_throttled',
   /** A provider sign-in by a disabled user, or one outside the client's allowed groups. */
   SignInRefused: 'sign_in_refused',
+  /**
+   * The provider sent a user back to an application with a code: with the password just typed, or with the session
+   * they already had. The detail names the redirect URI.
+   */
+  AppSignedIn: 'app_signed_in',
+  /**
+   * The provider turned an application's sign-in request away before anyone signed in, such as an unknown client, a
+   * redirect URI it doesn't have or a scope it may not ask for. The detail has the error.
+   */
+  AppSignInFailed: 'app_sign_in_failed',
+  /**
+   * The token endpoint refused an application: a wrong client secret, or a code or refresh token that was used
+   * already or has expired. The detail has the error and the grant type.
+   */
+  AppTokenRefused: 'app_token_refused',
+  /** A user signed out from inside an application (RP-initiated logout). */
+  AppSignedOut: 'app_signed_out',
+  /** A client got a token for itself with the client credentials grant, with no user. */
+  MachineTokenIssued: 'machine_token_issued',
   /** A user signed in to the admin UI or their account page. */
   WebSignedIn: 'web_signed_in',
   /** A user signed out of the admin UI or their account page. */
@@ -60,14 +79,27 @@ export type AuditType = (typeof AuditType)[keyof typeof AuditType];
 /** Every type, in the order above. */
 export const AUDIT_TYPES: readonly AuditType[] = Object.values(AuditType);
 
-/** The sign-ins a user is shown on their account page. */
+/**
+ * The sign-ins a user is shown on their account page. A password that worked is followed by an app or web sign-in,
+ * so `SignInSucceeded` would only say it twice.
+ */
 export const SIGN_IN_TYPES: readonly AuditType[] = [
-  AuditType.SignInSucceeded,
   AuditType.SignInFailed,
   AuditType.SignInThrottled,
   AuditType.SignInRefused,
+  AuditType.AppSignedIn,
+  AuditType.AppSignedOut,
   AuditType.WebSignedIn,
 ];
+
+/** How an app sign-in was made, in its `via` detail. */
+export const AppSignInVia = {
+  /** The user typed their password for it. */
+  Password: 'password',
+  /** The user already had a provider session, so nothing was asked. */
+  Session: 'session',
+} as const;
+export type AppSignInVia = (typeof AppSignInVia)[keyof typeof AppSignInVia];
 
 /** The kinds of thing an entry can be about. */
 export const AuditTargetKind = {
@@ -80,6 +112,13 @@ export const AuditTargetKind = {
   Settings: 'settings',
 } as const;
 export type AuditTargetKind = (typeof AuditTargetKind)[keyof typeof AuditTargetKind];
+
+/** The target of key rotations. */
+export const KEYS_TARGET: AuditTarget = Object.freeze({
+  kind: AuditTargetKind.Keys,
+  id: 'signing',
+  name: 'Signing keys',
+});
 
 /** Who did it. */
 export interface AuditActor {
@@ -174,6 +213,13 @@ export interface AuditLog {
    * @returns The page.
    */
   list: (query: AuditQuery) => AuditPage;
+  /**
+   * Calls a listener with every entry recorded from now on.
+   *
+   * @param listener - Called after each append.
+   * @returns A function that stops the calls.
+   */
+  onRecord: (listener: (entry: AuditEntry) => void) => () => void;
 }
 
 /** Owner read and write only, like the other data files. */
@@ -265,6 +311,20 @@ function concerns(entry: AuditEntry, userId: string): boolean {
 }
 
 /**
+ * Checks an entry passes a query's filters; the page fields are ignored.
+ *
+ * @param entry - The entry.
+ * @param query - The type and user filters.
+ * @returns Whether it passes.
+ */
+export function matchesQuery(entry: AuditEntry, { types = null, userId = null }: AuditQuery): boolean {
+  if (types !== null && types.includes(entry.type) === false) {
+    return false;
+  }
+  return userId === null || concerns(entry, userId);
+}
+
+/**
  * Opens the audit log: JSON lines appended to `file`, which is rotated to `audit.1.jsonl` and so on once it would
  * pass `AUDIT_DEFAULTS.maxFileBytes`, keeping `AUDIT_DEFAULTS.keptFiles` of them.
  *
@@ -283,6 +343,7 @@ export function openAuditLog(
   settings: Pick<typeof AUDIT_DEFAULTS, 'maxFileBytes' | 'keptFiles'> = AUDIT_DEFAULTS,
 ): AuditLog {
   const files = filesOf(file, settings.keptFiles);
+  const listeners = new Set<(entry: AuditEntry) => void>();
 
   /** Moves each file one place down the list, dropping the oldest. */
   const rotate = (): void => {
@@ -305,11 +366,21 @@ export function openAuditLog(
         }
         mkdirSync(path.dirname(file), { recursive: true, mode: DIR_MODE });
         appendFileSync(file, line, { encoding: 'utf8', mode: FILE_MODE });
+        for (const listener of listeners) {
+          listener(entry);
+        }
       } catch (error) {
         console.error(LOG_TAG, 'could not record', event.type, error);
       }
     },
-    list: ({ first = AUDIT_DEFAULTS.pageSize, after = null, types = null, userId = null }) => {
+    onRecord: (listener) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    list: (query) => {
+      const { first = AUDIT_DEFAULTS.pageSize, after = null } = query;
       const size = Math.min(Math.max(first, 1), AUDIT_DEFAULTS.maxPageSize);
       const newestFirst = files.flatMap((each) => entriesIn(each).reverse());
       let start = 0;
@@ -320,10 +391,7 @@ export function openAuditLog(
       const matching: AuditEntry[] = [];
       let hasMore = false;
       for (const entry of newestFirst.slice(start)) {
-        if (types !== null && types.includes(entry.type) === false) {
-          continue;
-        }
-        if (userId !== null && concerns(entry, userId) === false) {
+        if (matchesQuery(entry, query) === false) {
           continue;
         }
         if (matching.length === size) {
