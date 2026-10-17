@@ -3,12 +3,21 @@ import { createSchema } from 'graphql-yoga';
 import { adminUrls, type BrandingView, brandingView, sessionClientName, WEB_APP_PAGE } from '../admin/admin-client.ts';
 import type { Context } from '../core/context.ts';
 import { notFound } from '../core/errors.ts';
+import { type StartedPairing, startPairing } from '../oidc/pairing.ts';
 import { SCOPES } from '../oidc/provider.ts';
 import type { SessionInfo } from '../oidc/sessions.ts';
-import { type ClaimEntry, claimEntries } from '../store/claims.ts';
-import { ClientAuthMethod, type ClientFields, type NewClient, type OidcClient } from '../store/clients.ts';
+import { type ClaimEntry, claimEntries, withoutBlanks } from '../store/claims.ts';
+import {
+  CLIENT_SOURCE_ADMIN,
+  CLIENT_SOURCE_PAIRED,
+  ClientAuthMethod,
+  type ClientFields,
+  type NewClient,
+  type OidcClient,
+} from '../store/clients.ts';
 import { deleteGroup, type Group, listGroups, renameGroup } from '../store/groups.ts';
 import type { ProviderKeys } from '../store/keys.ts';
+import type { Pairing, PairingInput } from '../store/pairings.ts';
 import type { NewUser, PublicUser, UserFields } from '../store/users.ts';
 import { TYPE_DEFS } from './type-defs.ts';
 
@@ -42,6 +51,39 @@ interface GroupView {
   members: PublicUser[];
   clients: OidcClient[];
   isProtected: boolean;
+}
+
+/** Where a pairing is, as `PairingStatus` names it. */
+const PAIRING_WAITING = 'WAITING' as const;
+const PAIRING_PAIRED = 'PAIRED' as const;
+
+/** What `Pairing` resolves from. */
+interface PairingView {
+  id: string;
+  status: typeof PAIRING_WAITING | typeof PAIRING_PAIRED;
+  expiresAt: string;
+  allowedGroups: string[];
+  groupsClaim: string;
+  client: OidcClient | null;
+}
+
+/**
+ * Describes a pairing for the admin UI.
+ *
+ * @param ctx - Request context.
+ * @param pairing - The stored pairing.
+ * @returns What `Pairing` resolves from.
+ */
+function pairingView(ctx: Context, pairing: Pairing): PairingView {
+  const { id, allowedGroups, groupsClaim, clientId } = pairing;
+  return {
+    id,
+    status: clientId === null ? PAIRING_WAITING : PAIRING_PAIRED,
+    expiresAt: new Date(pairing.expiresAt).toISOString(),
+    allowedGroups,
+    groupsClaim,
+    client: clientId === null ? null : ctx.clients.find(clientId),
+  };
 }
 
 /**
@@ -134,6 +176,10 @@ const resolvers = {
     CLIENT_SECRET_BASIC: ClientAuthMethod.SecretBasic,
     CLIENT_SECRET_POST: ClientAuthMethod.SecretPost,
     NONE: ClientAuthMethod.None,
+  },
+  ClientSource: {
+    ADMIN: CLIENT_SOURCE_ADMIN,
+    PAIRED: CLIENT_SOURCE_PAIRED,
   },
   User: {
     /**
@@ -245,6 +291,18 @@ const resolvers = {
      * @returns The name and logo URL.
      */
     branding: (_parent: unknown, _args: unknown, ctx: Context): BrandingView => brandingView(ctx.branding.read()),
+    /**
+     * Resolves `Query.pairing`.
+     *
+     * @param _parent - Unused.
+     * @param args - The pairing's id.
+     * @param ctx - Request context.
+     * @returns The pairing, or null once it has expired or been cancelled.
+     */
+    pairing: (_parent: unknown, args: { id: string }, ctx: Context): PairingView | null => {
+      const pairing = ctx.pairings.find(args.id);
+      return pairing === null ? null : pairingView(ctx, pairing);
+    },
   },
   Mutation: {
     /**
@@ -287,6 +345,36 @@ const resolvers = {
      */
     deleteClient: (_parent: unknown, args: { clientId: string }, ctx: Context): OidcClient =>
       refreshed(ctx, ctx.clients.remove(args.clientId)),
+    /**
+     * Resolves `Mutation.startPairing`.
+     *
+     * @param _parent - Unused.
+     * @param args - What the paired client gets.
+     * @param ctx - Request context.
+     * @returns The pairing and its setup URL.
+     */
+    startPairing: async (
+      _parent: unknown,
+      args: { input: PairingInput },
+      ctx: Context,
+    ): Promise<{ pairing: PairingView; setupUrl: string }> => {
+      const started: StartedPairing = await startPairing(
+        ctx.host.current(),
+        ctx.pairings,
+        withoutBlanks(args.input),
+        ctx.branding.read().name,
+      );
+      return { pairing: pairingView(ctx, started), setupUrl: started.setupUrl };
+    },
+    /**
+     * Resolves `Mutation.cancelPairing`.
+     *
+     * @param _parent - Unused.
+     * @param args - The pairing's id.
+     * @param ctx - Request context.
+     * @returns Whether it was still there to cancel.
+     */
+    cancelPairing: (_parent: unknown, args: { id: string }, ctx: Context): boolean => ctx.pairings.cancel(args.id),
     /**
      * Resolves `Mutation.createUser`.
      *

@@ -98,8 +98,9 @@ export function clientMetadata(client: OidcClient): AdapterPayload {
 }
 
 /**
- * Serves the provider's `Client` model from the client store. Clients are added and removed in the
- * web app, never by the provider, so its writes are ignored.
+ * Serves the provider's `Client` model from the client store. The provider writes a client only when an app
+ * registers or updates itself with a setup URL, and the pairing policy (`pairing.ts`) has stored it by then, so a
+ * write is only checked. An app removing itself (RFC 7592) removes its client from the store.
  *
  * @param clients - The client store.
  * @param builtIns - Clients the server itself is, such as the admin UI. They are not in the store.
@@ -107,6 +108,7 @@ export function clientMetadata(client: OidcClient): AdapterPayload {
  */
 function createClientAdapter(clients: ClientStore, builtIns: AdapterPayload[]): Adapter {
   const ignore = async (): Promise<void> => {};
+  const isBuiltIn = (id: string): boolean => builtIns.some((candidate) => candidate.client_id === id);
   return {
     find: async (id) => {
       const builtIn = builtIns.find((candidate) => candidate.client_id === id);
@@ -116,11 +118,21 @@ function createClientAdapter(clients: ClientStore, builtIns: AdapterPayload[]): 
       const client = clients.find(id);
       return client === null ? undefined : clientMetadata(client);
     },
-    upsert: ignore,
+    upsert: async (id) => {
+      const isUnknown = isBuiltIn(id) === false && clients.find(id) === null;
+      if (isUnknown) {
+        throw new Error(`Client "${id}" was written without going through the pairing policy.`);
+      }
+    },
     findByUserCode: async () => undefined,
     findByUid: async () => undefined,
     consume: ignore,
-    destroy: ignore,
+    destroy: async (id) => {
+      const isStored = isBuiltIn(id) === false && clients.find(id) !== null;
+      if (isStored) {
+        clients.remove(id);
+      }
+    },
     revokeByGrantId: ignore,
   };
 }

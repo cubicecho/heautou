@@ -8,7 +8,20 @@ fragment ClientFields on Client {
   allowedGroups
   groupsClaim
   allowClientCredentials
+  source
+  logoUri
   createdAt
+}
+
+fragment PairingFields on Pairing {
+  id
+  status
+  expiresAt
+  allowedGroups
+  groupsClaim
+  client {
+    ...ClientFields
+  }
 }
 
 fragment UserFields on User {
@@ -68,6 +81,25 @@ mutation DeleteClient($clientId: ID!) {
   deleteClient(clientId: $clientId) {
     clientId
   }
+}
+
+mutation StartPairing($input: PairingInput!) {
+  startPairing(input: $input) {
+    setupUrl
+    pairing {
+      ...PairingFields
+    }
+  }
+}
+
+query Pairing($id: ID!) {
+  pairing(id: $id) {
+    ...PairingFields
+  }
+}
+
+mutation CancelPairing($id: ID!) {
+  cancelPairing(id: $id)
 }
 
 query Users {

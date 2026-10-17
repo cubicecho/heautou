@@ -1,4 +1,5 @@
 import path from 'node:path';
+import type Provider from 'oidc-provider';
 import { adminClientMetadata } from '../admin/admin-client.ts';
 import { createSetupGate, type SetupGate } from '../admin/setup.ts';
 import { createAdapterFactory, createModelFiles } from '../oidc/adapter.ts';
@@ -10,6 +11,7 @@ import { type Branding, type BrandingStore, createBrandingStore } from '../store
 import { type ClientStore, createClientStore, type OidcClient } from '../store/clients.ts';
 import { openJsonFile } from '../store/json-file.ts';
 import { type KeyStore, openKeyStore, type ProviderKeys } from '../store/keys.ts';
+import { createPairingStore, type PairingDocument, type PairingStore } from '../store/pairings.ts';
 import { createPasswordLinkStore, type PasswordLinkDocument, type PasswordLinkStore } from '../store/password-links.ts';
 import { createUserStore, type User, type UserStore } from '../store/users.ts';
 
@@ -21,6 +23,7 @@ const DATA_FILES = {
   adminSessions: 'admin-sessions.json',
   passwordLinks: 'password-links.json',
   branding: 'branding.json',
+  pairings: 'pairings.json',
   /** A directory: one file per provider model (sessions, codes, tokens...). */
   oidc: 'oidc',
 } as const;
@@ -33,7 +36,7 @@ export interface ServiceSettings {
   issuer: string;
   /** Whether X-Forwarded-Proto and -Host are believed. */
   isProxied: boolean;
-  /** The clock, in epoch milliseconds, for the setup window. */
+  /** The clock, in epoch milliseconds, for the setup window and the setup URLs. */
   now?: () => number;
 }
 
@@ -44,6 +47,8 @@ export interface Services {
   /** The web app's sessions, for admins and for users on their account page. */
   adminSessions: AdminSessionStore;
   passwordLinks: PasswordLinkStore;
+  /** Setup URLs handed out for apps to pair with. */
+  pairings: PairingStore;
   branding: BrandingStore;
   /** Guards making the first admin; its token is logged at boot while one is needed. */
   setup: SetupGate;
@@ -72,6 +77,7 @@ export function openServices(settings: ServiceSettings): Services {
   }
   const adminSessions = createAdminSessionStore(openJsonFile<AdminSessionDocument>(at(DATA_FILES.adminSessions), {}));
   const passwordLinks = createPasswordLinkStore(openJsonFile<PasswordLinkDocument>(at(DATA_FILES.passwordLinks), {}));
+  const pairings = createPairingStore(openJsonFile<PairingDocument>(at(DATA_FILES.pairings), {}), settings.now);
   const branding = createBrandingStore(openJsonFile<Partial<Branding>>(at(DATA_FILES.branding), {}));
   const files = createModelFiles(at(DATA_FILES.oidc));
   const adapter = createAdapterFactory({
@@ -79,18 +85,28 @@ export function openServices(settings: ServiceSettings): Services {
     clients,
     builtInClients: [adminClientMetadata(settings.issuer)],
   });
-  const host = createProviderHost(
-    () =>
-      createProvider({
-        issuer: settings.issuer,
-        clients,
-        users,
-        keys: keys.current(),
-        adapter,
-        isProxied: settings.isProxied,
-        claimNames: claimNamesIn(users, clients),
-      }),
-    () => JSON.stringify({ kids: keys.current().jwks.map((jwk) => jwk.kid), claims: claimNamesIn(users, clients) }),
+  const build = (): Provider => {
+    const provider = createProvider({
+      issuer: settings.issuer,
+      clients,
+      users,
+      pairings,
+      keys: keys.current(),
+      adapter,
+      isProxied: settings.isProxied,
+      claimNames: claimNamesIn(users, clients),
+    });
+    // A paired client may bring a new groups claim, which the provider has to be built again to release.
+    const refreshSoon = (): void => {
+      setImmediate(() => host.refresh());
+    };
+    provider.on('registration_create.success', refreshSoon);
+    provider.on('registration_update.success', refreshSoon);
+    provider.on('registration_delete.success', refreshSoon);
+    return provider;
+  };
+  const host: ProviderHost = createProviderHost(build, () =>
+    JSON.stringify({ kids: keys.current().jwks.map((jwk) => jwk.kid), claims: claimNamesIn(users, clients) }),
   );
   const setup = createSetupGate(users, settings.now);
   return {
@@ -98,6 +114,7 @@ export function openServices(settings: ServiceSettings): Services {
     users,
     adminSessions,
     passwordLinks,
+    pairings,
     branding,
     setup,
     keys,

@@ -1,6 +1,7 @@
 import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 import {
+  CancelPairingDocument,
   type ClientInput,
   ClientsDocument,
   CreateClientDocument,
@@ -14,6 +15,8 @@ import {
   KeysDocument,
   type NewClientInput,
   type NewUserInput,
+  PairingDocument,
+  type PairingInput,
   ProviderDocument,
   RenameGroupDocument,
   RotateClientSecretDocument,
@@ -23,6 +26,7 @@ import {
   SetUserDisabledDocument,
   SetUserPasswordDocument,
   SignOutUserDocument,
+  StartPairingDocument,
   UpdateClientDocument,
   UpdateUserDocument,
   type UserInput,
@@ -43,7 +47,11 @@ const KEYS = {
   groups: ['groups'],
   keys: ['keys'],
   branding: ['branding'],
+  pairings: ['pairings'],
 } as const;
+
+/** How often a waiting pairing is asked about, in milliseconds. */
+const PAIRING_POLL_MS = 2000;
 
 /**
  * Builds a mutation hook's `onSuccess` that refetches one list.
@@ -265,6 +273,52 @@ export function useSignOutUser() {
   return useMutation({
     mutationFn: async (id: string) => (await request(SignOutUserDocument, { id })).signOutUser,
     onSuccess: refetching(queryClient, KEYS.sessions),
+  });
+}
+
+/**
+ * Makes a setup URL an app pairs itself with.
+ *
+ * @returns The mutation; it resolves to the pairing and its URL, which is shown only this once.
+ */
+export function useStartPairing() {
+  return useMutation({
+    mutationFn: async (input: PairingInput) => (await request(StartPairingDocument, { input })).startPairing,
+  });
+}
+
+/**
+ * Watches a pairing, asking again every couple of seconds while no app has registered with it. When one has, the
+ * client list is fetched again so the new client shows.
+ *
+ * @param id - The pairing's id.
+ * @returns The query; its data is null once the pairing has expired or been cancelled.
+ */
+export function usePairing(id: string) {
+  const queryClient = useQueryClient();
+  return useQuery({
+    queryKey: [...KEYS.pairings, id],
+    queryFn: async () => {
+      const { pairing } = await request(PairingDocument, { id });
+      if (pairing?.status === 'PAIRED') {
+        await queryClient.invalidateQueries({ queryKey: KEYS.clients });
+      }
+      return pairing;
+    },
+    refetchInterval: (query) => (query.state.data?.status === 'WAITING' ? PAIRING_POLL_MS : false),
+  });
+}
+
+/**
+ * Stops a setup URL working.
+ *
+ * @returns The mutation; it resolves to whether the pairing was still waiting.
+ */
+export function useCancelPairing() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => (await request(CancelPairingDocument, { id })).cancelPairing,
+    onSuccess: refetching(queryClient, KEYS.pairings),
   });
 }
 

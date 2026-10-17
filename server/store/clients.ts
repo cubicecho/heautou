@@ -17,6 +17,13 @@ export const ClientAuthMethod = {
 } as const;
 export type ClientAuthMethod = (typeof ClientAuthMethod)[keyof typeof ClientAuthMethod];
 
+/** A client the operator added by hand. */
+export const CLIENT_SOURCE_ADMIN = 'admin' as const;
+/** A client an app registered itself as, with a setup URL. */
+export const CLIENT_SOURCE_PAIRED = 'paired' as const;
+/** How a client came to be. */
+export type ClientSource = typeof CLIENT_SOURCE_ADMIN | typeof CLIENT_SOURCE_PAIRED;
+
 /** An application that signs its users in through this provider. */
 export interface OidcClient {
   /** What the application is configured with as its client ID. */
@@ -36,6 +43,10 @@ export interface OidcClient {
   groupsClaim: string;
   /** Whether it may get tokens for itself with the client credentials grant. Confidential clients only. */
   allowClientCredentials: boolean;
+  /** Whether the operator added it or an app paired itself. */
+  source: ClientSource;
+  /** The app's logo, as the app gave it when it paired. Null for none. */
+  logoUri: string | null;
   /** When it was added, as an ISO 8601 string. */
   createdAt: string;
 }
@@ -57,6 +68,11 @@ const clientFields = z.object({
     .default([]),
   groupsClaim: groupsClaimSchema.default(DEFAULT_GROUPS_CLAIM),
   allowClientCredentials: z.boolean().default(false),
+  logoUri: z
+    .url({ protocol: /^https?$/ })
+    .trim()
+    .nullable()
+    .default(null),
 });
 
 /**
@@ -90,6 +106,7 @@ const newClientSchema = clientFields
       .regex(CLIENT_ID_PATTERN, 'use letters, digits, ".", "-" and "_" only')
       .optional()
       .or(z.literal('').transform(() => undefined)),
+    source: z.enum([CLIENT_SOURCE_ADMIN, CLIENT_SOURCE_PAIRED]).default(CLIENT_SOURCE_ADMIN),
   })
   .superRefine(checkFlows);
 export type NewClient = z.input<typeof newClientSchema>;
@@ -123,6 +140,8 @@ function withDefaults(client: OidcClient): OidcClient {
     allowedGroups: client.allowedGroups ?? [],
     groupsClaim: client.groupsClaim ?? DEFAULT_GROUPS_CLAIM,
     allowClientCredentials: client.allowClientCredentials ?? false,
+    source: client.source ?? CLIENT_SOURCE_ADMIN,
+    logoUri: client.logoUri ?? null,
   };
 }
 
@@ -188,8 +207,8 @@ export function createClientStore(file: JsonFile<OidcClient[]>, now: () => Date 
     update: (clientId, input) => {
       const current = load(clientId);
       // What the input leaves out keeps its value, rather than taking the default a new client gets.
-      const { allowedGroups, groupsClaim, allowClientCredentials } = current;
-      const merged = { allowedGroups, groupsClaim, allowClientCredentials, ...withoutBlanks(input) };
+      const { allowedGroups, groupsClaim, allowClientCredentials, logoUri } = current;
+      const merged = { allowedGroups, groupsClaim, allowClientCredentials, logoUri, ...withoutBlanks(input) };
       const fields = parseInput(clientFieldsSchema, merged);
       return replace(withSecretFor({ ...current, ...fields }));
     },

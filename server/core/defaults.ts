@@ -182,3 +182,13 @@ export const BRANDING_DEFAULTS: Readonly<BrandingSettings> = Object.freeze({
   maxLogoBytes: 262_144,
   logoCacheSeconds: 300,
 });
+
+/** How an app pairs itself with the provider through a setup URL. */
+export interface PairingSettings {
+  /** How long a setup URL works before the app has to register with it, in seconds. */
+  linkSeconds: number;
+}
+
+export const PAIRING_DEFAULTS: Readonly<PairingSettings> = Object.freeze({
+  linkSeconds: 600,
+});

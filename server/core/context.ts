@@ -5,7 +5,16 @@ import type { Services } from './services.ts';
 export interface Context
   extends Pick<
     Services,
-    'clients' | 'users' | 'issuer' | 'host' | 'sessions' | 'keys' | 'branding' | 'passwordLinks' | 'adminSessions'
+    | 'clients'
+    | 'users'
+    | 'issuer'
+    | 'host'
+    | 'sessions'
+    | 'keys'
+    | 'branding'
+    | 'passwordLinks'
+    | 'adminSessions'
+    | 'pairings'
   > {
   /** The signed-in admin making the request. */
   viewer: PublicUser;

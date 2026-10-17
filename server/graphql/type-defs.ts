@@ -10,6 +10,14 @@ export const TYPE_DEFS = /* GraphQL */ `
     NONE
   }
 
+  "How a client came to be."
+  enum ClientSource {
+    "The operator added it."
+    ADMIN
+    "An app registered itself with a setup URL."
+    PAIRED
+  }
+
   "An application that signs its users in through this provider."
   type Client {
     "What the application is configured with as its client ID."
@@ -29,8 +37,41 @@ export const TYPE_DEFS = /* GraphQL */ `
     groupsClaim: String!
     "Whether it may get tokens for itself with the client credentials grant."
     allowClientCredentials: Boolean!
+    "Whether the operator added it or an app paired itself."
+    source: ClientSource!
+    "The logo the app gave when it paired. Null for none."
+    logoUri: String
     "When it was added, as an ISO 8601 string."
     createdAt: String!
+  }
+
+  "Where a setup URL is."
+  enum PairingStatus {
+    "No app has registered with it yet."
+    WAITING
+    "An app has, and is the pairing's client."
+    PAIRED
+  }
+
+  "A setup URL handed out for an app to register itself with."
+  type Pairing {
+    id: ID!
+    status: PairingStatus!
+    "When the URL stops working, and the pairing is forgotten, as an ISO 8601 string."
+    expiresAt: String!
+    "The allowed groups the app's client gets."
+    allowedGroups: [String!]!
+    "The groups claim the app's client gets."
+    groupsClaim: String!
+    "The client the app registered as. Null while WAITING."
+    client: Client
+  }
+
+  "A pairing just started, with the URL to paste into the app. The URL is shown only this once."
+  type StartedPairing {
+    pairing: Pairing!
+    "The issuer, with a single-use initial access token in the fragment."
+    setupUrl: String!
   }
 
   "A claim of the operator's own, released with the profile scope."
@@ -144,6 +185,8 @@ export const TYPE_DEFS = /* GraphQL */ `
     keys: Keys!
     "The provider's name and logo."
     branding: Branding!
+    "A pairing. Null once it has expired or been cancelled."
+    pairing(id: ID!): Pairing
   }
 
   input ClaimInput {
@@ -162,6 +205,12 @@ export const TYPE_DEFS = /* GraphQL */ `
     allowedGroups: [String!]
     groupsClaim: String
     allowClientCredentials: Boolean
+  }
+
+  "What the client of an app that pairs gets."
+  input PairingInput {
+    allowedGroups: [String!]
+    groupsClaim: String
   }
 
   "A client's new settings. A field left out keeps its value."
@@ -203,6 +252,10 @@ export const TYPE_DEFS = /* GraphQL */ `
     rotateClientSecret(clientId: ID!): Client!
     "Removes a client. Its users are signed out of it at their next token refresh."
     deleteClient(clientId: ID!): Client!
+    "Makes a setup URL an app registers itself with (OAuth 2.0 Dynamic Client Registration). It works once, for a few minutes."
+    startPairing(input: PairingInput!): StartedPairing!
+    "Stops a setup URL working. False when it had already expired or been used."
+    cancelPairing(id: ID!): Boolean!
     "Adds a user."
     createUser(input: NewUserInput!): User!
     "Changes a user's details."
