@@ -1,5 +1,6 @@
 import { ADMIN_DEFAULTS } from '../../server/core/defaults.ts';
 import { HttpStatus } from '../../server/core/wire.ts';
+import { AuditType } from '../../server/store/audit.ts';
 import { ClientAuthMethod, type OidcClient } from '../../server/store/clients.ts';
 import { startTestApp, type TestApp } from '../helpers.ts';
 import {
@@ -206,6 +207,10 @@ describe('who may sign in, and what clients see', () => {
       body: new URLSearchParams({ token }),
     });
     expect(await introspect.json()).toMatchObject({ active: true, client_id: service.clientId });
+    expect(app.services.audit.list({ types: [AuditType.MachineTokenIssued] }).entries[0]).toMatchObject({
+      actor: null,
+      target: { id: service.clientId, name: 'Backup job' },
+    });
   });
 
   it('refuses client credentials to a client not allowed them', async () => {
@@ -215,6 +220,10 @@ describe('who may sign in, and what clients see', () => {
       body: new URLSearchParams({ grant_type: 'client_credentials' }),
     });
     expect(tokenRes.status).toBe(HttpStatus.BadRequest);
+    expect(app.services.audit.list({ types: [AuditType.AppTokenRefused] }).entries[0]).toMatchObject({
+      target: { id: client.clientId },
+      detail: { error: 'invalid_request', grantType: 'client_credentials' },
+    });
   });
 
   it('lists and ends a user’s sessions', async () => {

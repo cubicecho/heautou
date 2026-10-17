@@ -4,11 +4,12 @@ import type { Client, KoaContextWithOIDC } from 'oidc-provider';
 import { adminClientMetadata } from '../admin/admin-client.ts';
 import { createSetupGate, type SetupGate } from '../admin/setup.ts';
 import { createAdapterFactory, createModelFiles } from '../oidc/adapter.ts';
+import { recordProviderEvents } from '../oidc/audit-events.ts';
 import { createProviderHost, type ProviderHost } from '../oidc/host.ts';
 import { claimNamesIn, createProvider } from '../oidc/provider.ts';
 import { createSessionTools, type SessionTools } from '../oidc/sessions.ts';
 import { type AdminSessionDocument, type AdminSessionStore, createAdminSessionStore } from '../store/admin-sessions.ts';
-import { type AuditLog, AuditTargetKind, AuditType, openAuditLog } from '../store/audit.ts';
+import { type AuditLog, AuditTargetKind, AuditType, KEYS_TARGET, openAuditLog } from '../store/audit.ts';
 import { type Branding, type BrandingStore, createBrandingStore } from '../store/branding.ts';
 import { type ClientStore, clientSecretsIn, createClientStore, type OidcClient } from '../store/clients.ts';
 import { openJsonFile } from '../store/json-file.ts';
@@ -44,7 +45,7 @@ export interface ServiceSettings {
   issuer: string;
   /** Whether X-Forwarded-Proto and -Host are believed. */
   isProxied: boolean;
-  /** The clock, in epoch milliseconds, for the setup window and the setup URLs. */
+  /** The clock, in epoch milliseconds, for the setup window, the setup URLs and key rotation. */
   now?: () => number;
   /** The keys client secrets and private keys are sealed with. Unset or null keeps them plain text. */
   secretKeys?: SecretKeys | null;
@@ -101,15 +102,23 @@ export function openServices(settings: ServiceSettings): Services {
     allowsHttpRedirects: () => providerSettings.httpRedirects().isAllowed,
   });
   const users = createUserStore(openJsonFile<User[]>(at(DATA_FILES.users), []));
-  const keys = openKeyStore(openSealedFile(keyFile, box, privateKeysIn));
+  const audit = openAuditLog(at(DATA_FILES.audit), settings.now);
+  const now = settings.now ?? Date.now;
+  const keys = openKeyStore(openSealedFile(keyFile, box, privateKeysIn), () => new Date(now()));
   if (keys.isDue()) {
-    keys.rotate();
+    const rotated = keys.rotate();
+    audit.record({
+      type: AuditType.KeysRotated,
+      actor: null,
+      ip: null,
+      target: KEYS_TARGET,
+      detail: { kid: rotated.jwks[0]?.kid ?? '', reason: 'scheduled' },
+    });
   }
   const adminSessions = createAdminSessionStore(openJsonFile<AdminSessionDocument>(at(DATA_FILES.adminSessions), {}));
   const passwordLinks = createPasswordLinkStore(openJsonFile<PasswordLinkDocument>(at(DATA_FILES.passwordLinks), {}));
   const pairings = createPairingStore(openJsonFile<PairingDocument>(at(DATA_FILES.pairings), {}), settings.now);
   const branding = createBrandingStore(openJsonFile<Partial<Branding>>(at(DATA_FILES.branding), {}));
-  const audit = openAuditLog(at(DATA_FILES.audit), settings.now);
   const files = createModelFiles(at(DATA_FILES.oidc));
   const adapter = createAdapterFactory({
     files,
@@ -156,6 +165,7 @@ export function openServices(settings: ServiceSettings): Services {
     provider.on('registration_create.success', recordRegistration(AuditType.PairingCompleted));
     provider.on('registration_update.success', recordRegistration(AuditType.RegistrationUpdated));
     provider.on('registration_delete.success', recordRegistration(AuditType.RegistrationDeleted));
+    recordProviderEvents(provider, { audit, users, clients });
     return provider;
   };
   const host: ProviderHost = createProviderHost(build, () =>

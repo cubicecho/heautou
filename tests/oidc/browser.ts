@@ -117,6 +117,66 @@ export async function adminGql(browser: Browser, query: string, variables: Recor
   return res.json();
 }
 
+/** A subscription opened the way the admin UI opens one. */
+export interface Subscription {
+  /**
+   * Waits for the next event.
+   *
+   * @returns Its parsed `data`, or null once the stream has completed.
+   */
+  next: () => Promise<{ data?: Record<string, unknown>; errors?: unknown[] } | null>;
+  /** Closes the stream. */
+  close: () => void;
+}
+
+/**
+ * Opens a GraphQL subscription over server-sent events, as the admin UI does.
+ *
+ * @param browser - A browser, signed in or not.
+ * @param query - The subscription.
+ * @param [variables] - Its variables.
+ * @returns The response, and the stream once it answered 200.
+ */
+export async function adminSubscribe(
+  browser: Browser,
+  query: string,
+  variables: Record<string, unknown> = {},
+): Promise<{ res: Response; subscription: Subscription }> {
+  const abort = new AbortController();
+  const res = await browser.send('/graphql', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', accept: 'text/event-stream' },
+    body: JSON.stringify({ query, variables }),
+    signal: abort.signal,
+  });
+  const reader = res.body?.pipeThrough(new TextDecoderStream()).getReader();
+  let buffer = '';
+  const next: Subscription['next'] = async () => {
+    for (;;) {
+      const end = buffer.indexOf('\n\n');
+      if (end !== -1) {
+        const block = buffer.slice(0, end);
+        buffer = buffer.slice(end + 2);
+        const lines = block.split('\n');
+        if (lines.includes('event: complete')) {
+          return null;
+        }
+        const data = lines.filter((line) => line.startsWith('data:')).map((line) => line.slice(5).trim());
+        if (data.length > 0 && data.join('') !== '') {
+          return JSON.parse(data.join('\n'));
+        }
+        continue;
+      }
+      const chunk = await reader?.read();
+      if (chunk === undefined || chunk.done) {
+        return null;
+      }
+      buffer += chunk.value;
+    }
+  };
+  return { res, subscription: { next, close: () => abort.abort() } };
+}
+
 /** The tokens a confidential client gets for a user. */
 export interface Tokens {
   access_token: string;

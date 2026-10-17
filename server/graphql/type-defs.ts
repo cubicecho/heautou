@@ -360,4 +360,12 @@ export const TYPE_DEFS = /* GraphQL */ `
     "Allows or refuses plain http redirect URIs for clients saved from now on. Null follows the issuer again."
     setHttpRedirects(allowed: Boolean): HttpRedirects!
   }
+
+  "Live updates, over server-sent events. The admin session is checked when the stream opens."
+  type Subscription {
+    "Each entry recorded from now on that passes the filters, the way auditLog filters."
+    auditEntryAdded(type: AuditType, userId: ID): AuditEntry!
+    "The pairing now, then again each time it changes. Null once it has expired or been cancelled, and the stream ends."
+    pairingChanged(id: ID!): Pairing
+  }
 `;

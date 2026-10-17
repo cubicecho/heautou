@@ -99,6 +99,12 @@ query Pairing($id: ID!) {
   }
 }
 
+subscription PairingChanged($id: ID!) {
+  pairingChanged(id: $id) {
+    ...PairingFields
+  }
+}
+
 mutation CancelPairing($id: ID!) {
   cancelPairing(id: $id)
 }
@@ -247,27 +253,37 @@ mutation SetBrandingLogo($dataUrl: String) {
   }
 }
 
+fragment AuditEntryFields on AuditEntry {
+  id
+  at
+  type
+  actor {
+    userId
+    username
+  }
+  ip
+  target {
+    kind
+    id
+    name
+  }
+  detail {
+    name
+    value
+  }
+}
+
 query AuditLog($first: Int, $after: String, $type: AuditType, $userId: ID) {
   auditLog(first: $first, after: $after, type: $type, userId: $userId) {
     entries {
-      id
-      at
-      type
-      actor {
-        userId
-        username
-      }
-      ip
-      target {
-        kind
-        id
-        name
-      }
-      detail {
-        name
-        value
-      }
+      ...AuditEntryFields
     }
     nextCursor
+  }
+}
+
+subscription AuditEntryAdded($type: AuditType, $userId: ID) {
+  auditEntryAdded(type: $type, userId: $userId) {
+    ...AuditEntryFields
   }
 }

@@ -1,5 +1,6 @@
 import { HttpStatus } from '../../server/core/wire.ts';
 import { PAGE_PARAM, WEB_PAGE } from '../../server/oidc/pages.ts';
+import { AuditType } from '../../server/store/audit.ts';
 import { ClientAuthMethod, type OidcClient } from '../../server/store/clients.ts';
 import { startTestApp, type TestApp } from '../helpers.ts';
 import { createBrowser, PASSWORD, REDIRECT_URI, signIn } from './browser.ts';
@@ -69,6 +70,10 @@ describe('pages the provider sends a browser to', () => {
     const success = locationOf(app, confirmed);
     const loggedOut = locationOf(app, await browser.send(success.pathname + success.search));
     expect(loggedOut.pathname).toBe(WEB_PAGE.loggedOut);
+    expect(app.services.audit.list({ types: [AuditType.AppSignedOut] }).entries[0]).toMatchObject({
+      actor: { username: 'ada' },
+      target: { id: client.clientId, name: 'Test app' },
+    });
 
     // Signed out: the next sign-in asks for the password again.
     const again = locationOf(app, await browser.send(authorizeUrl()));

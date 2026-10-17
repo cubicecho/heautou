@@ -1,6 +1,13 @@
 import { readdirSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { type AuditEvent, AuditTargetKind, AuditType, openAuditLog } from '../../server/store/audit.ts';
+import {
+  type AuditEntry,
+  type AuditEvent,
+  AuditTargetKind,
+  AuditType,
+  matchesQuery,
+  openAuditLog,
+} from '../../server/store/audit.ts';
 import { tempDir } from '../helpers.ts';
 
 const ADA = { userId: 'u1', username: 'ada' };
@@ -50,6 +57,19 @@ describe('audit log', () => {
       AuditType.SignInSucceeded,
     ]);
     expect(log.list({ userId: 'u2' }).entries.map((entry) => entry.type)).toEqual([AuditType.UserCreated]);
+  });
+
+  it('tells listeners about each entry once it is written, until they stop listening', () => {
+    const log = openAuditLog(path.join(tempDir(), 'audit.jsonl'));
+    const heard: AuditEntry[] = [];
+    const off = log.onRecord((entry) => heard.push(entry));
+    log.record(event(AuditType.SignInFailed, { actor: null }));
+    off();
+    log.record(event(AuditType.SignInSucceeded));
+    expect(heard).toHaveLength(1);
+    expect(heard[0]).toEqual(log.list({ types: [AuditType.SignInFailed] }).entries[0]);
+    expect(matchesQuery(heard[0], { types: [AuditType.SignInFailed] })).toBe(true);
+    expect(matchesQuery(heard[0], { userId: 'u1' })).toBe(false);
   });
 
   it('rotates by size, keeping only so many files, and still reads across them', () => {
