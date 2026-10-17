@@ -1,6 +1,8 @@
-import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { type QueryClient, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 import {
+  AuditLogDocument,
+  type AuditType,
   CancelPairingDocument,
   type ClientInput,
   ClientsDocument,
@@ -51,6 +53,7 @@ const KEYS = {
   branding: ['branding'],
   pairings: ['pairings'],
   httpRedirects: ['httpRedirects'],
+  audit: ['audit'],
 } as const;
 
 /** How often a waiting pairing is asked about, in milliseconds. */
@@ -470,5 +473,31 @@ export function useSetBrandingLogo() {
   return useMutation({
     mutationFn: async (dataUrl: string | null) => (await request(SetBrandingLogoDocument, { dataUrl })).setBrandingLogo,
     onSuccess: (branding) => queryClient.setQueryData(KEYS.branding, branding),
+  });
+}
+
+/** Which audit log entries the activity page shows. */
+export interface AuditFilters {
+  /** Only this type, or every type with null. */
+  type: AuditType | null;
+  /** Only entries done by or to this user, or everyone's with null. */
+  userId: string | null;
+}
+
+/** The first page of the audit log has no cursor. */
+const FIRST_PAGE: string | null = null;
+
+/**
+ * Reads the audit log, newest first, a page at a time.
+ *
+ * @param filters - The type and user to keep.
+ * @returns The infinite query; `fetchNextPage` loads the next page.
+ */
+export function useAuditLog(filters: AuditFilters) {
+  return useInfiniteQuery({
+    queryKey: [...KEYS.audit, filters],
+    queryFn: async ({ pageParam }) => (await request(AuditLogDocument, { ...filters, after: pageParam })).auditLog,
+    initialPageParam: FIRST_PAGE,
+    getNextPageParam: (page) => page.nextCursor,
   });
 }

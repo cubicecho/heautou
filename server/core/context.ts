@@ -16,7 +16,10 @@ export interface Context
     | 'adminSessions'
     | 'pairings'
     | 'settings'
+    | 'audit'
   > {
   /** The signed-in admin making the request. */
   viewer: PublicUser;
+  /** The admin's address, for the audit log. */
+  ip: string | null;
 }

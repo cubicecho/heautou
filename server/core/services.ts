@@ -1,5 +1,6 @@
 import path from 'node:path';
 import type Provider from 'oidc-provider';
+import type { Client, KoaContextWithOIDC } from 'oidc-provider';
 import { adminClientMetadata } from '../admin/admin-client.ts';
 import { createSetupGate, type SetupGate } from '../admin/setup.ts';
 import { createAdapterFactory, createModelFiles } from '../oidc/adapter.ts';
@@ -7,6 +8,7 @@ import { createProviderHost, type ProviderHost } from '../oidc/host.ts';
 import { claimNamesIn, createProvider } from '../oidc/provider.ts';
 import { createSessionTools, type SessionTools } from '../oidc/sessions.ts';
 import { type AdminSessionDocument, type AdminSessionStore, createAdminSessionStore } from '../store/admin-sessions.ts';
+import { type AuditLog, AuditTargetKind, AuditType, openAuditLog } from '../store/audit.ts';
 import { type Branding, type BrandingStore, createBrandingStore } from '../store/branding.ts';
 import { type ClientStore, clientSecretsIn, createClientStore, type OidcClient } from '../store/clients.ts';
 import { openJsonFile } from '../store/json-file.ts';
@@ -28,6 +30,8 @@ const DATA_FILES = {
   branding: 'branding.json',
   pairings: 'pairings.json',
   settings: 'settings.json',
+  /** JSON lines, rotated by size into `audit.1.jsonl` and so on. */
+  audit: 'audit.jsonl',
   /** A directory: one file per provider model (sessions, codes, tokens...). */
   oidc: 'oidc',
 } as const;
@@ -58,6 +62,8 @@ export interface Services {
   branding: BrandingStore;
   /** The operator's settings, such as whether plain http redirect URIs are allowed. */
   settings: SettingsStore;
+  /** Who did what: sign-ins, admin changes, account changes. */
+  audit: AuditLog;
   /** Guards making the first admin; its token is logged at boot while one is needed. */
   setup: SetupGate;
   keys: KeyStore;
@@ -103,6 +109,7 @@ export function openServices(settings: ServiceSettings): Services {
   const passwordLinks = createPasswordLinkStore(openJsonFile<PasswordLinkDocument>(at(DATA_FILES.passwordLinks), {}));
   const pairings = createPairingStore(openJsonFile<PairingDocument>(at(DATA_FILES.pairings), {}), settings.now);
   const branding = createBrandingStore(openJsonFile<Partial<Branding>>(at(DATA_FILES.branding), {}));
+  const audit = openAuditLog(at(DATA_FILES.audit), settings.now);
   const files = createModelFiles(at(DATA_FILES.oidc));
   const adapter = createAdapterFactory({
     files,
@@ -125,9 +132,30 @@ export function openServices(settings: ServiceSettings): Services {
     const refreshSoon = (): void => {
       setImmediate(() => host.refresh());
     };
-    provider.on('registration_create.success', refreshSoon);
-    provider.on('registration_update.success', refreshSoon);
-    provider.on('registration_delete.success', refreshSoon);
+    /**
+     * Records what a paired app did to its own registration.
+     *
+     * @param type - Which change.
+     * @returns A listener for the provider's `registration_*.success` events.
+     */
+    const recordRegistration =
+      (type: AuditType) =>
+      (ctx: KoaContextWithOIDC, client: Client): void => {
+        audit.record({
+          type,
+          actor: null,
+          ip: ctx.ip,
+          target: {
+            kind: AuditTargetKind.Client,
+            id: client.clientId,
+            name: client.clientName ?? clients.find(client.clientId)?.name ?? client.clientId,
+          },
+        });
+        refreshSoon();
+      };
+    provider.on('registration_create.success', recordRegistration(AuditType.PairingCompleted));
+    provider.on('registration_update.success', recordRegistration(AuditType.RegistrationUpdated));
+    provider.on('registration_delete.success', recordRegistration(AuditType.RegistrationDeleted));
     return provider;
   };
   const host: ProviderHost = createProviderHost(build, () =>
@@ -142,6 +170,7 @@ export function openServices(settings: ServiceSettings): Services {
     pairings,
     branding,
     settings: providerSettings,
+    audit,
     setup,
     keys,
     host,
