@@ -104,6 +104,16 @@ docker run -d --name heautou --restart unless-stopped \
 Signing in from the app sends you to Heautou's sign-in page and then back to the app. There is no
 consent screen: the apps you added are trusted.
 
+### Pairing an app
+
+An app that supports pairing sets itself up. Under **Clients**, choose **Pair an app**, pick the allowed groups and
+groups claim, and choose **Make setup URL**. Paste the URL into the app's sign-in setup. The app registers itself,
+and the dialog shows when it has. The client is listed as **Paired**, and you can edit or delete it like any other.
+
+The setup URL works once, for 10 minutes. Closing the dialog before the app registers cancels it. Under the hood this
+is standard OAuth 2.0 Dynamic Client Registration with an initial access token, so any app that supports that with
+a pasted token can use it too. [docs/pairing.md](docs/pairing.md) is the spec for adding pairing to an app.
+
 ### Claims
 
 | Scope     | Claims                                                                    |
@@ -210,6 +220,8 @@ What Heautou does:
 - **Password guessing is slowed.** Sign-ins are limited to 5 failures per username and 10 per address in
   15 minutes, and sign-in routes to 120 requests a minute per address. Unknown usernames take as long to
   refuse as wrong passwords.
+- **Setup URLs are single use.** A pairing's token registers one client, lasts 10 minutes, and can be
+  cancelled. Registration is rate-limited like sign-in.
 - **The pages can't be framed**, send no referrer, and the web app runs only its own scripts.
 
 What it does not do: encrypt the data folder (anyone who can read it has the signing keys and client

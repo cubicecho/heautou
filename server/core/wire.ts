@@ -1,6 +1,8 @@
 /** HTTP status codes this server sends or checks. */
 export const HttpStatus = {
   Ok: 200,
+  Created: 201,
+  NoContent: 204,
   SeeOther: 303,
   BadRequest: 400,
   Unauthorized: 401,

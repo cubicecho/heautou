@@ -3,6 +3,7 @@ import { useState } from 'react';
 import type { ClientFieldsFragment } from '@/__generated__/graphql';
 import { AUTH_METHODS } from '@/clients/auth-methods';
 import { ClientFormDialog } from '@/clients/client-form-dialog';
+import { PairDialog } from '@/clients/pair-dialog';
 import { ConfirmButton } from '@/components/confirm-button';
 import { DescriptionList, PropertyRow } from '@/components/description-list';
 import { DisclosureRow } from '@/components/disclosure-row';
@@ -14,15 +15,15 @@ import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { CopyButton } from '@/components/ui/copy-button';
-import { Pencil, Plus, RefreshCw, Trash2 } from '@/components/ui/icons';
+import { Pencil, Plug, Plus, RefreshCw, Trash2 } from '@/components/ui/icons';
 import { useClients, useDeleteClient, useRotateClientSecret } from '@/core/admin';
 import { AppWindow } from '@/core/app-icons';
 import { messageOf } from '@/core/lists';
 
 export const Route = createFileRoute('/clients')({ component: ClientsPage });
 
-/** Which dialog is up: none, a new client, or one client's edit. */
-type Editing = { kind: 'closed' } | { kind: 'new' } | { kind: 'edit'; client: ClientFieldsFragment };
+/** Which dialog is up: none, a new client, pairing an app, or one client's edit. */
+type Editing = { kind: 'closed' } | { kind: 'new' } | { kind: 'pair' } | { kind: 'edit'; client: ClientFieldsFragment };
 
 /**
  * The URIs a client may be sent back to, one per line.
@@ -120,20 +121,34 @@ function ClientsPage() {
   const clients = query.data ?? [];
   const [openId, setOpenId] = useState<string | null>(null);
   const [editing, setEditing] = useState<Editing>({ kind: 'closed' });
-  const isDialogOpen = editing.kind !== 'closed';
+  const isFormOpen = editing.kind === 'new' || editing.kind === 'edit';
+  const close = (next: boolean): void => {
+    if (next === false) {
+      setEditing({ kind: 'closed' });
+    }
+  };
 
   return (
     <PageLayout
       title="Clients"
       description="The applications that sign their users in here. Open one for the values to configure it with."
       actionSlot={
-        <Button
-          variant="info"
-          size="sm"
-          iconSlot={<Plus />}
-          content="New client"
-          onClick={() => setEditing({ kind: 'new' })}
-        />
+        <>
+          <Button
+            variant="outline"
+            size="sm"
+            iconSlot={<Plug />}
+            content="Pair an app"
+            onClick={() => setEditing({ kind: 'pair' })}
+          />
+          <Button
+            variant="info"
+            size="sm"
+            iconSlot={<Plus />}
+            content="New client"
+            onClick={() => setEditing({ kind: 'new' })}
+          />
+        </>
       }
       contentClassName="gap-4"
       contentSlot={
@@ -149,14 +164,22 @@ function ClientsPage() {
               <EmptyState
                 iconSlot={<AppWindow />}
                 title="No clients yet"
-                description="Add one for each application that should sign in through this provider."
+                description="Add one for each application that should sign in through this provider, or pair an app that can register itself."
                 actionSlot={
-                  <Button
-                    variant="info"
-                    iconSlot={<Plus />}
-                    content="New client"
-                    onClick={() => setEditing({ kind: 'new' })}
-                  />
+                  <>
+                    <Button
+                      variant="outline"
+                      iconSlot={<Plug />}
+                      content="Pair an app"
+                      onClick={() => setEditing({ kind: 'pair' })}
+                    />
+                    <Button
+                      variant="info"
+                      iconSlot={<Plus />}
+                      content="New client"
+                      onClick={() => setEditing({ kind: 'new' })}
+                    />
+                  </>
                 }
               />
             }
@@ -173,6 +196,7 @@ function ClientsPage() {
                   <>
                     <Badge variant="outline">{client.authMethod === 'NONE' ? 'Public' : 'Confidential'}</Badge>
                     {client.allowedGroups.length === 0 ? null : <Badge variant="secondary">Limited</Badge>}
+                    {client.source === 'PAIRED' ? <Badge variant="secondary">Paired</Badge> : null}
                   </>
                 }
                 meta={<span className="font-mono text-foreground/60 text-xs">{client.clientId}</span>}
@@ -200,18 +224,17 @@ function ClientsPage() {
               />
             ))}
           />
-          {isDialogOpen ? (
+          {isFormOpen ? (
             <ClientFormDialog
               key={editing.kind === 'edit' ? editing.client.clientId : 'new'}
               client={editing.kind === 'edit' ? editing.client : null}
-              open={isDialogOpen}
-              onOpenChange={(next) => {
-                if (next === false) {
-                  setEditing({ kind: 'closed' });
-                }
-              }}
+              open={isFormOpen}
+              onOpenChange={close}
               onSaved={(saved) => setOpenId(saved.clientId)}
             />
+          ) : null}
+          {editing.kind === 'pair' ? (
+            <PairDialog open onOpenChange={close} onPaired={(paired) => setOpenId(paired.clientId)} />
           ) : null}
         </>
       }

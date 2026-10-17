@@ -24,7 +24,7 @@ const HEALTH_ENDPOINT = '/healthz';
 /** Every path but the server's own, so the web app's routes load index.html. */
 const WEB_ROUTES = /^(?!\/(graphql|healthz)$|\/(oidc|interaction|admin)(\/|$)).*/;
 /** The routes that start sign-ins or write files, limited per address. */
-const LIMITED_ROUTES = [`${OIDC_MOUNT_PATH}/auth`, '/interaction', '/admin'];
+const LIMITED_ROUTES = [`${OIDC_MOUNT_PATH}/auth`, `${OIDC_MOUNT_PATH}/reg`, '/interaction', '/admin'];
 /** Where `npm run build` puts the web app. */
 const WEB_DIST = fileURLToPath(new URL('../../dist', import.meta.url));
 
@@ -58,6 +58,7 @@ export function createApp(services: Services): Express {
       branding: services.branding,
       passwordLinks: services.passwordLinks,
       adminSessions: services.adminSessions,
+      pairings: services.pairings,
       viewer: res.locals.viewer as PublicUser,
     }),
   });

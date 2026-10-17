@@ -3,8 +3,10 @@ import { TOKEN_LIFETIME_DEFAULTS } from '../core/defaults.ts';
 import { DEFAULT_GROUPS_CLAIM } from '../store/claims.ts';
 import { ClientAuthMethod, type ClientStore, type OidcClient } from '../store/clients.ts';
 import type { ProviderKeys } from '../store/keys.ts';
+import type { PairingStore } from '../store/pairings.ts';
 import type { PublicUser, UserStore } from '../store/users.ts';
 import { createPageSources } from './pages.ts';
+import { createPairingPolicy, PAIRING_POLICY } from './pairing.ts';
 
 /** The scopes clients may ask for. */
 export const SCOPES = ['openid', 'offline_access', 'profile', 'email', 'groups'] as const;
@@ -88,6 +90,8 @@ export interface ProviderDeps {
   issuer: string;
   clients: ClientStore;
   users: UserStore;
+  /** The setup URLs apps register with. */
+  pairings: PairingStore;
   keys: ProviderKeys;
   /** Persists the provider's sessions, codes and tokens. */
   adapter: AdapterFactory;
@@ -184,6 +188,16 @@ export function createProvider(deps: ProviderDeps): Provider {
       clientCredentials: { enabled: true },
       // The web app draws these pages; the provider's own are plain HTML.
       rpInitiatedLogout: { enabled: true, logoutSource, postLogoutSuccessSource },
+      // An app pairs itself with a setup URL, whose token registers one client (RFC 7591). Every token is made by
+      // `startPairing` and carries the pairing policy, which stores the client.
+      registration: {
+        enabled: true,
+        initialAccessToken: true,
+        issueRegistrationAccessToken: true,
+        policies: { [PAIRING_POLICY]: createPairingPolicy(deps) },
+      },
+      // The app can update or remove itself later with the registration access token it was given (RFC 7592).
+      registrationManagement: { enabled: true, rotateRegistrationAccessToken: true },
     },
     // A browser app may call the token endpoint from the origins it was registered to return to.
     clientBasedCORS: (_ctx, origin, client) => (client.redirectUris ?? []).some((uri) => originOf(uri) === origin),
