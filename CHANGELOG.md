@@ -1,3 +1,10 @@
+# [1.5.0](https://github.com/cubicecho/heautou/compare/v1.4.1...v1.5.0) (2026-10-17)
+
+
+### Features
+
+* pair apps with a setup URL through dynamic client registration ([1b6469f](https://github.com/cubicecho/heautou/commit/1b6469fe1f7009e04c5297bdb720fa1b21b6b04a))
+
 ## [1.4.1](https://github.com/cubicecho/heautou/compare/v1.4.0...v1.4.1) (2026-10-17)
 
 
