@@ -1,3 +1,10 @@
+# [1.6.0](https://github.com/cubicecho/heautou/compare/v1.5.0...v1.6.0) (2026-10-17)
+
+
+### Features
+
+* encrypt client secrets and signing keys at rest ([10bb226](https://github.com/cubicecho/heautou/commit/10bb226e101e575f04ee3e3df36600ba629d64b2))
+
 # [1.5.0](https://github.com/cubicecho/heautou/compare/v1.4.1...v1.5.0) (2026-10-17)
 
 
