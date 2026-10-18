@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { useState } from 'react';
+import { BackupSection } from '@/backup/backup-section';
 import { InputField, useAppForm } from '@/components/app-form';
 import { Combobox } from '@/components/combobox';
 import { ConfirmButton } from '@/components/confirm-button';
@@ -322,14 +323,14 @@ function PasswordRulesSection() {
 }
 
 /**
- * The provider's own settings: its branding, its redirect URI rule, its password rules and its keys.
+ * The provider's own settings: its branding, its redirect URI rule, its password rules, its keys and backups.
  */
 function SettingsPage() {
   const branding = useBranding();
   return (
     <PageLayout
       title="Settings"
-      description="How the provider presents itself, where it sends applications back to, what passwords it takes, and the keys it signs with."
+      description="How the provider presents itself, where it sends applications back to, what passwords it takes, and the keys it signs with, and backups of its data."
       width="prose"
       contentClassName="gap-6"
       contentSlot={
@@ -339,6 +340,7 @@ function SettingsPage() {
           <RedirectUrisSection />
           <PasswordRulesSection />
           <KeysSection />
+          <BackupSection />
         </>
       }
     />

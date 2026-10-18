@@ -299,3 +299,16 @@ export interface BackchannelLogoutSettings {
 export const BACKCHANNEL_LOGOUT_DEFAULTS: Readonly<BackchannelLogoutSettings> = Object.freeze({
   timeoutMs: 5000,
 });
+
+/** How a backup of the data directory is made and taken back. */
+export interface BackupSettings {
+  /** Largest archive a restore takes, gzipped, in bytes. */
+  maxArchiveBytes: number;
+  /** Largest an archive may grow to once unzipped, in bytes, so a small upload cannot fill the memory. */
+  maxUnpackedBytes: number;
+}
+
+export const BACKUP_DEFAULTS: Readonly<BackupSettings> = Object.freeze({
+  maxArchiveBytes: 33_554_432,
+  maxUnpackedBytes: 268_435_456,
+});

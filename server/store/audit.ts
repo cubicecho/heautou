@@ -94,6 +94,10 @@ export const AuditType = {
   PasskeyRemoved: 'passkey_removed',
   /** An admin removed every second factor a user had, as for a lost phone. */
   UserSecondFactorsReset: 'user_second_factors_reset',
+  /** An admin downloaded a backup of the data. The detail says whether it took the sessions. */
+  BackupDownloaded: 'backup_downloaded',
+  /** The data was replaced from a backup, by an admin or the CLI. The detail says when the backup was made. */
+  DataRestored: 'data_restored',
 } as const;
 export type AuditType = (typeof AuditType)[keyof typeof AuditType];
 

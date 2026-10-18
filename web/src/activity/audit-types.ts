@@ -51,6 +51,8 @@ const LABELS: Record<AuditType, string> = {
   PASSKEY_ADDED: 'Passkey added',
   PASSKEY_REMOVED: 'Passkey removed',
   USER_SECOND_FACTORS_RESET: 'Two-factor reset by an admin',
+  BACKUP_DOWNLOADED: 'Backup downloaded',
+  DATA_RESTORED: 'Data restored from a backup',
 };
 
 /** The labels by the type's GraphQL name and by the value the account route sends. */

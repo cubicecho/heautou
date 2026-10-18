@@ -11,6 +11,8 @@ export interface ProviderHost {
   current: () => Provider;
   /** Builds the provider again if its keys or claim names have changed since the last build. */
   refresh: () => void;
+  /** Builds the provider again whatever changed, after a restore replaced the data it was built from. */
+  rebuild: () => void;
   /** Handles a request under the mount path with the current provider. */
   handle: (req: IncomingMessage, res: ServerResponse) => void;
 }
@@ -26,16 +28,20 @@ export function createProviderHost(build: () => Provider, fingerprint: () => str
   let builtFrom = fingerprint();
   let provider = build();
   let handler = provider.callback();
+  /** Builds the provider from what is there now. */
+  const rebuild = (): void => {
+    builtFrom = fingerprint();
+    provider = build();
+    handler = provider.callback();
+  };
   return {
     current: () => provider,
     refresh: () => {
-      const next = fingerprint();
-      if (next !== builtFrom) {
-        builtFrom = next;
-        provider = build();
-        handler = provider.callback();
+      if (fingerprint() !== builtFrom) {
+        rebuild();
       }
     },
+    rebuild,
     handle: (req, res) => {
       void handler(req, res);
     },

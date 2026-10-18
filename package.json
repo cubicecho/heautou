@@ -18,7 +18,8 @@
     "check": "npm run check:biome && npm run check:types",
     "check:biome": "biome check --write .",
     "check:types": "npm run codegen && tsc --noEmit -p server && tsc --noEmit -p web",
-    "test": "vitest run"
+    "test": "vitest run",
+    "backup": "node --env-file-if-exists=.env server/backup.ts"
   },
   "dependencies": {
     "@escape.tech/graphql-armor-max-aliases": "^2.6.2",
