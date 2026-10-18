@@ -1,3 +1,11 @@
+# [1.11.0](https://github.com/cubicecho/heautou/compare/v1.10.0...v1.11.0) (2026-10-18)
+
+
+### Features
+
+* back up and restore the data from Settings ([278a805](https://github.com/cubicecho/heautou/commit/278a8054196e6c4affaec07374d26295cf48db84)), closes [#15](https://github.com/cubicecho/heautou/issues/15)
+* sign in through upstream providers such as Google and GitHub ([895cb0e](https://github.com/cubicecho/heautou/commit/895cb0eb73772f56ae2e19cb50fdf8fa8c260a4e)), closes [#17](https://github.com/cubicecho/heautou/issues/17)
+
 # [1.10.0](https://github.com/cubicecho/heautou/compare/v1.9.0...v1.10.0) (2026-10-18)
 
 
