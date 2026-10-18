@@ -9,7 +9,7 @@ import type { SettingsStore } from '../store/settings.ts';
 import type { PublicUser, UserStore } from '../store/users.ts';
 import { createPageSources } from './pages.ts';
 import { createPairingPolicy, PAIRING_POLICY } from './pairing.ts';
-import { apiLifetimeOf, resourceIndicatorsFor, type TokenAudience } from './resources.ts';
+import { accessTokenLifetimeOf, resourceIndicatorsFor, type TokenAudience } from './resources.ts';
 
 /** The scopes clients may ask for. */
 export const SCOPES = ['openid', 'offline_access', 'profile', 'email', 'groups'] as const;
@@ -203,9 +203,9 @@ export function tokenLifetimesFor(clients: ClientStore) {
 
   return {
     AccessToken: (_ctx: unknown, token?: TokenAudience, client?: TokenOwner) =>
-      apiLifetimeOf(token) ?? lifetimeOf(client, 'accessTokenSeconds', accessTokenSeconds),
+      accessTokenLifetimeOf(token, lifetimeOf(client, 'accessTokenSeconds', accessTokenSeconds)),
     ClientCredentials: (_ctx: unknown, token?: TokenAudience, client?: TokenOwner) =>
-      apiLifetimeOf(token) ?? lifetimeOf(client, 'accessTokenSeconds', clientCredentialsSeconds),
+      accessTokenLifetimeOf(token, lifetimeOf(client, 'accessTokenSeconds', clientCredentialsSeconds)),
     IdToken: (_ctx: unknown, _token: unknown, client?: TokenOwner) =>
       lifetimeOf(client, 'idTokenSeconds', idTokenSeconds),
     RefreshToken: (_ctx: unknown, _token: unknown, client?: TokenOwner) =>

@@ -218,6 +218,16 @@ describe('access tokens for a named API (resource indicators)', () => {
     expect(noApi.body.expires_in).toBe(clientSeconds);
   });
 
+  it('caps a token for an API that sets no lifetime at the API maximum, however long the client’s own', async () => {
+    const longSeconds = API_DEFAULTS.maxAccessTokenSeconds * 30;
+    app.services.clients.update(client.clientId, {
+      ...client,
+      tokenLifetimes: { accessTokenSeconds: longSeconds, idTokenSeconds: null, refreshTokenSeconds: null },
+    });
+    const capped = await signInFor(app, client, PHOTOS_API, 'openid photos:read');
+    expect(capped.tokens?.body.expires_in).toBe(API_DEFAULTS.maxAccessTokenSeconds);
+  });
+
   it('manages APIs over GraphQL, audited, and drops a deleted client from them', async () => {
     const admin = await signInAsAdmin(app);
     const created = await adminGql(

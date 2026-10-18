@@ -1,4 +1,5 @@
 import { type Client, errors, type KoaContextWithOIDC, type ResourceServer } from 'oidc-provider';
+import { API_DEFAULTS } from '../core/defaults.ts';
 import type { ApiStore } from '../store/apis.ts';
 
 /** The grant a machine client gets a token for itself with. */
@@ -17,6 +18,20 @@ export interface TokenAudience {
  */
 export function apiLifetimeOf(token: TokenAudience | undefined): number | undefined {
   return token?.resourceServer?.accessTokenTTL;
+}
+
+/**
+ * Picks an access token's lifetime: its API's own, or the client's or server's when the API set none. A token for an
+ * API is never longer than `API_DEFAULTS.maxAccessTokenSeconds`, since a JWT access token can't be revoked.
+ *
+ * @param token - The token being made.
+ * @param fallback - The client's own lifetime, or the server's.
+ * @returns The lifetime in seconds.
+ */
+export function accessTokenLifetimeOf(token: TokenAudience | undefined, fallback: number): number {
+  const isForApi = token?.resourceServer !== undefined;
+  const capped = isForApi ? Math.min(fallback, API_DEFAULTS.maxAccessTokenSeconds) : fallback;
+  return apiLifetimeOf(token) ?? capped;
 }
 
 /**
