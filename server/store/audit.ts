@@ -109,6 +109,10 @@ export const AuditType = {
   UpstreamUnlinked: 'upstream_unlinked',
   /** A sign-in through an upstream provider changed the user's mapped groups. The detail lists them. */
   UpstreamGroupsApplied: 'upstream_groups_applied',
+  /** An admin added an API apps may ask for access tokens to. */
+  ApiCreated: 'api_created',
+  ApiUpdated: 'api_updated',
+  ApiDeleted: 'api_deleted',
 } as const;
 export type AuditType = (typeof AuditType)[keyof typeof AuditType];
 
@@ -153,6 +157,8 @@ export const AuditTargetKind = {
   Settings: 'settings',
   /** A provider users sign in through, such as Google or GitHub. */
   Upstream: 'upstream',
+  /** An API (resource server) apps ask for access tokens to. */
+  Api: 'api',
 } as const;
 export type AuditTargetKind = (typeof AuditTargetKind)[keyof typeof AuditTargetKind];
 

@@ -53,6 +53,7 @@ export function createApp(services: Services): Express {
     plugins: [useOperationLimits()],
     context: ({ req, res }): Context => ({
       clients: services.clients,
+      apis: services.apis,
       users: services.users,
       factors: services.factors,
       upstreams: services.upstreams,

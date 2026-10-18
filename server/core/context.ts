@@ -6,6 +6,7 @@ export interface Context
   extends Pick<
     Services,
     | 'clients'
+    | 'apis'
     | 'users'
     | 'factors'
     | 'upstreams'

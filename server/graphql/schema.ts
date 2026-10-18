@@ -43,6 +43,7 @@ import {
 } from '../store/upstreams.ts';
 import type { NewUser, PublicUser, UserFields } from '../store/users.ts';
 import { upstreamTarget } from '../upstream/accounts.ts';
+import { apiResolvers } from './apis.ts';
 import { TYPE_DEFS } from './type-defs.ts';
 
 /** Where discovery lives under the issuer. */
@@ -1111,4 +1112,7 @@ const resolvers = {
 };
 
 /** The schema this server serves at `/graphql`. */
-export const schema: GraphQLSchema = createSchema<Context>({ typeDefs: TYPE_DEFS, resolvers });
+export const schema: GraphQLSchema = createSchema<Context>({
+  typeDefs: TYPE_DEFS,
+  resolvers: [resolvers, apiResolvers],
+});

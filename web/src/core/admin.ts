@@ -61,6 +61,7 @@ import {
   UsersDocument,
   ViewerDocument,
 } from '@/__generated__/graphql';
+import { APIS_KEY } from '@/core/apis';
 import { request, subscribe } from '@/core/gql';
 import { jsonReply, postJson } from '@/core/json-reply';
 
@@ -182,7 +183,7 @@ export function useUpdateClient() {
   return useMutation({
     mutationFn: async (vars: { clientId: string; input: ClientInput }) =>
       (await request(UpdateClientDocument, vars)).updateClient,
-    onSuccess: refetching(queryClient, KEYS.clients, KEYS.groups),
+    onSuccess: refetching(queryClient, KEYS.clients, KEYS.groups, APIS_KEY),
   });
 }
 
@@ -209,7 +210,7 @@ export function useDeleteClient() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (clientId: string) => (await request(DeleteClientDocument, { clientId })).deleteClient,
-    onSuccess: refetching(queryClient, KEYS.clients, KEYS.groups),
+    onSuccess: refetching(queryClient, KEYS.clients, KEYS.groups, APIS_KEY),
   });
 }
 

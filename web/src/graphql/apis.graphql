@@ -1,0 +1,43 @@
+fragment ApiFields on Api {
+  identifier
+  name
+  scopes
+  tokenFormat
+  accessTokenSeconds
+  allowedClients {
+    clientId
+    name
+  }
+  createdAt
+}
+
+query Apis {
+  apis {
+    ...ApiFields
+  }
+}
+
+query ApiLifetimeBounds {
+  apiLifetimeBounds {
+    minSeconds
+    maxSeconds
+  }
+}
+
+mutation CreateApi($input: NewApiInput!) {
+  createApi(input: $input) {
+    ...ApiFields
+  }
+}
+
+mutation UpdateApi($identifier: ID!, $input: ApiInput!) {
+  updateApi(identifier: $identifier, input: $input) {
+    ...ApiFields
+  }
+}
+
+mutation DeleteApi($identifier: ID!) {
+  deleteApi(identifier: $identifier) {
+    identifier
+  }
+}

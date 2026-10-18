@@ -340,3 +340,22 @@ export const UPSTREAM_DEFAULTS: Readonly<UpstreamSettings> = Object.freeze({
   maxNameLength: 60,
   maxIdLength: 40,
 });
+
+/** The APIs (resource servers) apps ask for access tokens to with a resource indicator (RFC 8707). */
+export interface ApiSettings {
+  /** Shortest access token lifetime an API may set, in seconds. */
+  minAccessTokenSeconds: number;
+  /** Longest access token lifetime an API may set, in seconds. A JWT access token can't be revoked, so it stays short. */
+  maxAccessTokenSeconds: number;
+  /** Longest name an API may have, in characters. */
+  maxNameLength: number;
+  /** Most scopes one API may list. */
+  maxScopes: number;
+}
+
+export const API_DEFAULTS: Readonly<ApiSettings> = Object.freeze({
+  minAccessTokenSeconds: 60,
+  maxAccessTokenSeconds: 86_400,
+  maxNameLength: 60,
+  maxScopes: 50,
+});

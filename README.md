@@ -128,6 +128,26 @@ a pasted token can use it too. [docs/pairing.md](docs/pairing.md) is the spec fo
 Add `offline_access` to the scopes for a refresh token. Custom claims are set per user, one `name=value` per
 line, and are sent as strings; the names the provider sets itself, such as `sub` or `email`, are refused.
 
+### Access tokens for your own APIs
+
+By default an app's access token is for Heautou's userinfo endpoint, and an API it is sent to has to ask the
+introspection endpoint about it. To give an API tokens of its own (RFC 8707 resource indicators), add it under
+**APIs**:
+
+- **Identifier:** an absolute URI with no fragment, such as `https://photos-api.home.lan`. Apps send it as
+  `resource`, and the token's `aud` is set to it, so a token for one API can't be replayed against another.
+- **Scopes:** the scopes it understands, such as `photos:read`. A token carries only those the app asked for.
+- **Token format:** **JWT** (the default), which the API checks itself against `<ISSUER_URL>/jwks` (check `iss`,
+  `aud` and `exp`), or **Opaque**, which it checks with the introspection endpoint. A JWT can't be revoked: it is
+  good until it expires.
+- **Access token lifetime:** up to a day. It wins over the app's own access token lifetime, which wins over the
+  server's.
+- **Allowed clients:** only these clients may ask for it; any other gets `invalid_target`.
+
+An app adds `resource=<identifier>` and the API's scopes to its sign-in request. The token request may leave
+`resource` out and gets the API granted at sign-in. A machine client uses `grant_type=client_credentials` with
+`resource`, or without it when it is allowed exactly one API.
+
 ## Managing users
 
 - **Invites and password resets.** A user's link button makes a link to send them by chat or however you like:
@@ -251,6 +271,7 @@ Everything lives in the data folder, which is the `heautou-data` volume in Docke
 - `password-links.json`: open invite and reset links (hashed tokens)
 - `branding.json`: the name and logo
 - `upstreams.json`: sign-in providers (client secrets sealed with `SECRET_KEY`) and the accounts linked to users
+- `apis.json`: your APIs, their scopes and the clients allowed to ask for them
 - `audit.jsonl`: the activity log, one entry a line; at 1 MB it moves to `audit.1.jsonl`, and two old files are kept
 - `oidc/`: sessions, codes and tokens. These are not sealed: they are short-lived, and the provider looks
   tokens up by their value, so they sit in the clear until they expire.
@@ -288,6 +309,8 @@ What Heautou does:
   "Signed in to an app" with the app, the redirect URI, and whether a password was typed or the session they
   already had let them straight through. Refused sign-in and token requests from apps, sign-outs, machine
   (client credentials) tokens and scheduled key rotations are logged too. Passwords, tokens, client secrets and setup URLs are never written to it.
+- **Tokens for an API name it.** An access token asked for with `resource` has that API as its `aud`, and only
+  the clients an API lists can get one. The audit log names the API each sign-in and machine token was for.
 - **The pages can't be framed**, send no referrer, and the web app runs only its own scripts.
 
 What it does not do: seal anything without `SECRET_KEY` (then anyone who can read the data folder has the

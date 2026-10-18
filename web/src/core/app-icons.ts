@@ -8,6 +8,7 @@ export {
   Link2,
   LogOut,
   MonitorSmartphone,
+  Server,
   ShieldCheck,
   ShieldOff,
   Tags,

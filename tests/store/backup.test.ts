@@ -145,6 +145,12 @@ describe('backups', () => {
   it('round trips through a restore into a running server, signing everyone out', () => {
     const key = newKey();
     const source = populated(key);
+    const apiIdentifier = 'https://photos-api.home.lan';
+    source.services.apis.create({
+      identifier: apiIdentifier,
+      name: 'Photos API',
+      allowedClientIds: [source.client.clientId],
+    });
     const archive = createBackup(source.dataDir, BACKUP_LAYOUT, { includeSessions: true });
     const sourceKids = source.services.keys.current().jwks.map((jwk) => jwk.kid);
 
@@ -156,6 +162,7 @@ describe('backups', () => {
     expect(target.services.users.list().map((user) => user.username)).toEqual(['ada']);
     const client = target.services.clients.find(source.client.clientId);
     expect(client?.clientSecret).toBe(source.client.clientSecret);
+    expect(target.services.apis.find(apiIdentifier)?.allowedClientIds).toEqual([source.client.clientId]);
     expect(target.services.keys.current().jwks.map((jwk) => jwk.kid)).toEqual(sourceKids);
     expect(target.services.host.current().issuer).toBe(ISSUER);
     // Neither the target's own web sessions nor the source's come back.

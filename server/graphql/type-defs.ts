@@ -1,4 +1,4 @@
-import { AUDIT_DEFAULTS } from '../core/defaults.ts';
+import { API_DEFAULTS, AUDIT_DEFAULTS } from '../core/defaults.ts';
 import { AUDIT_TYPES, AuditTargetKind } from '../store/audit.ts';
 import { MAX_PASSWORD_SCORE } from '../store/settings.ts';
 
@@ -354,6 +354,37 @@ export const TYPE_DEFS = /* GraphQL */ `
     nextCursor: String
   }
 
+  "How an API's access tokens are written."
+  enum TokenFormat {
+    "A JWT signed with the provider's keys, which the API checks itself with the JWKS."
+    JWT
+    "A random string the API checks with the introspection endpoint."
+    OPAQUE
+  }
+
+  "An API (a resource server) apps ask for access tokens to with the resource parameter (RFC 8707)."
+  type Api {
+    "The resource indicator apps send, and the aud of its access tokens."
+    identifier: ID!
+    "What the operator calls it."
+    name: String!
+    "The scopes it understands. Its tokens carry only those of the ones asked for."
+    scopes: [String!]!
+    tokenFormat: TokenFormat!
+    "How long its access tokens stay valid, in seconds. Null leaves it to the client's own, then the server's."
+    accessTokenSeconds: Int
+    "The clients that may ask for tokens to it."
+    allowedClients: [Client!]!
+    "When it was added, as an ISO 8601 string."
+    createdAt: String!
+  }
+
+  "The bounds on an API's own access token lifetime, in seconds."
+  type ApiLifetimeBounds {
+    minSeconds: Int!
+    maxSeconds: Int!
+  }
+
   type Query {
     "The provider's own URLs."
     provider: ProviderInfo!
@@ -389,6 +420,34 @@ export const TYPE_DEFS = /* GraphQL */ `
     before. userId keeps entries done by that user or to them.
     """
     auditLog(first: Int, after: String, type: AuditType, userId: ID): AuditPage!
+    "Every API apps may ask for access tokens to, oldest first."
+    apis: [Api!]!
+    "One API."
+    api(identifier: ID!): Api!
+    "The bounds on an API's own access token lifetime."
+    apiLifetimeBounds: ApiLifetimeBounds!
+  }
+
+  "An API to add. Lists left out are empty; a null lifetime leaves it to the client's own, then the server's."
+  input NewApiInput {
+    "An absolute URI with no fragment, such as https://photos-api.home.lan. It can't be changed later."
+    identifier: String!
+    name: String!
+    "At most ${API_DEFAULTS.maxScopes}, none of them the provider's own."
+    scopes: [String!]
+    "JWT when left out."
+    tokenFormat: TokenFormat
+    accessTokenSeconds: Int
+    allowedClientIds: [ID!]
+  }
+
+  "An API's new settings. A field left out keeps its value; accessTokenSeconds null clears it."
+  input ApiInput {
+    name: String
+    scopes: [String!]
+    tokenFormat: TokenFormat
+    accessTokenSeconds: Int
+    allowedClientIds: [ID!]
   }
 
   input GroupMappingInput {
@@ -537,6 +596,12 @@ export const TYPE_DEFS = /* GraphQL */ `
     deleteUpstream(id: ID!): Upstream!
     "Unlinks a user's identity at an upstream provider."
     unlinkUserUpstream(id: ID!, providerId: ID!): User!
+    "Adds an API apps may ask for access tokens to."
+    createApi(input: NewApiInput!): Api!
+    "Changes an API. Its identifier stays."
+    updateApi(identifier: ID!, input: ApiInput!): Api!
+    "Removes an API. Tokens already issued to it work until they expire; no new ones are."
+    deleteApi(identifier: ID!): Api!
   }
 
   "Live updates, over server-sent events. The admin session is checked when the stream opens."

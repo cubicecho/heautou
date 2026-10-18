@@ -51,6 +51,20 @@ function paramOf(ctx: KoaContextWithOIDC, name: string): string | undefined {
 }
 
 /**
+ * Reads the API a request asked for a token to (RFC 8707), after any default the provider filled in.
+ *
+ * @param ctx - The provider's context.
+ * @returns The resource indicator, several joined with spaces, or undefined when none was asked for.
+ */
+function resourceOf(ctx: KoaContextWithOIDC): string | undefined {
+  const value: unknown = ctx.oidc.params?.resource;
+  if (Array.isArray(value)) {
+    return value.length === 0 ? undefined : value.join(' ');
+  }
+  return typeof value === 'string' && value !== '' ? value : undefined;
+}
+
+/**
  * Keeps the strings of a detail that are set.
  *
  * @param detail - The detail, some of it unset.
@@ -186,6 +200,7 @@ export function recordProviderEvents(provider: Provider, { audit, users, clients
       detail: definedDetail({
         via: viaOf(ctx.oidc.result?.login),
         redirectUri: paramOf(ctx, 'redirect_uri'),
+        resource: resourceOf(ctx),
       }),
     });
   });
@@ -203,6 +218,7 @@ export function recordProviderEvents(provider: Provider, { audit, users, clients
         error: error.error,
         description: error.error_description,
         redirectUri: paramOf(ctx, 'redirect_uri'),
+        resource: resourceOf(ctx),
       }),
     });
   });
@@ -217,6 +233,7 @@ export function recordProviderEvents(provider: Provider, { audit, users, clients
         error: error.error,
         description: error.error_description,
         grantType: paramOf(ctx, 'grant_type'),
+        resource: resourceOf(ctx),
       }),
     });
   });
@@ -230,7 +247,7 @@ export function recordProviderEvents(provider: Provider, { audit, users, clients
       actor: null,
       ip: ctx.ip,
       target: targetOf(ctx),
-      detail: definedDetail({ scope: paramOf(ctx, 'scope') }),
+      detail: definedDetail({ scope: paramOf(ctx, 'scope'), resource: resourceOf(ctx) }),
     });
   });
 

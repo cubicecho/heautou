@@ -59,6 +59,9 @@ const LABELS: Record<AuditType, string> = {
   UPSTREAM_LINKED: 'Account linked',
   UPSTREAM_UNLINKED: 'Account unlinked',
   UPSTREAM_GROUPS_APPLIED: 'Groups set by a sign-in provider',
+  API_CREATED: 'API added',
+  API_UPDATED: 'API changed',
+  API_DELETED: 'API deleted',
 };
 
 /** The labels by the type's GraphQL name and by the value the account route sends. */

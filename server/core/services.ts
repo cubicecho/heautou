@@ -7,9 +7,10 @@ import { createAdapterFactory, createModelFiles } from '../oidc/adapter.ts';
 import { recordProviderEvents } from '../oidc/audit-events.ts';
 import { createLogoutNotifier } from '../oidc/backchannel.ts';
 import { createProviderHost, type ProviderHost } from '../oidc/host.ts';
-import { claimNamesIn, createProvider } from '../oidc/provider.ts';
+import { claimNamesIn, createProvider, SCOPES } from '../oidc/provider.ts';
 import { createSessionTools, type SessionTools } from '../oidc/sessions.ts';
 import { type AdminSessionDocument, type AdminSessionStore, createAdminSessionStore } from '../store/admin-sessions.ts';
+import { type Api, type ApiStore, createApiStore } from '../store/apis.ts';
 import { type AuditLog, AuditTargetKind, AuditType, KEYS_TARGET, openAuditLog } from '../store/audit.ts';
 import {
   type BackupLayout,
@@ -55,6 +56,8 @@ export const DATA_FILES = {
   factors: 'factors.json',
   /** Upstream sign-in providers (client secrets sealed) and the identities linked to users. */
   upstreams: 'upstreams.json',
+  /** The APIs (resource servers) apps ask for access tokens to. */
+  apis: 'apis.json',
   /** JSON lines, rotated by size into `audit.1.jsonl` and so on. */
   audit: 'audit.jsonl',
   /** A directory: one file per provider model (sessions, codes, tokens...). */
@@ -116,6 +119,8 @@ export interface ServiceSettings {
 export interface Services {
   clients: ClientStore;
   users: UserStore;
+  /** The APIs apps ask for access tokens to with a resource indicator. */
+  apis: ApiStore;
   /** Each user's second factors. */
   factors: FactorStore;
   /** Providers users may sign in through, such as Google or GitHub, and the identities linked to users. */
@@ -187,6 +192,12 @@ export function openServices(settings: ServiceSettings): Services {
   );
   const clients = createClientStore(tracked(openSealedFile(clientFile, box, clientSecretsIn)), {
     allowsHttpRedirects: () => providerSettings.httpRedirects().isAllowed,
+    // A removed client, by an admin or by an app's own RFC 7592 delete, is taken off every API.
+    onRemove: (clientId) => apis.removeClient(clientId),
+  });
+  const apis: ApiStore = createApiStore(tracked(openJsonFile<Api[]>(at(DATA_FILES.apis), [])), {
+    clientExists: (clientId) => clients.find(clientId) !== null,
+    reservedScopes: SCOPES,
   });
   const users = createUserStore(tracked(openJsonFile<User[]>(at(DATA_FILES.users), [])));
   const factors = createFactorStore(tracked(openSealedFile(factorFile, box, factorSecretsIn)), settings.now);
@@ -235,6 +246,7 @@ export function openServices(settings: ServiceSettings): Services {
       issuer: settings.issuer,
       clients,
       users,
+      apis,
       pairings,
       settings: providerSettings,
       keys: keys.current(),
@@ -294,6 +306,7 @@ export function openServices(settings: ServiceSettings): Services {
   return {
     clients,
     users,
+    apis,
     factors,
     upstreams,
     upstreamFlows,
