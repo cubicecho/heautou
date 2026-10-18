@@ -113,6 +113,21 @@ export const AuditType = {
   ApiCreated: 'api_created',
   ApiUpdated: 'api_updated',
   ApiDeleted: 'api_deleted',
+  /** An email went out. The detail has its kind and the address, never the link it carried. */
+  MailSent: 'mail_sent',
+  /** An email could not be sent. The detail has its kind, the address and the SMTP server's error. */
+  MailFailed: 'mail_failed',
+  /** An admin saved the SMTP server under Settings. The detail says whether the password was replaced. */
+  MailServerSet: 'mail_server_set',
+  /** An admin removed the SMTP server saved under Settings. */
+  MailServerRemoved: 'mail_server_removed',
+  /** An admin turned the forgot-password link or a notification on or off. */
+  MailOptionsSet: 'mail_options_set',
+  /**
+   * Someone asked for a reset link on the sign-in page. The actor is the user it matched; with none, the detail has
+   * what was typed. A link is only sent when the user is enabled and has an email address.
+   */
+  PasswordResetRequested: 'password_reset_requested',
 } as const;
 export type AuditType = (typeof AuditType)[keyof typeof AuditType];
 

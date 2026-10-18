@@ -150,9 +150,9 @@ An app adds `resource=<identifier>` and the API's scopes to its sign-in request.
 
 ## Managing users
 
-- **Invites and password resets.** A user's link button makes a link to send them by chat or however you like:
-  Heautou sends no email. The link sets their password and works once, for 24 hours. A new link replaces the
-  old one.
+- **Invites and password resets.** A user's link button makes a link to send them by chat or however you like.
+  With email set up (see [Email](#email)) and an address on the user, the dialog can also **send it by email**.
+  The link sets their password and works once, for 24 hours. A new link replaces the old one.
 - **Their own account.** Every user can open `/account` to see their details, change their password, and see
   or end where they are signed in. Signing in to the admin UI without being an admin lands there too.
 - **Disable and sign out.** Disabling a user turns them away at once: their tokens stop working and they can't
@@ -184,6 +184,25 @@ An app adds `resource=<identifier>` and the API's scopes to its sign-in request.
     mapped from theirs, and takes away mapped groups they no longer hold. `heautou-admin` can never come from a
     provider.
 
+### Email
+
+Optional. Without it, everything works as before and links are copied by hand. Set the SMTP server under
+**Settings → Email**, or with `SMTP_URL` (or `SMTP_HOST` and the rest) and `SMTP_FROM` in the environment, which
+wins and locks the section. **Send test email** checks it. A password saved under Settings is sealed under
+`SECRET_KEY` like the other secrets. Emails carry the branding's name and logo.
+
+Each of these is off until you turn it on:
+
+- **Forgot password link.** The sign-in page gets **Forgot password?**: a user types their username or email
+  address and a reset link goes to the address on file. The page answers the same whether or not an account
+  matched, and disabled users get nothing. It is limited to 5 requests an hour per IP and 3 per username or
+  address. After the new password is set, the link takes the browser back to the same sign-in when it is still
+  open in that browser, and to the account page's sign-in otherwise.
+- **Notifications.** Email a user when their password changes, when an authenticator app or passkey is added, or
+  when a second factor is removed (by them, or by an admin's reset).
+
+Every email sent or failed is in the activity log, with the error but never the link.
+
 ## Configuration
 
 Set these as environment variables, under `environment:` in Compose.
@@ -197,6 +216,9 @@ Set these as environment variables, under `environment:` in Compose.
 | `SECRET_KEY`  | none                          | Seals client secrets and signing keys on disk. 32 bytes of base64: `openssl rand -base64 32`.     |
 | `SECRET_KEY_FILE` | none                      | A file holding the key, such as a Docker secret. It wins over `SECRET_KEY`.                       |
 | `SECRET_KEY_PREVIOUS` | none                  | The old key while changing keys (`_FILE` works too). Remove it after one start.                   |
+| `SMTP_URL`    | none                          | Turns email on: `smtp://user:password@host:587` (STARTTLS) or `smtps://…:465`. `_FILE` works too. |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD` | none | The same, one part each. `SMTP_PASSWORD_FILE` works too. |
+| `SMTP_FROM`   | none                          | The sender, such as `Heautou <auth@example.home>`. Required with `SMTP_URL` or `SMTP_HOST`.      |
 
 ### Sealing secrets at rest
 

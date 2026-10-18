@@ -359,3 +359,37 @@ export const API_DEFAULTS: Readonly<ApiSettings> = Object.freeze({
   maxNameLength: 60,
   maxScopes: 50,
 });
+
+/** How email is sent (invite and reset links, the forgot-password link, notifications), when SMTP is set up. */
+export interface MailSettings {
+  /** The SMTP port when `SMTP_PORT`, the URL or Settings name none: submission with STARTTLS. */
+  port: number;
+  /** The port that means TLS from the first byte (SMTPS) when nothing says otherwise. */
+  implicitTlsPort: number;
+  /** How long connecting to the SMTP server may take, in milliseconds. */
+  connectionTimeoutMs: number;
+  /** How long the server may take to greet and to answer each command, in milliseconds. */
+  socketTimeoutMs: number;
+  /** Forgot-password requests from one IP per window. */
+  forgotPerIp: number;
+  /** Forgot-password requests for one username or email address per window. */
+  forgotPerIdentifier: number;
+  /** The window forgot-password requests are counted in, in seconds. */
+  forgotWindowSeconds: number;
+  /** Longest username or email address a forgot-password request may name, in characters. */
+  maxIdentifierLength: number;
+  /** Longest host, user or sender address saved under Settings, in characters. */
+  maxFieldLength: number;
+}
+
+export const MAIL_DEFAULTS: Readonly<MailSettings> = Object.freeze({
+  port: 587,
+  implicitTlsPort: 465,
+  connectionTimeoutMs: 10_000,
+  socketTimeoutMs: 20_000,
+  forgotPerIp: 5,
+  forgotPerIdentifier: 3,
+  forgotWindowSeconds: 3600,
+  maxIdentifierLength: 254,
+  maxFieldLength: 254,
+});

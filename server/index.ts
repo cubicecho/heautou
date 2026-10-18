@@ -8,6 +8,7 @@ import { SecretKeyError } from './core/secret-box.ts';
 import { openServices, type Services } from './core/services.ts';
 import { createApp } from './http/app.ts';
 import { stopOnSignals } from './http/shutdown.ts';
+import { mailServerFromEnv } from './mail/env.ts';
 
 const LISTEN_HOST = '0.0.0.0';
 const SECONDS_PER_MINUTE = 60;
@@ -26,6 +27,7 @@ function openOrExit(): Services {
       issuer: issuerUrl(),
       isProxied: trustProxy() !== false,
       secretKeys: sealingKeys,
+      mailServer: mailServerFromEnv(),
     });
   } catch (error) {
     if (error instanceof SecretKeyError) {

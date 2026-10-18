@@ -14,6 +14,7 @@ import type { Services } from '../core/services.ts';
 import { graphqlLogger } from '../graphql/logger.ts';
 import { useOperationLimits } from '../graphql/operation-limits.ts';
 import { schema } from '../graphql/schema.ts';
+import { createForgotPasswordRouter } from '../mail/forgot-password.ts';
 import { createInteractionRouter } from '../oidc/interactions.ts';
 import type { PublicUser } from '../store/users.ts';
 import { createUpstreamRouter } from '../upstream/routes.ts';
@@ -69,6 +70,7 @@ export function createApp(services: Services): Express {
       settings: services.settings,
       passwordPolicy: services.passwordPolicy,
       audit: services.audit,
+      mail: services.mail,
       viewer: res.locals.viewer as PublicUser,
       ip: req.ip ?? null,
     }),
@@ -94,6 +96,7 @@ export function createApp(services: Services): Express {
   app.use(createFactorRouter({ ...services, throttle }));
   app.use(createBackupRouter(services));
   app.use(createInteractionRouter({ ...services, origin, throttle }));
+  app.use(createForgotPasswordRouter({ ...services, mailer: services.mail, origin }));
   app.use(createUpstreamRouter(services));
   app.use(OIDC_MOUNT_PATH, (req, res) => services.host.handle(req, res));
 

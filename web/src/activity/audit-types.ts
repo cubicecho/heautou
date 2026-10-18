@@ -62,6 +62,12 @@ const LABELS: Record<AuditType, string> = {
   API_CREATED: 'API added',
   API_UPDATED: 'API changed',
   API_DELETED: 'API deleted',
+  MAIL_SENT: 'Email sent',
+  MAIL_FAILED: 'Email not sent',
+  MAIL_SERVER_SET: 'Email server saved',
+  MAIL_SERVER_REMOVED: 'Email server removed',
+  MAIL_OPTIONS_SET: 'Email options changed',
+  PASSWORD_RESET_REQUESTED: 'Password reset asked for',
 };
 
 /** The labels by the type's GraphQL name and by the value the account route sends. */
@@ -95,7 +101,7 @@ export function auditTypeLabel(type: string): string {
   return BY_NAME.get(type) ?? type;
 }
 
-/** The types that are a sign-in or sign-out going wrong, drawn as warnings. */
+/** The types that are a sign-in, a sign-out or an email going wrong, drawn as warnings. */
 const WARNINGS = new Set([
   'SIGN_IN_FAILED',
   'SIGN_IN_THROTTLED',
@@ -104,6 +110,7 @@ const WARNINGS = new Set([
   'APP_TOKEN_REFUSED',
   'APP_LOGOUT_FAILED',
   'ACCOUNT_PASSWORD_FAILED',
+  'MAIL_FAILED',
 ]);
 
 /**

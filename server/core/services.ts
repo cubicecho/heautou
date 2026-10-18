@@ -3,6 +3,8 @@ import type Provider from 'oidc-provider';
 import type { Client, KoaContextWithOIDC } from 'oidc-provider';
 import { adminClientMetadata } from '../admin/admin-client.ts';
 import { createSetupGate, type SetupGate } from '../admin/setup.ts';
+import { createMailer, type Mailer, type MailTransportFactory, smtpTransport } from '../mail/mailer.ts';
+import { sendNotifications } from '../mail/notifications.ts';
 import { createAdapterFactory, createModelFiles } from '../oidc/adapter.ts';
 import { recordProviderEvents } from '../oidc/audit-events.ts';
 import { createLogoutNotifier } from '../oidc/backchannel.ts';
@@ -25,6 +27,7 @@ import { type ClientStore, clientSecretsIn, createClientStore, type OidcClient }
 import { createFactorStore, type FactorStore, type FactorsDocument, factorSecretsIn } from '../store/factors.ts';
 import { type JsonFile, openJsonFile } from '../store/json-file.ts';
 import { type KeyStore, openKeyStore, type ProviderKeys, privateKeysIn } from '../store/keys.ts';
+import { createMailStore, type MailDocument, type MailServer, mailSecretsIn } from '../store/mail.ts';
 import { createPairingStore, type PairingDocument, type PairingStore } from '../store/pairings.ts';
 import { createPasswordLinkStore, type PasswordLinkDocument, type PasswordLinkStore } from '../store/password-links.ts';
 import { openSealedFile } from '../store/sealed-file.ts';
@@ -62,6 +65,8 @@ export const DATA_FILES = {
   audit: 'audit.jsonl',
   /** A directory: one file per provider model (sessions, codes, tokens...). */
   oidc: 'oidc',
+  /** The SMTP server saved under Settings (password sealed) and the email options. */
+  mail: 'mail.json',
 } as const;
 
 /**
@@ -113,6 +118,10 @@ export interface ServiceSettings {
   fetchRange?: FetchRange;
   /** Makes the requests to upstream sign-in providers. Unset, the global `fetch`. */
   fetchUpstream?: typeof globalThis.fetch;
+  /** The SMTP server `SMTP_URL` or `SMTP_HOST` sets, which wins over Settings. Unset or null, Settings decides. */
+  mailServer?: MailServer | null;
+  /** Sends email. Unset, nodemailer over SMTP. */
+  mailTransport?: MailTransportFactory;
 }
 
 /** Everything the HTTP app is built from. */
@@ -149,6 +158,8 @@ export interface Services {
   /** Backups of the data directory. */
   backup: DataBackup;
   issuer: string;
+  /** Sends invite and reset links, the forgot-password link and notifications, once SMTP is set up. */
+  mail: Mailer;
 }
 
 /**
@@ -180,11 +191,13 @@ export function openServices(settings: ServiceSettings): Services {
   const keyFile = openJsonFile<ProviderKeys | null>(at(DATA_FILES.keys), null);
   const factorFile = openJsonFile<FactorsDocument>(at(DATA_FILES.factors), {});
   const upstreamFile = openJsonFile<UpstreamsDocument>(at(DATA_FILES.upstreams), EMPTY_UPSTREAMS);
+  const mailFile = openJsonFile<MailDocument>(at(DATA_FILES.mail), {});
   if (box !== null) {
     clientSecretsIn(clientFile.read(), box.open);
     privateKeysIn(keyFile.read(), box.open);
     factorSecretsIn(factorFile.read(), box.open);
     upstreamSecretsIn(upstreamFile.read(), box.open);
+    mailSecretsIn(mailFile.read(), box.open);
   }
   const providerSettings = createSettingsStore(
     tracked(openJsonFile<SettingsDocument>(at(DATA_FILES.settings), {})),
@@ -235,6 +248,14 @@ export function openServices(settings: ServiceSettings): Services {
     settings.now,
   );
   const branding = createBrandingStore(tracked(openJsonFile<Partial<Branding>>(at(DATA_FILES.branding), {})));
+  const mail = createMailer({
+    store: createMailStore(tracked(openSealedFile(mailFile, box, mailSecretsIn))),
+    envServer: settings.mailServer ?? null,
+    transport: settings.mailTransport ?? smtpTransport,
+    branding,
+    audit,
+  });
+  sendNotifications({ audit, mailer: mail, users, branding });
   const files = createModelFiles(at(DATA_FILES.oidc));
   const adapter = createAdapterFactory({
     files,
@@ -323,5 +344,6 @@ export function openServices(settings: ServiceSettings): Services {
     sessions: createSessionTools(files, createLogoutNotifier(host, { audit, users, clients })),
     backup,
     issuer: settings.issuer,
+    mail,
   };
 }

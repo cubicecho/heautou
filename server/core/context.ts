@@ -22,6 +22,7 @@ export interface Context
     | 'settings'
     | 'passwordPolicy'
     | 'audit'
+    | 'mail'
   > {
   /** The signed-in admin making the request. */
   viewer: PublicUser;
