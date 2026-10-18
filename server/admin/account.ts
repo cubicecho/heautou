@@ -2,6 +2,7 @@ import express, { type Response, Router } from 'express';
 import { z } from 'zod';
 import { ADMIN_DEFAULTS, AUDIT_DEFAULTS, BRANDING_DEFAULTS, HTTP_DEFAULTS } from '../core/defaults.ts';
 import { errorMessage } from '../core/errors.ts';
+import type { PasswordPolicy } from '../core/password-policy.ts';
 import { HttpStatus } from '../core/wire.ts';
 import { sameOriginJson, sendRefusal } from '../http/guards.ts';
 import { type LoginThrottle, sendTooMany } from '../http/rate-limit.ts';
@@ -11,6 +12,7 @@ import { type AuditLog, type AuditTarget, AuditType, actorOf, SIGN_IN_TYPES } fr
 import type { BrandingStore } from '../store/branding.ts';
 import type { ClientStore } from '../store/clients.ts';
 import type { PasswordLinkStore } from '../store/password-links.ts';
+import type { SettingsStore } from '../store/settings.ts';
 import { isAdmin, type UserStore } from '../store/users.ts';
 import { ADMIN_PATH, adminUrls, brandingView, sessionClientName, WEB_APP_PAGE } from './admin-client.ts';
 import { COOKIE, sessionCookieOptions, signedInUser } from './routes.ts';
@@ -26,6 +28,9 @@ export interface AccountDeps {
   issuer: string;
   throttle: LoginThrottle;
   audit: AuditLog;
+  /** Holds the password rules, which the strength meters read. */
+  settings: SettingsStore;
+  passwordPolicy: PasswordPolicy;
 }
 
 const changePasswordSchema = z.object({ currentPassword: z.string(), newPassword: z.string() });
@@ -57,11 +62,12 @@ function sendDeadLink(res: Response): void {
  * their password given the current one, and `POST /admin/account/sign-out-everywhere` ends every session and token.
  * `GET /admin/account/activity` lists their last `AUDIT_DEFAULTS.accountEntries` sign-ins.
  * `POST /admin/password-link` names a link's user and `POST /admin/password-link/set` sets the password with it;
- * the token travels in the body, never in a URL. `GET /admin/branding` and `/admin/branding/logo` are public: the
- * sign-in page shows them.
+ * the token travels in the body, never in a URL. `GET /admin/branding`, `/admin/branding/logo` and
+ * `/admin/password-rules` are public: the sign-in and set-password pages show them.
  */
 export function createAccountRouter(deps: AccountDeps): Router {
   const { users, clients, adminSessions, passwordLinks, sessions, branding, issuer, throttle, audit } = deps;
+  const { settings, passwordPolicy } = deps;
   const urls = adminUrls(issuer);
   const json = [sameOriginJson(urls.origin), express.json({ limit: HTTP_DEFAULTS.bodyLimit })];
   const clientName = (clientId: string): string => sessionClientName(clientId, clients, branding.read());
@@ -139,6 +145,7 @@ export function createAccountRouter(deps: AccountDeps): Router {
       return;
     }
     try {
+      await passwordPolicy.check(parsed.data.newPassword, user);
       users.setPassword(user.id, parsed.data.newPassword);
       passwordLinks.cancelFor(user.id);
       throttle.succeed(user.username);
@@ -171,7 +178,7 @@ export function createAccountRouter(deps: AccountDeps): Router {
     res.json({ username: user.username, isInvite: user.hasPassword === false });
   });
 
-  router.post(ADMIN_PATH.passwordLinkSet, ...json, (req, res) => {
+  router.post(ADMIN_PATH.passwordLinkSet, ...json, async (req, res) => {
     const parsed = setWithLinkSchema.safeParse(req.body);
     if (parsed.success === false) {
       sendRefusal(res, HttpStatus.BadRequest, 'Send the link’s token and a password.');
@@ -185,7 +192,8 @@ export function createAccountRouter(deps: AccountDeps): Router {
       return;
     }
     try {
-      // Checked before the link is used up, so a password that is too short can be fixed and sent again.
+      // Checked before the link is used up, so a password the rules refuse can be fixed and sent again.
+      await passwordPolicy.check(password, user);
       users.setPassword(user.id, password);
       passwordLinks.consume(token);
       audit.record({
@@ -198,6 +206,10 @@ export function createAccountRouter(deps: AccountDeps): Router {
     } catch (caught) {
       sendRefusal(res, HttpStatus.BadRequest, errorMessage(caught));
     }
+  });
+
+  router.get(ADMIN_PATH.passwordRules, (_req, res) => {
+    res.json({ minScore: settings.passwordRules().minScore });
   });
 
   router.get(ADMIN_PATH.branding, (_req, res) => {

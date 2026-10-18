@@ -56,7 +56,7 @@ function isActiveAdmin(user: Pick<User, 'groups' | 'disabled'>): boolean {
 
 const USERNAME_PATTERN = /^[A-Za-z0-9._@-]+$/;
 
-const passwordSchema = z
+export const passwordSchema = z
   .string()
   .min(CREDENTIAL_DEFAULTS.minPasswordLength, `use at least ${CREDENTIAL_DEFAULTS.minPasswordLength} characters`);
 

@@ -62,6 +62,7 @@ export function createApp(services: Services): Express {
       adminSessions: services.adminSessions,
       pairings: services.pairings,
       settings: services.settings,
+      passwordPolicy: services.passwordPolicy,
       audit: services.audit,
       viewer: res.locals.viewer as PublicUser,
       ip: req.ip ?? null,

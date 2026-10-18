@@ -32,7 +32,7 @@ import { deleteGroup, type Group, listGroups, renameGroup } from '../store/group
 import type { ProviderKeys } from '../store/keys.ts';
 import type { Pairing, PairingInput } from '../store/pairings.ts';
 import { refusedRedirectUris } from '../store/redirect-uris.ts';
-import type { HttpRedirectSetting } from '../store/settings.ts';
+import type { HttpRedirectSetting, PasswordRules } from '../store/settings.ts';
 import type { NewUser, PublicUser, UserFields } from '../store/users.ts';
 import { TYPE_DEFS } from './type-defs.ts';
 
@@ -525,6 +525,15 @@ const resolvers = {
     httpRedirects: (_parent: unknown, _args: unknown, ctx: Context): HttpRedirectSetting =>
       ctx.settings.httpRedirects(),
     /**
+     * Resolves `Query.passwordRules`.
+     *
+     * @param _parent - Unused.
+     * @param _args - Unused.
+     * @param ctx - Request context.
+     * @returns The strength and breach rules.
+     */
+    passwordRules: (_parent: unknown, _args: unknown, ctx: Context): PasswordRules => ctx.settings.passwordRules(),
+    /**
      * Resolves `Query.pairing`.
      *
      * @param _parent - Unused.
@@ -681,7 +690,12 @@ const resolvers = {
      * @param ctx - Request context.
      * @returns The new user.
      */
-    createUser: (_parent: unknown, args: { input: NewUser }, ctx: Context): PublicUser => {
+    createUser: async (_parent: unknown, args: { input: NewUser }, ctx: Context): Promise<PublicUser> => {
+      const { password, username, name, email } = args.input;
+      const hasPassword = password !== undefined && password !== null && password !== '';
+      if (hasPassword) {
+        await ctx.passwordPolicy.check(password, { username, name, email });
+      }
       const user = ctx.users.create(args.input);
       return audited(ctx, AuditType.UserCreated, userTarget(user), refreshed(ctx, user));
     },
@@ -705,7 +719,16 @@ const resolvers = {
      * @param ctx - Request context.
      * @returns The user.
      */
-    setUserPassword: (_parent: unknown, args: { id: string; password: string }, ctx: Context): PublicUser => {
+    setUserPassword: async (
+      _parent: unknown,
+      args: { id: string; password: string },
+      ctx: Context,
+    ): Promise<PublicUser> => {
+      const owner = ctx.users.find(args.id);
+      if (owner === null) {
+        throw notFound(`No user has the ID "${args.id}".`);
+      }
+      await ctx.passwordPolicy.check(args.password, owner);
       const user = ctx.users.setPassword(args.id, args.password);
       ctx.passwordLinks.cancelFor(user.id);
       return audited(ctx, AuditType.UserPasswordSet, userTarget(user), user);
@@ -875,6 +898,30 @@ const resolvers = {
       return audited(ctx, AuditType.HttpRedirectsSet, SETTINGS_TARGET, setting, {
         httpRedirects: setting.isAllowed ? 'allowed' : 'refused',
         chosenBy: setting.isSet ? 'operator' : 'issuer',
+      });
+    },
+    /**
+     * Resolves `Mutation.setPasswordRules`.
+     *
+     * @param _parent - Unused.
+     * @param args - The rules to change; null or left out keeps one.
+     * @param ctx - Request context.
+     * @returns The rules.
+     */
+    setPasswordRules: (
+      _parent: unknown,
+      args: { minScore?: number | null; checkBreaches?: boolean | null },
+      ctx: Context,
+    ): PasswordRules => {
+      const rules = ctx.settings.setPasswordRules({
+        ...(args.minScore === undefined || args.minScore === null ? {} : { minScore: args.minScore }),
+        ...(args.checkBreaches === undefined || args.checkBreaches === null
+          ? {}
+          : { checkBreaches: args.checkBreaches }),
+      });
+      return audited(ctx, AuditType.PasswordRulesSet, SETTINGS_TARGET, rules, {
+        minScore: String(rules.minScore),
+        breachCheck: rules.checkBreaches ? 'on' : 'off',
       });
     },
   },

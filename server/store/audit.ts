@@ -67,6 +67,8 @@ export const AuditType = {
   BrandingLogoSet: 'branding_logo_set',
   /** Plain http redirect URIs allowed, refused, or left to follow the issuer. */
   HttpRedirectsSet: 'http_redirects_set',
+  /** The password strength or breach check rule changed. */
+  PasswordRulesSet: 'password_rules_set',
   AccountPasswordChanged: 'account_password_changed',
   /** A user's own password change with the wrong current password. */
   AccountPasswordFailed: 'account_password_failed',

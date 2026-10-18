@@ -43,10 +43,12 @@ export interface TestApp {
 /**
  * Starts the whole app on a random port with an empty data directory. The issuer is that port's `/oidc`.
  *
- * @param [settings] - Overrides for the services, such as the clock or the secret key.
+ * @param [settings] - Overrides for the services, such as the clock, the secret key or a fake Have I Been Pwned.
  * @returns The running app.
  */
-export async function startTestApp(settings: Pick<ServiceSettings, 'now' | 'secretKeys'> = {}): Promise<TestApp> {
+export async function startTestApp(
+  settings: Pick<ServiceSettings, 'now' | 'secretKeys' | 'fetchRange'> = {},
+): Promise<TestApp> {
   const dataDir = tempDir();
   const server = createServer();
   server.listen(0, '127.0.0.1');

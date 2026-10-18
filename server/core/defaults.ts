@@ -105,6 +105,25 @@ export const CREDENTIAL_DEFAULTS: Readonly<CredentialSettings> = Object.freeze({
   passwordLinkBytes: 32,
 });
 
+/** What a new password must pass besides its length. The operator changes the first two under Settings. */
+export interface PasswordRuleSettings {
+  /** The lowest zxcvbn score, from 0 (anything) to 4 (very hard to guess), a new password may have. */
+  minScore: number;
+  /** Whether a new password is looked up in Have I Been Pwned. Off, since it makes outbound requests. */
+  checkBreaches: boolean;
+  /** The Have I Been Pwned range API; the first five hex characters of the password's SHA-1 go after it. */
+  breachRangeUrl: string;
+  /** How long the breach check waits for an answer before it lets the password through, in milliseconds. */
+  breachTimeoutMs: number;
+}
+
+export const PASSWORD_RULE_DEFAULTS: Readonly<PasswordRuleSettings> = Object.freeze({
+  minScore: 3,
+  checkBreaches: false,
+  breachRangeUrl: 'https://api.pwnedpasswords.com/range/',
+  breachTimeoutMs: 3000,
+});
+
 /** The keys the provider signs and seals with, made on first boot. */
 export interface KeySettings {
   /** RSA modulus length of the token signing key, in bits. */

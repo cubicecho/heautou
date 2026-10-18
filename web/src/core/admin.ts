@@ -32,6 +32,7 @@ import {
   PairingChangedDocument,
   PairingDocument,
   type PairingInput,
+  PasswordRulesDocument,
   ProviderDocument,
   RenameGroupDocument,
   ResetSecondFactorsDocument,
@@ -40,6 +41,7 @@ import {
   SetBrandingLogoDocument,
   SetBrandingNameDocument,
   SetHttpRedirectsDocument,
+  SetPasswordRulesDocument,
   SetUserDisabledDocument,
   SetUserPasswordDocument,
   SignOutUserDocument,
@@ -67,6 +69,9 @@ const KEYS = {
   branding: ['branding'],
   pairings: ['pairings'],
   httpRedirects: ['httpRedirects'],
+  passwordRules: ['passwordRules'],
+  /** The public part of the password rules, which every strength meter reads. */
+  passwordStrength: ['passwordStrength'],
   tokenLifetimeDefaults: ['tokenLifetimeDefaults'],
   audit: ['audit'],
 } as const;
@@ -481,6 +486,49 @@ export function useSetHttpRedirects() {
       queryClient.setQueryData(KEYS.httpRedirects, setting);
       await queryClient.invalidateQueries({ queryKey: KEYS.clients });
     },
+  });
+}
+
+/**
+ * Reads what a new password must pass.
+ *
+ * @returns The query.
+ */
+export function usePasswordRules() {
+  return useQuery({
+    queryKey: KEYS.passwordRules,
+    queryFn: async () => (await request(PasswordRulesDocument)).passwordRules,
+  });
+}
+
+/**
+ * Changes the password strength or breach check rule. A rule left out keeps its value.
+ *
+ * @returns The mutation.
+ */
+export function useSetPasswordRules() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (changes: { minScore?: number; checkBreaches?: boolean }) =>
+      (await request(SetPasswordRulesDocument, changes)).setPasswordRules,
+    onSuccess: (rules) => {
+      queryClient.setQueryData(KEYS.passwordRules, rules);
+      queryClient.setQueryData(KEYS.passwordStrength, { minScore: rules.minScore });
+    },
+  });
+}
+
+const passwordStrengthSchema = z.object({ minScore: z.number() });
+
+/**
+ * Reads the lowest strength a new password may have. Public: the set-password and setup pages show the meter too.
+ *
+ * @returns The query.
+ */
+export function usePasswordStrengthRule() {
+  return useQuery({
+    queryKey: KEYS.passwordStrength,
+    queryFn: async () => jsonReply(await fetch('/admin/password-rules'), passwordStrengthSchema),
   });
 }
 

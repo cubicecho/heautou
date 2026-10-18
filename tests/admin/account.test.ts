@@ -1,8 +1,11 @@
+import { createHash } from 'node:crypto';
 import { HttpStatus } from '../../server/core/wire.ts';
 import { ClientAuthMethod } from '../../server/store/clients.ts';
 import { startTestApp, type TestApp } from '../helpers.ts';
 import { adminGql, type Browser, createBrowser, PASSWORD, signIn, signInAsAdmin } from '../oidc/browser.ts';
 
+/** How many hex characters of a password's SHA-1 go to Have I Been Pwned. */
+const HASH_PREFIX_LENGTH = 5;
 /** A one-pixel PNG. */
 const PIXEL_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
 
@@ -95,6 +98,17 @@ describe('the account page', () => {
     expect(await app.services.users.authenticate('ada', 'a brand new one')).not.toBeNull();
   });
 
+  it('refuses a weak new password, saying why', async () => {
+    const { browser } = await signInToWebApp(app, 'ada');
+    const weak = await postJson(browser, '/admin/account/password', {
+      currentPassword: PASSWORD,
+      newPassword: 'password1',
+    });
+    expect(weak.status).toBe(HttpStatus.BadRequest);
+    expect(weak.body.error).toMatch(/too easy to guess/);
+    expect(await app.services.users.authenticate('ada', PASSWORD)).not.toBeNull();
+  });
+
   it('signs out everywhere', async () => {
     const { browser } = await signInToWebApp(app, 'ada');
     const out = await postJson(browser, '/admin/account/sign-out-everywhere', {});
@@ -154,6 +168,19 @@ describe('password links', () => {
     expect((await postJson(visitor, '/admin/password-link', { token })).status).toBe(HttpStatus.NotFound);
     expect((await postJson(visitor, '/admin/password-link/set', { token, password: 'again and again' })).status).toBe(
       HttpStatus.NotFound,
+    );
+  });
+
+  it('refuses a weak password and keeps the link for another try', async () => {
+    const id = app.services.users.create({ username: 'dee', email: '', name: '', groups: [] }).id;
+    const link = await adminGql(admin, 'mutation($id: ID!) { createPasswordLink(id: $id) { url } }', { id });
+    const token = new URLSearchParams(new URL(link.data.createPasswordLink.url).hash.slice(1)).get('token');
+    const visitor = createBrowser(app.base);
+    const weak = await postJson(visitor, '/admin/password-link/set', { token, password: 'password1' });
+    expect(weak.status).toBe(HttpStatus.BadRequest);
+    expect(weak.body.error).toMatch(/too easy to guess/);
+    expect((await postJson(visitor, '/admin/password-link/set', { token, password: PASSWORD })).status).toBe(
+      HttpStatus.Ok,
     );
   });
 
@@ -292,5 +319,34 @@ describe('branding', () => {
     });
     expect(res.status).toBe(HttpStatus.Unauthorized);
     expect(app.services.branding.read().name).toBe('Heautou');
+  });
+});
+
+describe('breached passwords', () => {
+  let app: TestApp;
+  let asked: string[];
+
+  beforeEach(async () => {
+    asked = [];
+    const digest = createHash('sha1').update(PASSWORD).digest('hex').toUpperCase();
+    app = await startTestApp({
+      fetchRange: async (url) => {
+        asked.push(url);
+        return new Response(`${digest.slice(HASH_PREFIX_LENGTH)}:42\r\n`);
+      },
+    });
+    await signInAsAdmin(app);
+    app.services.settings.setPasswordRules({ checkBreaches: true });
+  });
+
+  afterEach(() => app.close());
+
+  it('refuses a password Have I Been Pwned knows, once the operator turns the check on', async () => {
+    const id = app.services.users.create({ username: 'dee', email: '', name: '', groups: [] }).id;
+    const token = app.services.passwordLinks.issue(id).token;
+    const set = await postJson(createBrowser(app.base), '/admin/password-link/set', { token, password: PASSWORD });
+    expect(set.status).toBe(HttpStatus.BadRequest);
+    expect(set.body.error).toMatch(/data breach/);
+    expect(asked).toHaveLength(1);
   });
 });

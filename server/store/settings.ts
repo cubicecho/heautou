@@ -1,10 +1,38 @@
+import { z } from 'zod';
+import { PASSWORD_RULE_DEFAULTS } from '../core/defaults.ts';
+import { parseInput } from '../core/validation.ts';
 import type { JsonFile } from './json-file.ts';
+
+/** The highest score zxcvbn gives a password. */
+export const MAX_PASSWORD_SCORE = 4;
 
 /** The provider's settings as the file holds them. A setting left out follows its default. */
 export interface SettingsDocument {
   /** Whether redirect URIs may be plain `http://` on any host. */
   allowHttpRedirectUris?: boolean;
+  /** The lowest zxcvbn score a new password may have. */
+  minPasswordScore?: number;
+  /** Whether new passwords are looked up in Have I Been Pwned. */
+  checkPasswordBreaches?: boolean;
 }
+
+/** What a new password must pass besides its length. */
+export interface PasswordRules {
+  /** The lowest zxcvbn score, 0 to `MAX_PASSWORD_SCORE`. */
+  minScore: number;
+  /** Whether a new password is looked up in Have I Been Pwned. */
+  checkBreaches: boolean;
+}
+
+const passwordRulesSchema = z.object({
+  minScore: z
+    .number()
+    .int()
+    .min(0)
+    .max(MAX_PASSWORD_SCORE, `the strength is a score from 0 to ${MAX_PASSWORD_SCORE}`)
+    .optional(),
+  checkBreaches: z.boolean().optional(),
+});
 
 /** Whether plain http redirect URIs are allowed, and why. */
 export interface HttpRedirectSetting {
@@ -30,6 +58,20 @@ export interface SettingsStore {
    * @returns The setting.
    */
   setHttpRedirects: (isAllowed: boolean | null) => HttpRedirectSetting;
+  /**
+   * Reads what a new password must pass.
+   *
+   * @returns The rules, each falling back to `PASSWORD_RULE_DEFAULTS` while unset.
+   */
+  passwordRules: () => PasswordRules;
+  /**
+   * Changes what a new password must pass.
+   *
+   * @param changes - The rules to change; one left out keeps its value.
+   * @returns The rules.
+   * @throws BAD_USER_INPUT for a score outside 0 to `MAX_PASSWORD_SCORE`.
+   */
+  setPasswordRules: (changes: Partial<PasswordRules>) => PasswordRules;
 }
 
 /**
@@ -45,6 +87,13 @@ export function createSettingsStore(file: JsonFile<SettingsDocument>, issuer: st
     const chosen = file.read().allowHttpRedirectUris;
     return { isAllowed: chosen ?? isIssuerHttp, isSet: chosen !== undefined, isIssuerHttp };
   };
+  const passwordRules = (): PasswordRules => {
+    const { minPasswordScore, checkPasswordBreaches } = file.read();
+    return {
+      minScore: minPasswordScore ?? PASSWORD_RULE_DEFAULTS.minScore,
+      checkBreaches: checkPasswordBreaches ?? PASSWORD_RULE_DEFAULTS.checkBreaches,
+    };
+  };
   return {
     httpRedirects,
     setHttpRedirects: (isAllowed) => {
@@ -53,6 +102,16 @@ export function createSettingsStore(file: JsonFile<SettingsDocument>, issuer: st
         return isAllowed === null ? rest : { ...rest, allowHttpRedirectUris: isAllowed };
       });
       return httpRedirects();
+    },
+    passwordRules,
+    setPasswordRules: (changes) => {
+      const { minScore, checkBreaches } = parseInput(passwordRulesSchema, changes);
+      file.update((current) => ({
+        ...current,
+        ...(minScore === undefined ? {} : { minPasswordScore: minScore }),
+        ...(checkBreaches === undefined ? {} : { checkPasswordBreaches: checkBreaches }),
+      }));
+      return passwordRules();
     },
   };
 }

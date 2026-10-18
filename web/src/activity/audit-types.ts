@@ -38,6 +38,7 @@ const LABELS: Record<AuditType, string> = {
   BRANDING_NAME_SET: 'Name changed',
   BRANDING_LOGO_SET: 'Logo changed',
   HTTP_REDIRECTS_SET: 'Plain http redirects changed',
+  PASSWORD_RULES_SET: 'Password rules changed',
   ACCOUNT_PASSWORD_CHANGED: 'Changed own password',
   ACCOUNT_PASSWORD_FAILED: 'Wrong current password',
   ACCOUNT_SIGNED_OUT_EVERYWHERE: 'Signed out everywhere',

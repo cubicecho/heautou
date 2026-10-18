@@ -230,6 +230,13 @@ describe('first admin setup without a token', () => {
     expect(app.services.users.hasAdmin()).toBe(true);
   });
 
+  it('refuses a weak password for a new admin, saying why', async () => {
+    const res = await postSetup({ username: 'root', password: 'password1' });
+    expect(res.status).toBe(HttpStatus.BadRequest);
+    expect((await res.json()).error).toMatch(/too easy to guess/);
+    expect(app.services.users.hasAdmin()).toBe(false);
+  });
+
   it('never promotes an existing user without the token', async () => {
     app.services.users.create({ username: 'ada', password: PASSWORD, email: '', name: '', groups: [] });
     const res = await postSetup({ username: 'ada', password: PASSWORD });

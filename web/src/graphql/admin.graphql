@@ -266,6 +266,23 @@ mutation SetHttpRedirects($allowed: Boolean) {
   }
 }
 
+fragment PasswordRulesFields on PasswordRules {
+  minScore
+  checkBreaches
+}
+
+query PasswordRules {
+  passwordRules {
+    ...PasswordRulesFields
+  }
+}
+
+mutation SetPasswordRules($minScore: Int, $checkBreaches: Boolean) {
+  setPasswordRules(minScore: $minScore, checkBreaches: $checkBreaches) {
+    ...PasswordRulesFields
+  }
+}
+
 mutation SetBrandingName($name: String!) {
   setBrandingName(name: $name) {
     name

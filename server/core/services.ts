@@ -20,6 +20,7 @@ import { createPasswordLinkStore, type PasswordLinkDocument, type PasswordLinkSt
 import { openSealedFile } from '../store/sealed-file.ts';
 import { createSettingsStore, type SettingsDocument, type SettingsStore } from '../store/settings.ts';
 import { createUserStore, type User, type UserStore } from '../store/users.ts';
+import { createPasswordPolicy, type FetchRange, type PasswordPolicy } from './password-policy.ts';
 import { createSecretBox, type SecretKeys } from './secret-box.ts';
 
 /** The files under the data directory. */
@@ -52,6 +53,8 @@ export interface ServiceSettings {
   now?: () => number;
   /** The keys client secrets and private keys are sealed with. Unset or null keeps them plain text. */
   secretKeys?: SecretKeys | null;
+  /** Fetches from Have I Been Pwned for the breach check. Unset, the global `fetch`. */
+  fetchRange?: FetchRange;
 }
 
 /** Everything the HTTP app is built from. */
@@ -68,6 +71,8 @@ export interface Services {
   branding: BrandingStore;
   /** The operator's settings, such as whether plain http redirect URIs are allowed. */
   settings: SettingsStore;
+  /** Checks a new password against the rules under Settings before a store saves it. */
+  passwordPolicy: PasswordPolicy;
   /** Who did what: sign-ins, admin changes, account changes. */
   audit: AuditLog;
   /** Guards making the first admin; its token is logged at boot while one is needed. */
@@ -189,6 +194,7 @@ export function openServices(settings: ServiceSettings): Services {
     pairings,
     branding,
     settings: providerSettings,
+    passwordPolicy: createPasswordPolicy(providerSettings.passwordRules, {}, settings.fetchRange),
     audit,
     setup,
     keys,

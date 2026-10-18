@@ -21,6 +21,7 @@ import { LogOut } from '@/core/app-icons';
 import { BrandIcon, useBrandName } from '@/core/brand';
 import { messageOf } from '@/core/lists';
 import { formatAgo, formatDateTime, joinStats } from '@/lib/format';
+import { PasswordStrengthMeter } from '@/passwords/strength-meter';
 import { passwordProblem } from '@/users/user-form-dialog';
 
 export const Route = createFileRoute('/account')({ component: AccountPage });
@@ -32,6 +33,8 @@ const PASSWORD_FORM_ID = 'password-form';
  */
 function ChangePassword() {
   const change = useChangePassword();
+  const account = useAccount();
+  const { username = '', name = '', email = '' } = account.data ?? {};
   const form = useAppForm({
     defaultValues: { currentPassword: '', newPassword: '' },
     onSubmit: async ({ value, formApi }) => {
@@ -60,6 +63,9 @@ function ChangePassword() {
             autoComplete="new-password"
             validators={{ onChange: ({ value }) => passwordProblem(value) }}
           />
+          <form.Subscribe selector={(state) => state.values.newPassword}>
+            {(password) => <PasswordStrengthMeter password={password} owner={[username, name, email]} />}
+          </form.Subscribe>
           {change.error === null ? null : (
             <Alert variant="destructive" title="Password not changed" description={messageOf(change.error)} />
           )}

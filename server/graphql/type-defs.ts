@@ -1,5 +1,6 @@
 import { AUDIT_DEFAULTS } from '../core/defaults.ts';
 import { AUDIT_TYPES, AuditTargetKind } from '../store/audit.ts';
+import { MAX_PASSWORD_SCORE } from '../store/settings.ts';
 
 /** The admin API the web app uses to set up clients and users. */
 export const TYPE_DEFS = /* GraphQL */ `
@@ -198,6 +199,14 @@ export const TYPE_DEFS = /* GraphQL */ `
     isIssuerHttp: Boolean!
   }
 
+  "What a new password must pass besides its length. Existing passwords keep working."
+  type PasswordRules {
+    "The lowest zxcvbn score a new password may have, from 0 (anything) to ${MAX_PASSWORD_SCORE} (very hard to guess)."
+    minScore: Int!
+    "Whether a new password is looked up in Have I Been Pwned, by the first 5 characters of its SHA-1."
+    checkBreaches: Boolean!
+  }
+
   "What the sign-in page and the sidebar show the provider as."
   type Branding {
     name: String!
@@ -292,6 +301,7 @@ export const TYPE_DEFS = /* GraphQL */ `
     branding: Branding!
     "Whether redirect URIs may be plain http."
     httpRedirects: HttpRedirects!
+    passwordRules: PasswordRules!
     "The token lifetimes a client gets unless it is given its own."
     tokenLifetimeDefaults: TokenLifetimeDefaults!
     "A pairing. Null once it has expired or been cancelled."
@@ -409,6 +419,8 @@ export const TYPE_DEFS = /* GraphQL */ `
     setBrandingLogo(dataUrl: String): Branding!
     "Allows or refuses plain http redirect URIs for clients saved from now on. Null follows the issuer again."
     setHttpRedirects(allowed: Boolean): HttpRedirects!
+    "Changes what a new password must pass. A rule left out keeps its value."
+    setPasswordRules(minScore: Int, checkBreaches: Boolean): PasswordRules!
   }
 
   "Live updates, over server-sent events. The admin session is checked when the stream opens."
