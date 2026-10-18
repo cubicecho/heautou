@@ -84,7 +84,12 @@ export async function signIn(
     const loginUid = /^\/login\/([^/]+)$/.exec(next)?.[1];
     if (loginUid !== undefined) {
       const details = await (await browser.send(`/interaction/${loginUid}/details`)).json();
-      expect(details).toEqual({ clientName: expect.any(String), passkeysAvailable: expect.any(Boolean) });
+      expect(details).toEqual({
+        clientName: expect.any(String),
+        passkeysAvailable: expect.any(Boolean),
+        upstreams: expect.any(Array),
+        secondFactor: null,
+      });
       const res = await browser.send(`/interaction/${loginUid}/login`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },

@@ -33,7 +33,16 @@ import type { ProviderKeys } from '../store/keys.ts';
 import type { Pairing, PairingInput } from '../store/pairings.ts';
 import { refusedRedirectUris } from '../store/redirect-uris.ts';
 import type { HttpRedirectSetting, PasswordRules } from '../store/settings.ts';
+import {
+  type GroupMapping,
+  UnknownIdentity,
+  type UpstreamFields,
+  UpstreamKind,
+  type UpstreamLink,
+  type UpstreamProvider,
+} from '../store/upstreams.ts';
 import type { NewUser, PublicUser, UserFields } from '../store/users.ts';
+import { upstreamTarget } from '../upstream/accounts.ts';
 import { TYPE_DEFS } from './type-defs.ts';
 
 /** Where discovery lives under the issuer. */
@@ -349,6 +358,37 @@ function loadUser(ctx: Context, id: string): PublicUser {
   return user;
 }
 
+/** What `UpstreamInput` arrives as: GraphQL sends null for a list or a flag left out. */
+interface UpstreamInputArgs {
+  name: string;
+  kind: UpstreamKind;
+  issuer?: string | null;
+  clientId: string;
+  clientSecret?: string | null;
+  scopes?: string[] | null;
+  unknownIdentity?: UnknownIdentity | null;
+  createDomains?: string[] | null;
+  createGroups?: string[] | null;
+  countsAsBothFactors?: boolean | null;
+  groupsClaim?: string | null;
+  groupMappings?: GroupMapping[] | null;
+}
+
+/**
+ * Reads an `UpstreamInput` as the store takes it: null lists and flags are left out, so they take their defaults.
+ *
+ * @param input - What GraphQL sent.
+ * @returns The fields.
+ */
+function upstreamFieldsOf(input: UpstreamInputArgs): UpstreamFields {
+  return withoutBlanks(input) as UpstreamFields;
+}
+
+/** What `UpstreamLink` resolves from. */
+interface UpstreamLinkView extends Pick<UpstreamLink, 'providerId' | 'label' | 'linkedAt' | 'lastUsedAt'> {
+  providerName: string;
+}
+
 const resolvers = {
   // The enum's GraphQL names, as the wire values the provider and the files use.
   ClientAuthMethod: {
@@ -376,6 +416,37 @@ const resolvers = {
       }),
   },
   AuditType: enumOf(AUDIT_TYPES),
+  UpstreamKind: enumOf(Object.values(UpstreamKind)),
+  UnknownIdentity: enumOf(Object.values(UnknownIdentity)),
+  Upstream: {
+    /**
+     * Resolves `Upstream.hasClientSecret`.
+     *
+     * @param upstream - The provider.
+     * @returns Whether a secret is saved; the secret itself never leaves the server.
+     */
+    hasClientSecret: (upstream: UpstreamProvider): boolean => upstream.clientSecret !== null,
+    /**
+     * Resolves `Upstream.redirectUri`.
+     *
+     * @param upstream - The provider.
+     * @param _args - Unused.
+     * @param ctx - Request context.
+     * @returns The URI to register there.
+     */
+    redirectUri: (upstream: UpstreamProvider, _args: unknown, ctx: Context): string =>
+      ctx.upstreamFlows.redirectUriOf(upstream.id),
+    /**
+     * Resolves `Upstream.linkCount`.
+     *
+     * @param upstream - The provider.
+     * @param _args - Unused.
+     * @param ctx - Request context.
+     * @returns How many identities are linked through it.
+     */
+    linkCount: (upstream: UpstreamProvider, _args: unknown, ctx: Context): number =>
+      ctx.upstreams.linkCount(upstream.id),
+  },
   AuditTargetKind: enumOf(Object.values(AuditTargetKind)),
   User: {
     /**
@@ -410,6 +481,22 @@ const resolvers = {
       const { hasTotp, recoveryCodesLeft, passkeys } = ctx.factors.summary(user.id);
       return { hasTotp, recoveryCodesLeft, passkeyCount: passkeys.length };
     },
+    /**
+     * Resolves `User.upstreamLinks`.
+     *
+     * @param user - The user.
+     * @param _args - Unused.
+     * @param ctx - Request context.
+     * @returns Their linked identities, with the providers' names.
+     */
+    upstreamLinks: (user: PublicUser, _args: unknown, ctx: Context): UpstreamLinkView[] =>
+      ctx.upstreams.linksOf(user.id).map(({ providerId, label, linkedAt, lastUsedAt }) => ({
+        providerId,
+        providerName: ctx.upstreams.find(providerId)?.name ?? providerId,
+        label,
+        linkedAt,
+        lastUsedAt,
+      })),
   },
   Query: {
     /**
@@ -534,6 +621,25 @@ const resolvers = {
      * @returns The strength and breach rules.
      */
     passwordRules: (_parent: unknown, _args: unknown, ctx: Context): PasswordRules => ctx.settings.passwordRules(),
+    /**
+     * Resolves `Query.upstreams`.
+     *
+     * @param _parent - Unused.
+     * @param _args - Unused.
+     * @param ctx - Request context.
+     * @returns The upstream providers, oldest first.
+     */
+    upstreams: (_parent: unknown, _args: unknown, ctx: Context): UpstreamProvider[] => ctx.upstreams.list(),
+    /**
+     * Resolves `Query.upstreamRedirectUri`.
+     *
+     * @param _parent - Unused.
+     * @param args - The id the provider will have.
+     * @param ctx - Request context.
+     * @returns Its redirect URI.
+     */
+    upstreamRedirectUri: (_parent: unknown, args: { id: string }, ctx: Context): string =>
+      ctx.upstreamFlows.redirectUriOf(args.id.trim()),
     /**
      * Resolves `Query.pairing`.
      *
@@ -747,6 +853,7 @@ const resolvers = {
       await signOutEverywhere(ctx, user.id);
       ctx.passwordLinks.cancelFor(user.id);
       ctx.factors.removeAll(user.id);
+      ctx.upstreams.removeUser(user.id);
       return audited(ctx, AuditType.UserDeleted, userTarget(user), refreshed(ctx, user));
     },
     /**
@@ -932,6 +1039,72 @@ const resolvers = {
       return audited(ctx, AuditType.PasswordRulesSet, SETTINGS_TARGET, rules, {
         minScore: String(rules.minScore),
         breachCheck: rules.checkBreaches ? 'on' : 'off',
+      });
+    },
+    /**
+     * Resolves `Mutation.createUpstream`.
+     *
+     * @param _parent - Unused.
+     * @param args - Its id and settings.
+     * @param ctx - Request context.
+     * @returns The provider.
+     */
+    createUpstream: (
+      _parent: unknown,
+      args: { id: string; input: UpstreamInputArgs },
+      ctx: Context,
+    ): UpstreamProvider => {
+      const upstream = ctx.upstreams.create({ ...upstreamFieldsOf(args.input), id: args.id });
+      return audited(ctx, AuditType.UpstreamCreated, upstreamTarget(upstream), upstream, { kind: upstream.kind });
+    },
+    /**
+     * Resolves `Mutation.updateUpstream`.
+     *
+     * @param _parent - Unused.
+     * @param args - Its id and settings.
+     * @param ctx - Request context.
+     * @returns The provider.
+     */
+    updateUpstream: (
+      _parent: unknown,
+      args: { id: string; input: UpstreamInputArgs },
+      ctx: Context,
+    ): UpstreamProvider => {
+      const isNewSecret = (args.input.clientSecret ?? '').trim() !== '';
+      const upstream = ctx.upstreams.update(args.id, upstreamFieldsOf(args.input));
+      return audited(ctx, AuditType.UpstreamUpdated, upstreamTarget(upstream), upstream, {
+        clientSecret: isNewSecret ? 'replaced' : 'kept',
+      });
+    },
+    /**
+     * Resolves `Mutation.deleteUpstream`.
+     *
+     * @param _parent - Unused.
+     * @param args - Its id.
+     * @param ctx - Request context.
+     * @returns The removed provider.
+     */
+    deleteUpstream: (_parent: unknown, args: { id: string }, ctx: Context): UpstreamProvider => {
+      const { provider, unlinked } = ctx.upstreams.remove(args.id);
+      return audited(ctx, AuditType.UpstreamDeleted, upstreamTarget(provider), provider, {
+        unlinked: String(unlinked),
+      });
+    },
+    /**
+     * Resolves `Mutation.unlinkUserUpstream`.
+     *
+     * @param _parent - Unused.
+     * @param args - The user's id and the provider's.
+     * @param ctx - Request context.
+     * @returns The user.
+     */
+    unlinkUserUpstream: (_parent: unknown, args: { id: string; providerId: string }, ctx: Context): PublicUser => {
+      const user = loadUser(ctx, args.id);
+      const link = ctx.upstreams.unlink(user.id, args.providerId);
+      const provider = ctx.upstreams.find(link.providerId) ?? { id: link.providerId, name: link.providerId };
+      return audited(ctx, AuditType.UpstreamUnlinked, upstreamTarget(provider), user, {
+        identity: link.label,
+        user: user.username,
       });
     },
   },

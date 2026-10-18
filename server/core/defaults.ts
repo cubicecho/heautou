@@ -299,3 +299,44 @@ export interface BackchannelLogoutSettings {
 export const BACKCHANNEL_LOGOUT_DEFAULTS: Readonly<BackchannelLogoutSettings> = Object.freeze({
   timeoutMs: 5000,
 });
+
+/** How a backup of the data directory is made and taken back. */
+export interface BackupSettings {
+  /** Largest archive a restore takes, gzipped, in bytes. */
+  maxArchiveBytes: number;
+  /** Largest an archive may grow to once unzipped, in bytes, so a small upload cannot fill the memory. */
+  maxUnpackedBytes: number;
+}
+
+export const BACKUP_DEFAULTS: Readonly<BackupSettings> = Object.freeze({
+  maxArchiveBytes: 33_554_432,
+  maxUnpackedBytes: 268_435_456,
+});
+
+/** How users sign in through an upstream provider, such as Google, GitHub or another OpenID Connect server. */
+export interface UpstreamSettings {
+  /** How long a sign-in or a link may spend at the upstream provider before it has to start again, in seconds. */
+  flowSeconds: number;
+  /** How long a provider's discovery document is kept before it is read again, in seconds. */
+  discoverySeconds: number;
+  /** How long one request to an upstream provider may take, in seconds. */
+  requestTimeoutSeconds: number;
+  /** The scopes asked of an OpenID Connect provider when the admin names none. */
+  oidcScopes: readonly string[];
+  /** The scopes asked of GitHub: the profile and the email addresses. */
+  githubScopes: readonly string[];
+  /** Longest name a provider may have, in characters. */
+  maxNameLength: number;
+  /** Longest id a provider may have, in characters. The id is part of its redirect URI. */
+  maxIdLength: number;
+}
+
+export const UPSTREAM_DEFAULTS: Readonly<UpstreamSettings> = Object.freeze({
+  flowSeconds: 600,
+  discoverySeconds: 3600,
+  requestTimeoutSeconds: 10,
+  oidcScopes: Object.freeze(['openid', 'profile', 'email']),
+  githubScopes: Object.freeze(['read:user', 'user:email']),
+  maxNameLength: 60,
+  maxIdLength: 40,
+});

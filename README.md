@@ -1,5 +1,7 @@
 # Heautou
 
+[Website](https://cubicecho.github.io/heautou/)
+
 A minimal OpenID Connect provider for self-hosted setups. It gives your apps one shared sign-in
 ("Sign in with Heautou") without running Keycloak or Authentik.
 
@@ -147,6 +149,20 @@ line, and are sent as strings; the names the provider sets itself, such as `sub`
 - **Signing keys.** Heautou rotates its signing key at start-up once it is 90 days old, and **Rotate now** does it
   at once. The previous key stays published, so tokens it signed still verify; tokens signed with keys older than
   that stop verifying, and those users sign in again.
+- **Sign-in providers.** Let users sign in with an account they have elsewhere: any OpenID Connect provider
+  (Google, Microsoft, GitLab, Authentik, another Heautou…) found from its issuer URL, or GitHub. Register Heautou
+  at the provider with the redirect URI the dialog shows (`<your-host>/upstream/<id>/callback`), then paste the
+  client ID and secret. The sign-in page gets a **Sign in with …** button for each.
+  - An account elsewhere is only ever matched to a user it is **linked** to, never by its email address. Each user
+    links theirs under **Linked accounts** on `/account`; an admin can unlink one from the user's row.
+  - An account no one has linked is turned away, unless the provider is set to **make a user** for it: for
+    anybody, or only for addresses at the domains you list (the provider must say the address is verified). New
+    users start in the groups you pick and have no password.
+  - A user with a second factor here is still asked for it, unless you turn on **Counts as both factors** to trust
+    the provider's own check. The ID token's `amr` says `fed` for these sign-ins.
+  - **Group mapping** reads a groups claim from the provider and, at each sign-in, puts the user in the groups
+    mapped from theirs, and takes away mapped groups they no longer hold. `heautou-admin` can never come from a
+    provider.
 
 ## Configuration
 
@@ -234,6 +250,7 @@ Everything lives in the data folder, which is the `heautou-data` volume in Docke
 - `admin-sessions.json`: browsers signed in to the admin UI or the account page (hashed tokens)
 - `password-links.json`: open invite and reset links (hashed tokens)
 - `branding.json`: the name and logo
+- `upstreams.json`: sign-in providers (client secrets sealed with `SECRET_KEY`) and the accounts linked to users
 - `audit.jsonl`: the activity log, one entry a line; at 1 MB it moves to `audit.1.jsonl`, and two old files are kept
 - `oidc/`: sessions, codes and tokens. These are not sealed: they are short-lived, and the provider looks
   tokens up by their value, so they sit in the clear until they expire.

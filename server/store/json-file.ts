@@ -12,6 +12,8 @@ export interface JsonFile<T> {
    * @returns The next document.
    */
   update: (change: (current: T) => T) => T;
+  /** Reads the file again, after something other than `update` replaced it, such as a restore. */
+  reload: () => void;
 }
 
 /** The suffix of the file a write goes to before it replaces the real one. */
@@ -19,7 +21,7 @@ const TEMP_SUFFIX = '.tmp';
 /** Two-space indents, so a person can read and fix the file by hand. */
 const JSON_INDENT = 2;
 /** Owner read and write only: the files hold private keys, client secrets and live sessions. */
-const FILE_MODE = 0o600;
+export const FILE_MODE = 0o600;
 /** Owner only, for a directory made here. One that already exists is left as it is. */
 export const DIR_MODE = 0o700;
 
@@ -72,6 +74,9 @@ export function openJsonFile<T>(file: string, fallback: T): JsonFile<T> {
       renameSync(temp, file);
       current = next;
       return next;
+    },
+    reload: () => {
+      current = readOrFallback(file, fallback);
     },
   };
 }

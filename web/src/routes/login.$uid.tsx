@@ -5,7 +5,7 @@ import {
 } from '@simplewebauthn/browser';
 import { useQuery } from '@tanstack/react-query';
 import { createFileRoute } from '@tanstack/react-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { z } from 'zod';
 import { InputField, useAppForm } from '@/components/app-form';
 import { CenteredLayout } from '@/components/centered-layout';
@@ -22,8 +22,17 @@ export const Route = createFileRoute('/login/$uid')({ component: LoginPage });
 const PASSWORD_FORM_ID = 'login-form';
 const CODE_FORM_ID = 'second-factor-form';
 
-const detailsSchema = z.object({ clientName: z.string(), passkeysAvailable: z.boolean() });
 const choiceSchema = z.object({ totp: z.boolean(), passkey: z.boolean(), recoveryCode: z.boolean() });
+const detailsSchema = z.object({
+  clientName: z.string(),
+  passkeysAvailable: z.boolean(),
+  /** The providers users may sign in through instead. */
+  upstreams: z.array(z.object({ id: z.string(), name: z.string() })),
+  /** A sign-in that came back from one of them and still needs a second factor here. */
+  secondFactor: choiceSchema.extend({ provider: z.string() }).nullable(),
+});
+/** Where the server says why a sign-in through a provider did not work: `/login/:uid?error=`. */
+const ERROR_PARAM = 'error';
 /** The login POST's reply: where to go next, or which second factors to ask for. */
 const loginSchema = z.union([z.object({ redirectTo: z.string() }), z.object({ secondFactor: choiceSchema })]);
 const resultSchema = z.object({ redirectTo: z.string() });
@@ -100,7 +109,9 @@ function secondFactorPrompt(choice: SecondFactorChoice): string {
 function LoginPage() {
   const { uid } = Route.useParams();
   const base = `/interaction/${encodeURIComponent(uid)}`;
-  const [failure, setFailure] = useState<string | null>(null);
+  const [failure, setFailure] = useState<string | null>(() =>
+    new URLSearchParams(window.location.search).get(ERROR_PARAM),
+  );
   const [secondFactor, setSecondFactor] = useState<SecondFactorChoice | null>(null);
   const [isUsingPasskey, setUsingPasskey] = useState(false);
 
@@ -116,6 +127,13 @@ function LoginPage() {
     },
     retry: false,
   });
+
+  const cameBackFrom = details.data?.secondFactor ?? null;
+  useEffect(() => {
+    if (cameBackFrom !== null) {
+      setSecondFactor(cameBackFrom);
+    }
+  }, [cameBackFrom]);
 
   /**
    * Reports a refusal, going back to the password when the sign-in has to start again.
@@ -178,11 +196,14 @@ function LoginPage() {
   });
 
   const brandName = useBrandName();
+  const upstreams = details.data?.upstreams ?? [];
   const canUsePasskeys = details.data?.passkeysAvailable === true && browserSupportsWebAuthn();
   const isAskingCode = secondFactor !== null && (secondFactor.totp || secondFactor.recoveryCode);
   const description =
     secondFactor !== null
-      ? secondFactorPrompt(secondFactor)
+      ? cameBackFrom === null
+        ? secondFactorPrompt(secondFactor)
+        : `Signed in with ${cameBackFrom.provider}. ${secondFactorPrompt(secondFactor)}`
       : details.data === undefined
         ? `Sign in with your ${brandName} account to continue.`
         : `Sign in with your ${brandName} account to continue to ${details.data.clientName}.`;
@@ -213,6 +234,18 @@ function LoginPage() {
       />
       <PasswordField form={passwordForm} name="password" label="Password" required autoComplete="current-password" />
       {failureAlert}
+      {upstreams.length === 0 ? null : (
+        <div className="grid gap-2 border-t pt-4">
+          {upstreams.map((upstream) => (
+            <Button
+              key={upstream.id}
+              variant="outline"
+              content={`Sign in with ${upstream.name}`}
+              onClick={() => window.location.assign(`${base}/upstream/${encodeURIComponent(upstream.id)}`)}
+            />
+          ))}
+        </div>
+      )}
     </FormElement>
   );
 

@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
+import { LinkedAccountsSection } from '@/account/linked-accounts';
 import { TwoFactorSection } from '@/account/two-factor';
 import { auditTypeLabel } from '@/activity/audit-types';
 import { useAppForm } from '@/components/app-form';
@@ -155,6 +156,7 @@ function AccountPage() {
             />
             <ChangePassword />
             <TwoFactorSection />
+            <LinkedAccountsSection />
             <RecentSignIns />
             <Section
               title="Where you are signed in"

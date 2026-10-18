@@ -47,13 +47,23 @@ export function openSealedFile<T>(file: JsonFile<T>, box: SecretBox | null, mapS
     }
     return file;
   }
-  // Open everything before writing anything, so a wrong key leaves the file as it was.
-  let current = mapSecrets(stored, box.open);
   const seal = (document: T): T => mapSecrets(document, box.seal);
-  const isStale = secretsIn(stored, mapSecrets).some((secret) => box.isCurrent(secret) === false);
-  if (isStale) {
-    file.update(() => seal(current));
-  }
+  /**
+   * Opens the document as the file holds it, re-sealing values that are plain or under the previous key.
+   *
+   * @returns The document with its secrets open.
+   */
+  const openStored = (): T => {
+    const onDisk = file.read();
+    // Open everything before writing anything, so a wrong key leaves the file as it was.
+    const opened = mapSecrets(onDisk, box.open);
+    const isStale = secretsIn(onDisk, mapSecrets).some((secret) => box.isCurrent(secret) === false);
+    if (isStale) {
+      file.update(() => seal(opened));
+    }
+    return opened;
+  };
+  let current = openStored();
   return {
     read: () => current,
     update: (change) => {
@@ -61,6 +71,10 @@ export function openSealedFile<T>(file: JsonFile<T>, box: SecretBox | null, mapS
       file.update(() => seal(next));
       current = next;
       return next;
+    },
+    reload: () => {
+      file.reload();
+      current = openStored();
     },
   };
 }

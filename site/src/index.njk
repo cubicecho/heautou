@@ -1,0 +1,57 @@
+---
+layout: base.njk
+---
+<section class="hero project-hero">
+  <h1>{{ site.name }}</h1>
+  <p>{{ site.tagline }}</p>
+  <p class="cta">
+    <a class="button" href="#start">Get started</a>
+    <a class="button secondary" href="{{ site.repo }}" rel="noopener">GitHub ↗</a>
+  </p>
+</section>
+
+<section class="section">
+  <h2>What it does</h2>
+  <p class="section-intro">
+    Self-hosted apps each want their own login. Heautou lets them all use one
+    sign-in, without running Keycloak or Authentik: one container, one folder of
+    data, and a web page for adding the apps and the people who use them.
+  </p>
+
+  <ul class="card-grid">
+    <li>
+      <article class="card">
+        <h3>One sign-in for every app</h3>
+        <p>A standard OIDC provider for the authorization code flow, with client secrets or PKCE; apps can pair themselves from a setup link.</p>
+      </article>
+    </li>
+    <li>
+      <article class="card">
+        <h3>Two-factor and passkeys</h3>
+        <p>Users add an authenticator app or passkeys on their account page, and apps can see from the token how they signed in.</p>
+      </article>
+    </li>
+    <li>
+      <article class="card">
+        <h3>No database</h3>
+        <p>Clients, users and keys live in a few JSON files, with secrets sealed under a key you choose, and every sign-in and change goes in an audit log.</p>
+      </article>
+    </li>
+  </ul>
+</section>
+
+<section class="section" id="start">
+  <h2>Get started</h2>
+  <div class="prose">
+    <pre class="code"><code>docker run -d -p 3000:3000 -v heautou-data:/data \
+  -e ISSUER_URL=http://localhost:3000/oidc \
+  ghcr.io/cubicecho/heautou:latest
+
+# then open http://localhost:3000 and create the first admin</code></pre>
+  </div>
+
+  <p class="readme-link">
+    Full documentation lives in the project README:
+    <a href="{{ site.repo }}#readme" rel="noopener">{{ site.repo }}</a>
+  </p>
+</section>

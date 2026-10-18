@@ -148,6 +148,8 @@ export const TYPE_DEFS = /* GraphQL */ `
     sessions: [Session!]!
     "What they can give as a second factor after their password."
     secondFactors: SecondFactors!
+    "The upstream identities they sign in with, such as a Google or GitHub account."
+    upstreamLinks: [UpstreamLink!]!
     "When they were added, as an ISO 8601 string."
     createdAt: String!
   }
@@ -160,6 +162,74 @@ export const TYPE_DEFS = /* GraphQL */ `
     recoveryCodesLeft: Int!
     "How many passkeys they registered."
     passkeyCount: Int!
+  }
+
+  "How an upstream provider signs users in."
+  enum UpstreamKind {
+    "An OpenID Connect provider, found by discovery from its issuer: Google, Microsoft, GitLab, Authentik..."
+    OIDC
+    "GitHub, which is plain OAuth 2.0. Who signed in is read from its API."
+    GITHUB
+  }
+
+  "What happens to an upstream identity no user here is linked to."
+  enum UnknownIdentity {
+    "It is turned away. A user links it from their account page first."
+    REFUSE
+    "A user is made for it and linked, when its verified address is in createDomains (or any, when that is empty)."
+    CREATE
+  }
+
+  "An upstream group that gives a group here."
+  type GroupMapping {
+    "A value of the provider's groups claim."
+    upstream: String!
+    "The group here."
+    local: String!
+  }
+
+  "A provider users may sign in through instead of with a password. Its client secret is never sent back."
+  type Upstream {
+    "Lower-case letters, digits and dashes. Part of its redirect URI, so it never changes."
+    id: ID!
+    "What the sign-in button says after Sign in with."
+    name: String!
+    kind: UpstreamKind!
+    "The OpenID Connect issuer. Null for GitHub."
+    issuer: String
+    clientId: String!
+    "Whether a client secret is saved."
+    hasClientSecret: Boolean!
+    scopes: [String!]!
+    unknownIdentity: UnknownIdentity!
+    "Email domains a user it creates must have a verified address at. Empty creates one for anybody."
+    createDomains: [String!]!
+    "The groups a user it creates starts in."
+    createGroups: [String!]!
+    "Whether a sign-in through it counts as both factors, so no second factor is asked here."
+    countsAsBothFactors: Boolean!
+    "The claim its groups are in, for groupMappings."
+    groupsClaim: String
+    "Upstream groups that put a user in a group here each time they sign in. Mapped groups they lose upstream are taken away."
+    groupMappings: [GroupMapping!]!
+    "The redirect URI to register at the provider."
+    redirectUri: String!
+    "How many users have an identity linked through it."
+    linkCount: Int!
+    "When it was added, as an ISO 8601 string."
+    createdAt: String!
+  }
+
+  "An upstream identity a user signs in with."
+  type UpstreamLink {
+    providerId: ID!
+    providerName: String!
+    "The address or username it shows as."
+    label: String!
+    "When it was linked, as an ISO 8601 string."
+    linkedAt: String!
+    "When it last signed in, as an ISO 8601 string. Null when it never has."
+    lastUsedAt: String
   }
 
   "A name users hold in their groups claim and clients may be limited to."
@@ -306,6 +376,10 @@ export const TYPE_DEFS = /* GraphQL */ `
     "Whether redirect URIs may be plain http."
     httpRedirects: HttpRedirects!
     passwordRules: PasswordRules!
+    "The providers users may sign in through, oldest first."
+    upstreams: [Upstream!]!
+    "The redirect URI a provider with this id is given, to register before it is saved."
+    upstreamRedirectUri(id: ID!): String!
     "The token lifetimes a client gets unless it is given its own."
     tokenLifetimeDefaults: TokenLifetimeDefaults!
     "A pairing. Null once it has expired or been cancelled."
@@ -315,6 +389,30 @@ export const TYPE_DEFS = /* GraphQL */ `
     before. userId keeps entries done by that user or to them.
     """
     auditLog(first: Int, after: String, type: AuditType, userId: ID): AuditPage!
+  }
+
+  input GroupMappingInput {
+    upstream: String!
+    local: String!
+  }
+
+  "An upstream provider's settings. Lists left out are empty."
+  input UpstreamInput {
+    name: String!
+    kind: UpstreamKind!
+    "Required for OIDC; ignored for GitHub."
+    issuer: String
+    clientId: String!
+    "Left out, null or blank keeps the saved secret. Leave it out for a public client."
+    clientSecret: String
+    "Empty asks for openid, profile and email (OIDC) or read:user and user:email (GitHub)."
+    scopes: [String!]
+    unknownIdentity: UnknownIdentity
+    createDomains: [String!]
+    createGroups: [String!]
+    countsAsBothFactors: Boolean
+    groupsClaim: String
+    groupMappings: [GroupMappingInput!]
   }
 
   input ClaimInput {
@@ -431,6 +529,14 @@ export const TYPE_DEFS = /* GraphQL */ `
     setHttpRedirects(allowed: Boolean): HttpRedirects!
     "Changes what a new password must pass. A rule left out keeps its value."
     setPasswordRules(minScore: Int, checkBreaches: Boolean): PasswordRules!
+    "Adds a provider users may sign in through."
+    createUpstream(id: ID!, input: UpstreamInput!): Upstream!
+    "Changes an upstream provider. Its id stays."
+    updateUpstream(id: ID!, input: UpstreamInput!): Upstream!
+    "Removes an upstream provider and unlinks every identity linked through it."
+    deleteUpstream(id: ID!): Upstream!
+    "Unlinks a user's identity at an upstream provider."
+    unlinkUserUpstream(id: ID!, providerId: ID!): User!
   }
 
   "Live updates, over server-sent events. The admin session is checked when the stream opens."

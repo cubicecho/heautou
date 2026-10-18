@@ -26,6 +26,8 @@ export interface ModelFiles {
    * @returns Its document.
    */
   open: (model: string) => JsonFile<ModelDocument>;
+  /** Reads every open file again, after a restore replaced them. */
+  reload: () => void;
   /** The clock, in epoch milliseconds. */
   now: () => number;
 }
@@ -48,6 +50,11 @@ export function createModelFiles(dir: string, now: () => number = Date.now): Mod
       const file = openJsonFile<ModelDocument>(path.join(dir, `${model}.json`), {});
       opened.set(model, file);
       return file;
+    },
+    reload: () => {
+      for (const file of opened.values()) {
+        file.reload();
+      }
     },
     now,
   };

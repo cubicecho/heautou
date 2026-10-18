@@ -32,6 +32,7 @@ export default defineConfig({
       '/oidc': API_ORIGIN,
       '/interaction': API_ORIGIN,
       '/admin': API_ORIGIN,
+      '/upstream': API_ORIGIN,
     },
   },
 });

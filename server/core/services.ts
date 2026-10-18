@@ -11,21 +11,38 @@ import { claimNamesIn, createProvider } from '../oidc/provider.ts';
 import { createSessionTools, type SessionTools } from '../oidc/sessions.ts';
 import { type AdminSessionDocument, type AdminSessionStore, createAdminSessionStore } from '../store/admin-sessions.ts';
 import { type AuditLog, AuditTargetKind, AuditType, KEYS_TARGET, openAuditLog } from '../store/audit.ts';
+import {
+  type BackupLayout,
+  type BackupOptions,
+  createBackup,
+  type RestoreSummary,
+  readBackup,
+  restoreBackup,
+} from '../store/backup.ts';
 import { type Branding, type BrandingStore, createBrandingStore } from '../store/branding.ts';
 import { type ClientStore, clientSecretsIn, createClientStore, type OidcClient } from '../store/clients.ts';
 import { createFactorStore, type FactorStore, type FactorsDocument, factorSecretsIn } from '../store/factors.ts';
-import { openJsonFile } from '../store/json-file.ts';
+import { type JsonFile, openJsonFile } from '../store/json-file.ts';
 import { type KeyStore, openKeyStore, type ProviderKeys, privateKeysIn } from '../store/keys.ts';
 import { createPairingStore, type PairingDocument, type PairingStore } from '../store/pairings.ts';
 import { createPasswordLinkStore, type PasswordLinkDocument, type PasswordLinkStore } from '../store/password-links.ts';
 import { openSealedFile } from '../store/sealed-file.ts';
 import { createSettingsStore, type SettingsDocument, type SettingsStore } from '../store/settings.ts';
+import {
+  createUpstreamStore,
+  EMPTY_UPSTREAMS,
+  type UpstreamStore,
+  type UpstreamsDocument,
+  upstreamSecretsIn,
+} from '../store/upstreams.ts';
 import { createUserStore, type User, type UserStore } from '../store/users.ts';
+import { createUpstreamClient } from '../upstream/client.ts';
+import { createUpstreamFlows, type UpstreamFlows } from '../upstream/flows.ts';
 import { createPasswordPolicy, type FetchRange, type PasswordPolicy } from './password-policy.ts';
 import { createSecretBox, type SecretKeys } from './secret-box.ts';
 
 /** The files under the data directory. */
-const DATA_FILES = {
+export const DATA_FILES = {
   clients: 'clients.json',
   users: 'users.json',
   keys: 'keys.json',
@@ -36,11 +53,46 @@ const DATA_FILES = {
   settings: 'settings.json',
   /** Second factors: authenticator app secrets (sealed), recovery code hashes, passkeys. */
   factors: 'factors.json',
+  /** Upstream sign-in providers (client secrets sealed) and the identities linked to users. */
+  upstreams: 'upstreams.json',
   /** JSON lines, rotated by size into `audit.1.jsonl` and so on. */
   audit: 'audit.jsonl',
   /** A directory: one file per provider model (sessions, codes, tokens...). */
   oidc: 'oidc',
 } as const;
+
+/**
+ * What a backup leaves out or needs. Every other data file under the data directory is taken, so a new store is
+ * backed up without being listed here.
+ */
+export const BACKUP_LAYOUT: BackupLayout = Object.freeze({
+  sessionsDir: DATA_FILES.oidc,
+  /** The web app's sessions: a restore signs everyone out rather than bringing back sessions from the backup. */
+  skipped: Object.freeze([DATA_FILES.adminSessions]),
+  required: Object.freeze([DATA_FILES.keys]),
+});
+
+/** Backs the data directory up and puts a backup back, from the running server. */
+export interface DataBackup {
+  /** Whether secrets are sealed under `SECRET_KEY`, and so stay sealed in a backup. */
+  isSealed: boolean;
+  /**
+   * Makes an archive of the data directory as it is now.
+   *
+   * @param options - Whether to take the provider's sessions and tokens.
+   * @returns The gzipped archive.
+   */
+  create: (options: BackupOptions) => Buffer;
+  /**
+   * Checks an archive, swaps its files in, reads every store again and rebuilds the provider. Everyone signed in to
+   * the web app is signed out.
+   *
+   * @param archive - The gzipped archive.
+   * @returns What was put back.
+   * @throws BackupError when the archive is refused; nothing is written then.
+   */
+  restore: (archive: Buffer) => RestoreSummary;
+}
 
 /** Where the services keep their files and how the provider is reached. */
 export interface ServiceSettings {
@@ -56,6 +108,8 @@ export interface ServiceSettings {
   secretKeys?: SecretKeys | null;
   /** Fetches from Have I Been Pwned for the breach check. Unset, the global `fetch`. */
   fetchRange?: FetchRange;
+  /** Makes the requests to upstream sign-in providers. Unset, the global `fetch`. */
+  fetchUpstream?: typeof globalThis.fetch;
 }
 
 /** Everything the HTTP app is built from. */
@@ -64,6 +118,10 @@ export interface Services {
   users: UserStore;
   /** Each user's second factors. */
   factors: FactorStore;
+  /** Providers users may sign in through, such as Google or GitHub, and the identities linked to users. */
+  upstreams: UpstreamStore;
+  /** The upstream sign-ins and links under way. */
+  upstreamFlows: UpstreamFlows;
   /** The web app's sessions, for admins and for users on their account page. */
   adminSessions: AdminSessionStore;
   passwordLinks: PasswordLinkStore;
@@ -83,6 +141,8 @@ export interface Services {
   host: ProviderHost;
   /** The provider's sessions and tokens per user. */
   sessions: SessionTools;
+  /** Backups of the data directory. */
+  backup: DataBackup;
   issuer: string;
 }
 
@@ -98,27 +158,51 @@ export function openServices(settings: ServiceSettings): Services {
   const at = (name: string): string => path.join(settings.dataDir, name);
   const sealingKeys = settings.secretKeys ?? null;
   const box = sealingKeys === null ? null : createSecretBox(sealingKeys);
+  // Every store's file, read again after a restore swaps the files under them.
+  const reloads: Array<() => void> = [];
+  /**
+   * Remembers a store's file so a restore reads it again.
+   *
+   * @param file - The file the store is built on: the sealed one, for a store with secrets.
+   * @returns The same file.
+   */
+  const tracked = <T>(file: JsonFile<T>): JsonFile<T> => {
+    reloads.push(file.reload);
+    return file;
+  };
   // Every sealed file is opened, and so checked against the key, before any is re-sealed.
   const clientFile = openJsonFile<OidcClient[]>(at(DATA_FILES.clients), []);
   const keyFile = openJsonFile<ProviderKeys | null>(at(DATA_FILES.keys), null);
   const factorFile = openJsonFile<FactorsDocument>(at(DATA_FILES.factors), {});
+  const upstreamFile = openJsonFile<UpstreamsDocument>(at(DATA_FILES.upstreams), EMPTY_UPSTREAMS);
   if (box !== null) {
     clientSecretsIn(clientFile.read(), box.open);
     privateKeysIn(keyFile.read(), box.open);
     factorSecretsIn(factorFile.read(), box.open);
+    upstreamSecretsIn(upstreamFile.read(), box.open);
   }
   const providerSettings = createSettingsStore(
-    openJsonFile<SettingsDocument>(at(DATA_FILES.settings), {}),
+    tracked(openJsonFile<SettingsDocument>(at(DATA_FILES.settings), {})),
     settings.issuer,
   );
-  const clients = createClientStore(openSealedFile(clientFile, box, clientSecretsIn), {
+  const clients = createClientStore(tracked(openSealedFile(clientFile, box, clientSecretsIn)), {
     allowsHttpRedirects: () => providerSettings.httpRedirects().isAllowed,
   });
-  const users = createUserStore(openJsonFile<User[]>(at(DATA_FILES.users), []));
-  const factors = createFactorStore(openSealedFile(factorFile, box, factorSecretsIn), settings.now);
+  const users = createUserStore(tracked(openJsonFile<User[]>(at(DATA_FILES.users), [])));
+  const factors = createFactorStore(tracked(openSealedFile(factorFile, box, factorSecretsIn)), settings.now);
   const audit = openAuditLog(at(DATA_FILES.audit), settings.now);
   const now = settings.now ?? Date.now;
-  const keys = openKeyStore(openSealedFile(keyFile, box, privateKeysIn), () => new Date(now()));
+  const upstreams = createUpstreamStore(tracked(openSealedFile(upstreamFile, box, upstreamSecretsIn)), {
+    now: () => new Date(now()),
+    allowsHttp: () => providerSettings.httpRedirects().isAllowed,
+  });
+  const upstreamFlows = createUpstreamFlows({
+    upstreams,
+    client: createUpstreamClient({ fetch: settings.fetchUpstream ?? globalThis.fetch, now }),
+    issuer: settings.issuer,
+    now,
+  });
+  const keys = openKeyStore(tracked(openSealedFile(keyFile, box, privateKeysIn)), () => new Date(now()));
   if (keys.isDue()) {
     const rotated = keys.rotate();
     audit.record({
@@ -129,10 +213,17 @@ export function openServices(settings: ServiceSettings): Services {
       detail: { kid: rotated.jwks[0]?.kid ?? '', reason: 'scheduled' },
     });
   }
-  const adminSessions = createAdminSessionStore(openJsonFile<AdminSessionDocument>(at(DATA_FILES.adminSessions), {}));
-  const passwordLinks = createPasswordLinkStore(openJsonFile<PasswordLinkDocument>(at(DATA_FILES.passwordLinks), {}));
-  const pairings = createPairingStore(openJsonFile<PairingDocument>(at(DATA_FILES.pairings), {}), settings.now);
-  const branding = createBrandingStore(openJsonFile<Partial<Branding>>(at(DATA_FILES.branding), {}));
+  const adminSessions = createAdminSessionStore(
+    tracked(openJsonFile<AdminSessionDocument>(at(DATA_FILES.adminSessions), {})),
+  );
+  const passwordLinks = createPasswordLinkStore(
+    tracked(openJsonFile<PasswordLinkDocument>(at(DATA_FILES.passwordLinks), {})),
+  );
+  const pairings = createPairingStore(
+    tracked(openJsonFile<PairingDocument>(at(DATA_FILES.pairings), {})),
+    settings.now,
+  );
+  const branding = createBrandingStore(tracked(openJsonFile<Partial<Branding>>(at(DATA_FILES.branding), {})));
   const files = createModelFiles(at(DATA_FILES.oidc));
   const adapter = createAdapterFactory({
     files,
@@ -186,10 +277,26 @@ export function openServices(settings: ServiceSettings): Services {
     JSON.stringify({ kids: keys.current().jwks.map((jwk) => jwk.kid), claims: claimNamesIn(users, clients) }),
   );
   const setup = createSetupGate(users, settings.now);
+  const backup: DataBackup = {
+    isSealed: box !== null,
+    create: (options) => createBackup(settings.dataDir, BACKUP_LAYOUT, options, settings.now),
+    restore: (archive) => {
+      const checked = readBackup(archive, BACKUP_LAYOUT, box);
+      const summary = restoreBackup(settings.dataDir, BACKUP_LAYOUT, checked);
+      for (const reload of reloads) {
+        reload();
+      }
+      files.reload();
+      host.rebuild();
+      return summary;
+    },
+  };
   return {
     clients,
     users,
     factors,
+    upstreams,
+    upstreamFlows,
     adminSessions,
     passwordLinks,
     pairings,
@@ -201,6 +308,7 @@ export function openServices(settings: ServiceSettings): Services {
     keys,
     host,
     sessions: createSessionTools(files, createLogoutNotifier(host, { audit, users, clients })),
+    backup,
     issuer: settings.issuer,
   };
 }
