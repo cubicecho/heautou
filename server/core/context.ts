@@ -8,6 +8,8 @@ export interface Context
     | 'clients'
     | 'users'
     | 'factors'
+    | 'upstreams'
+    | 'upstreamFlows'
     | 'issuer'
     | 'host'
     | 'sessions'

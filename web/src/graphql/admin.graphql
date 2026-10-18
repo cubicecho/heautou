@@ -50,6 +50,13 @@ fragment UserFields on User {
     recoveryCodesLeft
     passkeyCount
   }
+  upstreamLinks {
+    providerId
+    providerName
+    label
+    linkedAt
+    lastUsedAt
+  }
 }
 
 query Provider {
@@ -331,5 +338,61 @@ query AuditLog($first: Int, $after: String, $type: AuditType, $userId: ID) {
 subscription AuditEntryAdded($type: AuditType, $userId: ID) {
   auditEntryAdded(type: $type, userId: $userId) {
     ...AuditEntryFields
+  }
+}
+
+fragment UpstreamFields on Upstream {
+  id
+  name
+  kind
+  issuer
+  clientId
+  hasClientSecret
+  scopes
+  unknownIdentity
+  createDomains
+  createGroups
+  countsAsBothFactors
+  groupsClaim
+  groupMappings {
+    upstream
+    local
+  }
+  redirectUri
+  linkCount
+  createdAt
+}
+
+query Upstreams {
+  upstreams {
+    ...UpstreamFields
+  }
+}
+
+query UpstreamRedirectUri($id: ID!) {
+  upstreamRedirectUri(id: $id)
+}
+
+mutation CreateUpstream($id: ID!, $input: UpstreamInput!) {
+  createUpstream(id: $id, input: $input) {
+    ...UpstreamFields
+  }
+}
+
+mutation UpdateUpstream($id: ID!, $input: UpstreamInput!) {
+  updateUpstream(id: $id, input: $input) {
+    ...UpstreamFields
+  }
+}
+
+mutation DeleteUpstream($id: ID!) {
+  deleteUpstream(id: $id) {
+    id
+  }
+}
+
+mutation UnlinkUserUpstream($id: ID!, $providerId: ID!) {
+  unlinkUserUpstream(id: $id, providerId: $providerId) {
+    id
   }
 }

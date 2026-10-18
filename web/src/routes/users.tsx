@@ -12,8 +12,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { KeyRound, Pencil, Plus, Trash2 } from '@/components/ui/icons';
 import { useDeleteUser, useResetSecondFactors, useSetUserDisabled, useUsers } from '@/core/admin';
-import { Ban, Link2, MonitorSmartphone, ShieldOff, UserRoundCheck, UsersRound } from '@/core/app-icons';
+import { Ban, Link2, MonitorSmartphone, ShieldCheck, ShieldOff, UserRoundCheck, UsersRound } from '@/core/app-icons';
 import { messageOf } from '@/core/lists';
+import { LinkedAccountsDialog } from '@/users/linked-accounts-dialog';
 import { PasswordDialog } from '@/users/password-dialog';
 import { PasswordLinkDialog } from '@/users/password-link-dialog';
 import { SessionsDialog } from '@/users/sessions-dialog';
@@ -28,7 +29,8 @@ type Dialog =
   | { kind: 'edit'; user: UserFieldsFragment }
   | { kind: 'password'; user: UserFieldsFragment }
   | { kind: 'link'; user: UserFieldsFragment }
-  | { kind: 'sessions'; user: UserFieldsFragment };
+  | { kind: 'sessions'; user: UserFieldsFragment }
+  | { kind: 'linked'; user: UserFieldsFragment };
 
 /**
  * A line on who a user is: their name, email and groups, whichever they have.
@@ -53,8 +55,8 @@ function hasTwoFactor(user: UserFieldsFragment): boolean {
 }
 
 /**
- * The badges a user's row carries: whether they are disabled, or invited and not signed up yet, and whether they
- * use a second factor.
+ * The badges a user's row carries: whether they are disabled, or invited and not signed up yet, whether they
+ * use a second factor, and the sign-in providers they have linked.
  *
  * @param user - The user.
  * @returns The badges, or null for a user with none.
@@ -66,10 +68,15 @@ function badgesOf(user: UserFieldsFragment) {
     <Badge variant="outline">Invited</Badge>
   );
   const twoFactor = hasTwoFactor(user) ? <Badge variant="outline">Two-factor</Badge> : null;
-  return state === null && twoFactor === null ? null : (
+  const linked =
+    user.upstreamLinks.length === 0 ? null : (
+      <Badge variant="outline">{user.upstreamLinks.map((link) => link.providerName).join(', ')}</Badge>
+    );
+  return state === null && twoFactor === null && linked === null ? null : (
     <>
       {state}
       {twoFactor}
+      {linked}
     </>
   );
 }
@@ -174,6 +181,16 @@ function UsersPage() {
                       iconSlot={<MonitorSmartphone />}
                       onClick={() => setDialog({ kind: 'sessions', user })}
                     />
+                    {user.upstreamLinks.length > 0 ? (
+                      <Button
+                        aria-label={`${user.username}'s linked accounts`}
+                        hint="Linked accounts"
+                        variant="outline"
+                        size="icon-sm"
+                        iconSlot={<ShieldCheck />}
+                        onClick={() => setDialog({ kind: 'linked', user })}
+                      />
+                    ) : null}
                     {hasTwoFactor(user) ? (
                       <ConfirmButton
                         aria-label={`Reset ${user.username}'s two-factor sign-in`}
@@ -237,6 +254,9 @@ function UsersPage() {
           ) : null}
           {dialog.kind === 'link' ? (
             <PasswordLinkDialog key={dialog.user.id} user={dialog.user} open onOpenChange={close} />
+          ) : null}
+          {dialog.kind === 'linked' ? (
+            <LinkedAccountsDialog key={dialog.user.id} user={dialog.user} open onOpenChange={close} />
           ) : null}
           {dialog.kind === 'sessions' ? (
             <SessionsDialog key={dialog.user.id} user={dialog.user} open onOpenChange={close} />

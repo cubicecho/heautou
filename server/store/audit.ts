@@ -98,6 +98,17 @@ export const AuditType = {
   BackupDownloaded: 'backup_downloaded',
   /** The data was replaced from a backup, by an admin or the CLI. The detail says when the backup was made. */
   DataRestored: 'data_restored',
+  /** An admin added a provider users may sign in through, such as Google or GitHub. */
+  UpstreamCreated: 'upstream_created',
+  UpstreamUpdated: 'upstream_updated',
+  /** An admin removed an upstream provider, and every identity linked through it. */
+  UpstreamDeleted: 'upstream_deleted',
+  /** An upstream identity was linked to a user: from their account page, or by the sign-in that made the user. */
+  UpstreamLinked: 'upstream_linked',
+  /** An upstream identity was unlinked, by its user or by an admin. */
+  UpstreamUnlinked: 'upstream_unlinked',
+  /** A sign-in through an upstream provider changed the user's mapped groups. The detail lists them. */
+  UpstreamGroupsApplied: 'upstream_groups_applied',
 } as const;
 export type AuditType = (typeof AuditType)[keyof typeof AuditType];
 
@@ -126,6 +137,8 @@ export const AppSignInVia = {
   Session: 'session',
   /** The user signed in with a passkey alone. */
   Passkey: 'passkey',
+  /** The user signed in through an upstream provider, such as Google or GitHub. */
+  Upstream: 'upstream',
 } as const;
 export type AppSignInVia = (typeof AppSignInVia)[keyof typeof AppSignInVia];
 
@@ -138,6 +151,8 @@ export const AuditTargetKind = {
   Keys: 'keys',
   Branding: 'branding',
   Settings: 'settings',
+  /** A provider users sign in through, such as Google or GitHub. */
+  Upstream: 'upstream',
 } as const;
 export type AuditTargetKind = (typeof AuditTargetKind)[keyof typeof AuditTargetKind];
 

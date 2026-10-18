@@ -47,7 +47,7 @@ export interface TestApp {
  * @returns The running app.
  */
 export async function startTestApp(
-  settings: Pick<ServiceSettings, 'now' | 'secretKeys' | 'fetchRange'> = {},
+  settings: Pick<ServiceSettings, 'now' | 'secretKeys' | 'fetchRange' | 'fetchUpstream'> = {},
 ): Promise<TestApp> {
   const dataDir = tempDir();
   const server = createServer();

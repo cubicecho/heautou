@@ -131,3 +131,75 @@ export function useSetPasswordWithLink() {
       jsonReply(await postJson('/admin/password-link/set', body), redirectSchema),
   });
 }
+
+const UPSTREAMS_KEY = [...KEY, 'upstreams'] as const;
+
+const upstreamsSchema = z.object({
+  /** Whether the user has a password, so unlinking their last provider would not lock them out. */
+  hasPassword: z.boolean(),
+  providers: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      link: z.object({ label: z.string(), linkedAt: z.string(), lastUsedAt: z.string().nullable() }).nullable(),
+    }),
+  ),
+});
+const linkedSchema = z.object({ provider: z.string(), label: z.string() });
+
+/** One provider the user may link an account at, and theirs when they have. */
+export type AccountUpstream = z.infer<typeof upstreamsSchema>['providers'][number];
+
+/**
+ * Reads the providers the signed-in user may link an account at, and the ones they have.
+ *
+ * @returns The query.
+ */
+export function useAccountUpstreams() {
+  return useQuery({
+    queryKey: UPSTREAMS_KEY,
+    queryFn: async () => jsonReply(await fetch('/admin/account/upstreams'), upstreamsSchema),
+    retry: false,
+  });
+}
+
+/**
+ * Starts linking an account at a provider: the browser goes there, and comes back to the account page.
+ *
+ * @returns The mutation.
+ */
+export function useStartLink() {
+  return useMutation({
+    mutationFn: async (providerId: string) =>
+      jsonReply(await postJson(`/admin/account/upstreams/${encodeURIComponent(providerId)}/link`, {}), redirectSchema),
+    onSuccess: ({ redirectTo }) => window.location.assign(redirectTo),
+  });
+}
+
+/**
+ * Links the account a provider sent the browser back with.
+ *
+ * @returns The mutation; it resolves to the provider's name and the account's.
+ */
+export function useFinishLink() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (ticket: string) =>
+      jsonReply(await postJson('/admin/account/upstreams/finish', { ticket }), linkedSchema),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: UPSTREAMS_KEY }),
+  });
+}
+
+/**
+ * Unlinks the signed-in user's account at a provider.
+ *
+ * @returns The mutation.
+ */
+export function useUnlink() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (providerId: string) =>
+      jsonReply(await postJson(`/admin/account/upstreams/${encodeURIComponent(providerId)}/unlink`, {}), okSchema),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: UPSTREAMS_KEY }),
+  });
+}

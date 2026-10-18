@@ -16,6 +16,7 @@ import { useOperationLimits } from '../graphql/operation-limits.ts';
 import { schema } from '../graphql/schema.ts';
 import { createInteractionRouter } from '../oidc/interactions.ts';
 import type { PublicUser } from '../store/users.ts';
+import { createUpstreamRouter } from '../upstream/routes.ts';
 import { sameOriginJson } from './guards.ts';
 import { securityHeaders, webAppHeaders } from './headers.ts';
 import { healthHandler } from './health.ts';
@@ -24,9 +25,9 @@ import { createLoginThrottle, limitRequests } from './rate-limit.ts';
 const GRAPHQL_ENDPOINT = '/graphql';
 const HEALTH_ENDPOINT = '/healthz';
 /** Every path but the server's own, so the web app's routes load index.html. */
-const WEB_ROUTES = /^(?!\/(graphql|healthz)$|\/(oidc|interaction|admin)(\/|$)).*/;
+const WEB_ROUTES = /^(?!\/(graphql|healthz)$|\/(oidc|interaction|admin|upstream)(\/|$)).*/;
 /** The routes that start sign-ins or write files, limited per address. */
-const LIMITED_ROUTES = [`${OIDC_MOUNT_PATH}/auth`, `${OIDC_MOUNT_PATH}/reg`, '/interaction', '/admin'];
+const LIMITED_ROUTES = [`${OIDC_MOUNT_PATH}/auth`, `${OIDC_MOUNT_PATH}/reg`, '/interaction', '/admin', '/upstream'];
 /** Where `npm run build` puts the web app. */
 const WEB_DIST = fileURLToPath(new URL('../../dist', import.meta.url));
 
@@ -54,6 +55,8 @@ export function createApp(services: Services): Express {
       clients: services.clients,
       users: services.users,
       factors: services.factors,
+      upstreams: services.upstreams,
+      upstreamFlows: services.upstreamFlows,
       issuer: services.issuer,
       host: services.host,
       sessions: services.sessions,
@@ -90,6 +93,7 @@ export function createApp(services: Services): Express {
   app.use(createFactorRouter({ ...services, throttle }));
   app.use(createBackupRouter(services));
   app.use(createInteractionRouter({ ...services, origin, throttle }));
+  app.use(createUpstreamRouter(services));
   app.use(OIDC_MOUNT_PATH, (req, res) => services.host.handle(req, res));
 
   const hasWebBuild = existsSync(WEB_DIST);

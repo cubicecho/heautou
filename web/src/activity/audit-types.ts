@@ -53,6 +53,12 @@ const LABELS: Record<AuditType, string> = {
   USER_SECOND_FACTORS_RESET: 'Two-factor reset by an admin',
   BACKUP_DOWNLOADED: 'Backup downloaded',
   DATA_RESTORED: 'Data restored from a backup',
+  UPSTREAM_CREATED: 'Sign-in provider added',
+  UPSTREAM_UPDATED: 'Sign-in provider changed',
+  UPSTREAM_DELETED: 'Sign-in provider removed',
+  UPSTREAM_LINKED: 'Account linked',
+  UPSTREAM_UNLINKED: 'Account unlinked',
+  UPSTREAM_GROUPS_APPLIED: 'Groups set by a sign-in provider',
 };
 
 /** The labels by the type's GraphQL name and by the value the account route sends. */

@@ -1,0 +1,312 @@
+import type { UnknownIdentity, UpstreamFieldsFragment, UpstreamKind } from '@/__generated__/graphql';
+import { ComboboxField, InputField, SelectField, SwitchField, TextareaField, useAppForm } from '@/components/app-form';
+import { DescriptionList, PropertyRow } from '@/components/description-list';
+import { DialogLayout } from '@/components/dialog-layout';
+import { PasswordField } from '@/components/password-field';
+import { Section } from '@/components/section';
+import { Alert } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import { CopyButton } from '@/components/ui/copy-button';
+import { FormElement } from '@/components/ui/form-element';
+import { useGroupOptions, useSaveUpstream, useUpstreamRedirectUri } from '@/core/admin';
+import { commaListOf, linesOf, messageOf } from '@/core/lists';
+
+const KIND_OPTIONS: { value: UpstreamKind; label: string }[] = [
+  { value: 'OIDC', label: 'OpenID Connect (Google, Microsoft, GitLab, Authentik…)' },
+  { value: 'GITHUB', label: 'GitHub' },
+];
+const UNKNOWN_OPTIONS: { value: UnknownIdentity; label: string }[] = [
+  { value: 'REFUSE', label: 'Turn them away until a user links the account' },
+  { value: 'CREATE', label: 'Make a user for them' },
+];
+const ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
+const MAPPING_ROWS = 3;
+/** What separates the upstream group from the local one in a mapping line. */
+const MAPPING_SEPARATOR = '=';
+
+/**
+ * Reads a kind from the select.
+ *
+ * @param value - The select's value.
+ * @returns The kind.
+ */
+function kindOf(value: string): UpstreamKind {
+  return value === 'GITHUB' ? 'GITHUB' : 'OIDC';
+}
+
+/**
+ * Reads the mapping lines, `upstream = local` each.
+ *
+ * @param text - The field's text.
+ * @returns The mappings.
+ */
+function mappingsOf(text: string): { upstream: string; local: string }[] {
+  return linesOf(text).map((line) => {
+    const at = line.indexOf(MAPPING_SEPARATOR);
+    return { upstream: line.slice(0, at).trim(), local: line.slice(at + 1).trim() };
+  });
+}
+
+/**
+ * Checks the mapping lines.
+ *
+ * @param text - The field's text.
+ * @returns What is wrong, or undefined.
+ */
+function mappingsProblem(text: string): string | undefined {
+  const bad = linesOf(text).find((line) => {
+    const at = line.indexOf(MAPPING_SEPARATOR);
+    return at <= 0 || line.slice(at + 1).trim() === '';
+  });
+  return bad === undefined ? undefined : `Write "${bad}" as upstream-group = local-group.`;
+}
+
+interface UpstreamFormDialogProps {
+  /** The provider to edit, or null to add one. */
+  upstream: UpstreamFieldsFragment | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+/**
+ * Adds a provider users may sign in through, or changes one. The client secret is never shown back: left blank,
+ * the saved one is kept.
+ *
+ * @param props - The provider and the dialog's open state.
+ */
+export function UpstreamFormDialog({ upstream, open, onOpenChange }: UpstreamFormDialogProps) {
+  const isEdit = upstream !== null;
+  const save = useSaveUpstream();
+  const groupOptions = useGroupOptions();
+
+  const form = useAppForm({
+    defaultValues: {
+      id: upstream?.id ?? '',
+      kind: upstream?.kind ?? 'OIDC',
+      name: upstream?.name ?? '',
+      issuer: upstream?.issuer ?? '',
+      clientId: upstream?.clientId ?? '',
+      clientSecret: '',
+      scopes: upstream?.scopes.join(' ') ?? '',
+      unknownIdentity: upstream?.unknownIdentity ?? 'REFUSE',
+      createDomains: upstream?.createDomains.join(', ') ?? '',
+      createGroups: upstream?.createGroups ?? [],
+      countsAsBothFactors: upstream?.countsAsBothFactors ?? false,
+      groupsClaim: upstream?.groupsClaim ?? '',
+      groupMappings: upstream?.groupMappings.map((each) => `${each.upstream} = ${each.local}`).join('\n') ?? '',
+    },
+    onSubmit: async ({ value }) => {
+      const kind = kindOf(value.kind);
+      await save.mutateAsync({
+        id: value.id.trim(),
+        isNew: isEdit === false,
+        input: {
+          name: value.name.trim(),
+          kind,
+          issuer: kind === 'OIDC' ? value.issuer.trim() : null,
+          clientId: value.clientId.trim(),
+          clientSecret: value.clientSecret.trim() || null,
+          scopes: value.scopes.split(/\s+/).filter((scope) => scope !== ''),
+          unknownIdentity: value.unknownIdentity === 'CREATE' ? 'CREATE' : 'REFUSE',
+          createDomains: commaListOf(value.createDomains),
+          createGroups: value.createGroups,
+          countsAsBothFactors: value.countsAsBothFactors,
+          groupsClaim: value.groupsClaim.trim() || null,
+          groupMappings: mappingsOf(value.groupMappings),
+        },
+      });
+      onOpenChange(false);
+    },
+  });
+
+  return (
+    <DialogLayout
+      open={open}
+      onOpenChange={onOpenChange}
+      title={isEdit ? `Edit ${upstream.name}` : 'New sign-in provider'}
+      description="Lets users sign in with an account they have elsewhere, such as Google, GitHub or a company identity provider."
+      size="lg"
+      hasUnsavedChanges={() => form.state.isDefaultValue === false}
+      contentSlot={
+        <FormElement onSubmit={() => form.handleSubmit()} className="grid gap-4">
+          <SelectField form={form} name="kind" label="Kind" options={KIND_OPTIONS} />
+          <InputField
+            form={form}
+            name="name"
+            label="Name"
+            required
+            placeholder="Google"
+            description="The sign-in button says Sign in with and this."
+            validators={{ onChange: ({ value }) => (value.trim() ? undefined : 'Give the provider a name.') }}
+          />
+          {isEdit ? null : (
+            <InputField
+              form={form}
+              name="id"
+              label="ID"
+              required
+              placeholder="google"
+              description="Lower-case letters, digits and dashes. It is part of the redirect URI, so it cannot change."
+              validators={{
+                onChange: ({ value }) =>
+                  ID_PATTERN.test(value.trim()) ? undefined : 'Use lower-case letters, digits and dashes.',
+              }}
+            />
+          )}
+          <form.Subscribe selector={(state) => state.values.id.trim()}>
+            {(id) => <RedirectUri id={isEdit ? upstream.id : ID_PATTERN.test(id) ? id : ''} />}
+          </form.Subscribe>
+          <form.Subscribe selector={(state) => kindOf(state.values.kind)}>
+            {(kind) =>
+              kind === 'OIDC' ? (
+                <InputField
+                  form={form}
+                  name="issuer"
+                  label="Issuer URL"
+                  required
+                  placeholder="https://accounts.google.com"
+                  description="Its discovery document is read from here, under /.well-known/openid-configuration."
+                  validators={{
+                    onChange: ({ value, fieldApi }) =>
+                      kindOf(fieldApi.form.getFieldValue('kind')) === 'GITHUB' || URL.canParse(value.trim())
+                        ? undefined
+                        : 'Give the issuer’s https URL.',
+                  }}
+                />
+              ) : null
+            }
+          </form.Subscribe>
+          <InputField
+            form={form}
+            name="clientId"
+            label="Client ID"
+            required
+            description="What the provider gave this server when you registered it there."
+            validators={{ onChange: ({ value }) => (value.trim() ? undefined : 'Paste the client ID.') }}
+          />
+          <PasswordField
+            form={form}
+            name="clientSecret"
+            label="Client secret"
+            autoComplete="off"
+            placeholder={upstream?.hasClientSecret ? 'Saved. Leave blank to keep it.' : undefined}
+            description="Kept sealed under SECRET_KEY and never shown again. Leave it blank for a public client."
+          />
+          <InputField
+            form={form}
+            name="scopes"
+            label="Scopes"
+            placeholder="Default"
+            description="Separated by spaces. Blank asks for openid profile email, or read:user user:email at GitHub."
+          />
+          <SwitchField
+            form={form}
+            name="countsAsBothFactors"
+            label="Counts as both factors"
+            description="Trust the provider’s own two-step check, so users who have a second factor here are not asked for it again. Off, they are."
+          />
+          <Section
+            title="New users"
+            description="A user is only ever matched by an account linked to them, never by an email address."
+            contentSlot={
+              <div className="grid gap-4">
+                <SelectField
+                  form={form}
+                  name="unknownIdentity"
+                  label="An account no user has linked"
+                  options={UNKNOWN_OPTIONS}
+                />
+                <form.Subscribe selector={(state) => state.values.unknownIdentity === 'CREATE'}>
+                  {(isCreating) =>
+                    isCreating ? (
+                      <>
+                        <InputField
+                          form={form}
+                          name="createDomains"
+                          label="Only for addresses at"
+                          placeholder="Any address"
+                          description="Comma-separated domains, such as example.com. The provider must say the address is verified. Blank makes a user for anybody who can sign in there."
+                        />
+                        <ComboboxField
+                          form={form}
+                          name="createGroups"
+                          label="Their groups"
+                          multiple
+                          freeText
+                          options={groupOptions}
+                          placeholder="None"
+                        />
+                      </>
+                    ) : null
+                  }
+                </form.Subscribe>
+              </div>
+            }
+          />
+          <Section
+            title="Group mapping"
+            description="Each sign-in puts the user in the groups mapped from theirs upstream, and takes away mapped groups they no longer hold. Other groups are left alone."
+            contentSlot={
+              <div className="grid gap-4">
+                <InputField
+                  form={form}
+                  name="groupsClaim"
+                  label="Groups claim"
+                  placeholder="groups"
+                  description="The claim the provider lists the user’s groups in. Ask for its scope above if it needs one."
+                />
+                <TextareaField
+                  form={form}
+                  name="groupMappings"
+                  label="Mappings"
+                  rows={MAPPING_ROWS}
+                  placeholder="engineering = builders"
+                  description="One per line: the upstream group, =, the group here. The admin group cannot be mapped."
+                  validators={{
+                    onChange: ({ value, fieldApi }) =>
+                      mappingsProblem(value) ??
+                      (linesOf(value).length > 0 && fieldApi.form.getFieldValue('groupsClaim').trim() === ''
+                        ? 'Name the groups claim first.'
+                        : undefined),
+                  }}
+                />
+              </div>
+            }
+          />
+          {save.error === null ? null : (
+            <Alert variant="destructive" title="Not saved" description={messageOf(save.error)} />
+          )}
+        </FormElement>
+      }
+      footerActionsSlot={(close) => (
+        <>
+          <Button variant="outline" onClick={close} content="Cancel" />
+          <form.AppForm>
+            <form.SubmitButton requireChanges={isEdit} content={isEdit ? 'Save changes' : 'Add provider'} />
+          </form.AppForm>
+        </>
+      )}
+    />
+  );
+}
+
+/**
+ * Shows the redirect URI to register at the provider.
+ *
+ * @param props - The provider's id, or blank while none is typed.
+ */
+function RedirectUri({ id }: { id: string }) {
+  const uri = useUpstreamRedirectUri(id).data;
+  return (
+    <DescriptionList
+      contentSlot={
+        <PropertyRow
+          label="Redirect URI"
+          value={uri ?? 'Type an ID to see it.'}
+          valueClassName="font-mono break-all"
+          actionSlot={uri === undefined ? undefined : <CopyButton value={uri} label="Copy the redirect URI" />}
+        />
+      }
+    />
+  );
+}

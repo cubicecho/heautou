@@ -72,6 +72,9 @@ function viaOf(login: { amr?: string[] } | undefined): AppSignInVia {
   if (login === undefined) {
     return AppSignInVia.Session;
   }
+  if (login.amr?.includes(AuthMethod.Federated)) {
+    return AppSignInVia.Upstream;
+  }
   return login.amr?.includes(AuthMethod.Password) === false ? AppSignInVia.Passkey : AppSignInVia.Password;
 }
 

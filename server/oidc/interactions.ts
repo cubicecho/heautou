@@ -13,7 +13,10 @@ import { type LoginThrottle, sendTooMany } from '../http/rate-limit.ts';
 import { type AuditEvent, type AuditLog, AuditTargetKind, AuditType, actorOf } from '../store/audit.ts';
 import type { ClientStore } from '../store/clients.ts';
 import type { FactorStore } from '../store/factors.ts';
+import type { UpstreamProvider, UpstreamStore } from '../store/upstreams.ts';
 import type { PublicUser, UserStore } from '../store/users.ts';
+import { resolveUpstreamUser } from '../upstream/accounts.ts';
+import { FlowPurpose, type UpstreamFlows } from '../upstream/flows.ts';
 import type { ProviderHost } from './host.ts';
 import { PAGE_PARAM, pageUrl, WEB_PAGE } from './pages.ts';
 import { AuthLevel, AuthMethod, INTERACTION_PATH, maySignIn } from './provider.ts';
@@ -40,6 +43,13 @@ export const SignInMethod = {
   PasswordAndRecoveryCode: 'password_recovery_code',
   PasswordAndPasskey: 'password_passkey',
   Passkey: 'passkey',
+  /** An upstream provider alone, for a user with no second factor here. */
+  Upstream: 'upstream',
+  /** An upstream provider the operator counts as both factors. */
+  UpstreamAsBothFactors: 'upstream_both_factors',
+  UpstreamAndTotp: 'upstream_totp',
+  UpstreamAndRecoveryCode: 'upstream_recovery_code',
+  UpstreamAndPasskey: 'upstream_passkey',
 } as const;
 export type SignInMethod = (typeof SignInMethod)[keyof typeof SignInMethod];
 
@@ -51,7 +61,16 @@ const AMR_OF: Record<SignInMethod, AuthMethod[]> = {
   [SignInMethod.PasswordAndPasskey]: [AuthMethod.Password, AuthMethod.HardwareKey, AuthMethod.MultiFactor],
   // The passkey had to check the user (a PIN or a fingerprint): something they have and something they are or know.
   [SignInMethod.Passkey]: [AuthMethod.HardwareKey, AuthMethod.UserVerified, AuthMethod.MultiFactor],
+  [SignInMethod.Upstream]: [AuthMethod.Federated],
+  [SignInMethod.UpstreamAsBothFactors]: [AuthMethod.Federated, AuthMethod.MultiFactor],
+  [SignInMethod.UpstreamAndTotp]: [AuthMethod.Federated, AuthMethod.OneTimeCode, AuthMethod.MultiFactor],
+  [SignInMethod.UpstreamAndRecoveryCode]: [AuthMethod.Federated, AuthMethod.OneTimeCode, AuthMethod.MultiFactor],
+  [SignInMethod.UpstreamAndPasskey]: [AuthMethod.Federated, AuthMethod.HardwareKey, AuthMethod.MultiFactor],
 };
+
+/** How a sign-in waiting for its second factor proved who the user is first. */
+const FirstFactor = { Password: 'password', Upstream: 'upstream' } as const;
+type FirstFactor = (typeof FirstFactor)[keyof typeof FirstFactor];
 
 /** The second factors a user may finish a sign-in with, as the sign-in page is told. */
 export interface SecondFactorChoice {
@@ -60,14 +79,42 @@ export interface SecondFactorChoice {
   recoveryCode: boolean;
 }
 
+/** How the first factor and the second one together are recorded. */
+const METHOD_AFTER: Record<FirstFactor, Record<keyof SecondFactorChoice, SignInMethod>> = {
+  [FirstFactor.Password]: {
+    totp: SignInMethod.PasswordAndTotp,
+    recoveryCode: SignInMethod.PasswordAndRecoveryCode,
+    passkey: SignInMethod.PasswordAndPasskey,
+  },
+  [FirstFactor.Upstream]: {
+    totp: SignInMethod.UpstreamAndTotp,
+    recoveryCode: SignInMethod.UpstreamAndRecoveryCode,
+    passkey: SignInMethod.UpstreamAndPasskey,
+  },
+};
+
 /** Records an audit entry of a type, with an optional detail, for one sign-in. */
 type Recorder = (type: AuditType, detail?: AuditEvent['detail']) => void;
 
-/** A sign-in whose password was right, waiting for the second factor. Kept by interaction. */
+/** A sign-in whose first factor was right, waiting for the second. Kept by interaction. */
 interface PendingSignIn {
   userId: string;
   /** Wrong second factors so far. */
   failures: number;
+  /** The upstream provider the first factor came from, or null for a password. */
+  upstream: Pick<UpstreamProvider, 'id' | 'name'> | null;
+}
+
+/**
+ * Says how a waiting sign-in proved who the user is first, and what its entry keeps about it.
+ *
+ * @param waiting - The waiting sign-in.
+ * @returns The first factor, and the provider's name for an upstream one.
+ */
+function firstFactorOf(waiting: PendingSignIn): { factor: FirstFactor; detail: Record<string, string> } {
+  return waiting.upstream === null
+    ? { factor: FirstFactor.Password, detail: {} }
+    : { factor: FirstFactor.Upstream, detail: { provider: waiting.upstream.name } };
 }
 
 /** What the interaction routes use. */
@@ -83,6 +130,10 @@ export interface InteractionDeps {
   factors: FactorStore;
   /** The public URL of the provider, which passkeys are registered to. */
   issuer: string;
+  /** The upstream providers a user may sign in through, and their links. */
+  upstreams: UpstreamStore;
+  /** The upstream sign-ins under way. */
+  upstreamFlows: UpstreamFlows;
   /** The clock, in epoch milliseconds, for how long a sign-in may wait for its second factor. */
   now?: () => number;
 }
@@ -166,7 +217,7 @@ async function clientIdOf(provider: Provider, req: Request, res: Response): Prom
  * password to `POST /interaction/:uid/login`, which answers with where the browser goes next.
  */
 export function createInteractionRouter(deps: InteractionDeps): Router {
-  const { host, clients, users, throttle, audit, factors, now = Date.now } = deps;
+  const { host, clients, users, throttle, audit, factors, upstreams, upstreamFlows, now = Date.now } = deps;
   const nameOf = (clientId: string): string =>
     clientId === ADMIN_DEFAULTS.clientId ? ADMIN_CLIENT_NAME : (clients.find(clientId)?.name ?? clientId);
   const rp = relyingPartyOf(deps.issuer);
@@ -206,7 +257,39 @@ export function createInteractionRouter(deps: InteractionDeps): Router {
   };
 
   /**
-   * Turns a user away who may not sign in to the interaction's client: disabled, or outside its allowed groups.
+   * Says why a user may not sign in to the interaction's client, and records it: disabled, or outside its allowed
+   * groups. Every way of signing in asks this, so they all refuse alike.
+   *
+   * @param provider - The provider.
+   * @param req - The interaction request.
+   * @param res - Its response.
+   * @param user - Who proved who they are.
+   * @param record - Records the refusal.
+   * @returns What to tell them, or null when they may go on.
+   */
+  const refusalFor = async (
+    provider: Provider,
+    req: Request,
+    res: Response,
+    user: PublicUser,
+    record: Recorder,
+  ): Promise<string | null> => {
+    if (user.disabled) {
+      record(AuditType.SignInRefused, { reason: 'disabled' });
+      return `"${user.username}" is disabled. Ask an admin to enable it.`;
+    }
+    const { params } = await provider.interactionDetails(req, res);
+    const signInClientId = String(params.client_id);
+    const client = clients.find(signInClientId);
+    if (maySignIn(user, client) === false) {
+      record(AuditType.SignInRefused, { reason: 'not_in_allowed_groups' });
+      return `"${user.username}" may not sign in to ${nameOf(signInClientId)}. It is only for ${client?.allowedGroups.join(', ')}.`;
+    }
+    return null;
+  };
+
+  /**
+   * Turns a user away who may not sign in to the interaction's client, answering the sign-in page's POST.
    *
    * @param provider - The provider.
    * @param req - The interaction request.
@@ -222,24 +305,46 @@ export function createInteractionRouter(deps: InteractionDeps): Router {
     user: PublicUser,
     record: Recorder,
   ): Promise<boolean> => {
-    if (user.disabled) {
-      record(AuditType.SignInRefused, { reason: 'disabled' });
-      sendError(res, HttpStatus.Forbidden, `"${user.username}" is disabled. Ask an admin to enable it.`);
-      return false;
-    }
-    const { params } = await provider.interactionDetails(req, res);
-    const signInClientId = String(params.client_id);
-    const client = clients.find(signInClientId);
-    if (maySignIn(user, client) === false) {
-      record(AuditType.SignInRefused, { reason: 'not_in_allowed_groups' });
-      sendError(
-        res,
-        HttpStatus.Forbidden,
-        `"${user.username}" may not sign in to ${nameOf(signInClientId)}. It is only for ${client?.allowedGroups.join(', ')}.`,
-      );
+    const refusal = await refusalFor(provider, req, res, user, record);
+    if (refusal !== null) {
+      sendError(res, HttpStatus.Forbidden, refusal);
       return false;
     }
     return true;
+  };
+
+  /**
+   * Finishes the sign-in with the provider.
+   *
+   * @param provider - The provider.
+   * @param req - The interaction request.
+   * @param res - Its response.
+   * @param user - Who signed in.
+   * @param method - How they proved it.
+   * @param [detail] - What else the audit entry keeps.
+   * @returns Where the browser goes next.
+   */
+  const complete = async (
+    provider: Provider,
+    req: Request,
+    res: Response,
+    user: PublicUser,
+    method: SignInMethod,
+    detail: Record<string, string> = {},
+  ): Promise<string> => {
+    const { uid, params } = await provider.interactionDetails(req, res);
+    pending.delete(uid);
+    const amr = AMR_OF[method];
+    const acr = amr.includes(AuthMethod.MultiFactor) ? AuthLevel.MultiFactor : AuthLevel.Password;
+    const redirectTo = await provider.interactionResult(
+      req,
+      res,
+      { login: { accountId: user.id, amr, acr } },
+      { mergeWithLastSubmission: false },
+    );
+    throttle.succeed(user.username);
+    recorder(req, String(params.client_id), user)(AuditType.SignInSucceeded, { method, ...detail });
+    return redirectTo;
   };
 
   /**
@@ -260,19 +365,7 @@ export function createInteractionRouter(deps: InteractionDeps): Router {
     method: SignInMethod,
     detail: Record<string, string> = {},
   ): Promise<void> => {
-    const { uid, params } = await provider.interactionDetails(req, res);
-    pending.delete(uid);
-    const amr = AMR_OF[method];
-    const acr = amr.includes(AuthMethod.MultiFactor) ? AuthLevel.MultiFactor : AuthLevel.Password;
-    const redirectTo = await provider.interactionResult(
-      req,
-      res,
-      { login: { accountId: user.id, amr, acr } },
-      { mergeWithLastSubmission: false },
-    );
-    throttle.succeed(user.username);
-    recorder(req, String(params.client_id), user)(AuditType.SignInSucceeded, { method, ...detail });
-    res.json({ redirectTo });
+    res.json({ redirectTo: await complete(provider, req, res, user, method, detail) });
   };
 
   /**
@@ -302,7 +395,7 @@ export function createInteractionRouter(deps: InteractionDeps): Router {
       res.status(HttpStatus.Unauthorized).json({ error: 'Too many wrong tries. Start again.', restart: true });
       return;
     }
-    pending.set(uid, { userId: user.id, failures });
+    pending.set(uid, { userId: user.id, failures, upstream: pending.get(uid)?.upstream ?? null });
     sendError(res, HttpStatus.Unauthorized, message);
   };
 
@@ -318,11 +411,11 @@ export function createInteractionRouter(deps: InteractionDeps): Router {
     provider: Provider,
     req: Request,
     res: Response,
-  ): Promise<{ user: PublicUser; uid: string; record: Recorder } | null> => {
+  ): Promise<{ user: PublicUser; uid: string; record: Recorder; waiting: PendingSignIn } | null> => {
     const { uid, params } = await provider.interactionDetails(req, res);
     const waiting = pending.get(uid);
     const user = waiting === null ? null : users.find(waiting.userId);
-    if (user === null || user.disabled) {
+    if (waiting === null || user === null || user.disabled) {
       pending.delete(uid);
       res.status(HttpStatus.BadRequest).json({ error: 'This sign-in waited too long. Start again.', restart: true });
       return null;
@@ -334,7 +427,46 @@ export function createInteractionRouter(deps: InteractionDeps): Router {
       sendTooMany(res, wait);
       return null;
     }
-    return { user, uid, record };
+    return { user, uid, record, waiting };
+  };
+
+  /**
+   * Sends the browser back to the sign-in page, with what went wrong.
+   *
+   * @param res - The response.
+   * @param uid - The interaction.
+   * @param [message] - What to show, if anything.
+   */
+  const backToLogin = (res: Response, uid: string, message?: string): void => {
+    res.redirect(
+      HttpStatus.SeeOther,
+      pageUrl(`${WEB_PAGE.login}/${encodeURIComponent(uid)}`, { [PAGE_PARAM.error]: message }),
+    );
+  };
+
+  /**
+   * Records an upstream sign-in that let nobody in.
+   *
+   * @param req - The request.
+   * @param clientId - The client it was for.
+   * @param type - How it went.
+   * @param provider - The upstream provider.
+   * @param detail - What else to keep.
+   */
+  const recordUpstream = (
+    req: Request,
+    clientId: string,
+    type: AuditType,
+    provider: Pick<UpstreamProvider, 'id' | 'name'>,
+    detail: Record<string, string>,
+  ): void => {
+    audit.record({
+      type,
+      actor: null,
+      ip: req.ip ?? null,
+      target: { kind: AuditTargetKind.Client, id: clientId, name: nameOf(clientId) },
+      detail: { method: SignInMethod.Upstream, provider: provider.name, ...detail },
+    });
   };
 
   router.get(`${INTERACTION_PATH}/:uid`, async (req, res) => {
@@ -358,8 +490,15 @@ export function createInteractionRouter(deps: InteractionDeps): Router {
 
   router.get(`${INTERACTION_PATH}/:uid/details`, async (req, res) => {
     try {
-      const { params } = await host.current().interactionDetails(req, res);
-      res.json({ clientName: nameOf(String(params.client_id)), passkeysAvailable: rp.isAvailable });
+      const { uid, params } = await host.current().interactionDetails(req, res);
+      const waiting = pending.get(uid);
+      res.json({
+        clientName: nameOf(String(params.client_id)),
+        passkeysAvailable: rp.isAvailable,
+        upstreams: upstreams.list().map(({ id, name, kind }) => ({ id, name, kind })),
+        // A sign-in that came back from an upstream provider and still needs a second factor.
+        secondFactor: waiting?.upstream ? { ...choiceFor(waiting.userId), provider: waiting.upstream.name } : null,
+      });
     } catch (error) {
       sendError(res, HttpStatus.BadRequest, errorMessage(error));
     }
@@ -413,7 +552,7 @@ export function createInteractionRouter(deps: InteractionDeps): Router {
       }
       if (factors.hasSecondFactor(user.id)) {
         const { uid } = await provider.interactionDetails(req, res);
-        pending.set(uid, { userId: user.id, failures: 0 });
+        pending.set(uid, { userId: user.id, failures: 0, upstream: null });
         res.json({ secondFactor: choiceFor(user.id) });
         return;
       }
@@ -436,13 +575,15 @@ export function createInteractionRouter(deps: InteractionDeps): Router {
         return;
       }
       const { user, uid, record } = waiting;
+      const { factor, detail } = firstFactorOf(waiting.waiting);
       const { code } = parsed.data;
       if (factors.checkTotp(user.id, code)) {
-        await finish(provider, req, res, user, SignInMethod.PasswordAndTotp);
+        await finish(provider, req, res, user, METHOD_AFTER[factor].totp, detail);
         return;
       }
       if (factors.useRecoveryCode(user.id, code)) {
-        await finish(provider, req, res, user, SignInMethod.PasswordAndRecoveryCode, {
+        await finish(provider, req, res, user, METHOD_AFTER[factor].recoveryCode, {
+          ...detail,
           recoveryCodesLeft: String(factors.summary(user.id).recoveryCodesLeft),
         });
         return;
@@ -528,7 +669,8 @@ export function createInteractionRouter(deps: InteractionDeps): Router {
       }
       factors.usedPasskey(found.passkey.id, check.counter);
       if (isAfterPassword) {
-        await finish(provider, req, res, owner, SignInMethod.PasswordAndPasskey);
+        const { factor, detail } = firstFactorOf(waiting);
+        await finish(provider, req, res, owner, METHOD_AFTER[factor].passkey, detail);
         return;
       }
       const wait = throttle.wait(ip, owner.username);
@@ -543,6 +685,73 @@ export function createInteractionRouter(deps: InteractionDeps): Router {
       }
     } catch (error) {
       sendError(res, HttpStatus.BadRequest, errorMessage(error));
+    }
+  });
+
+  router.get(`${INTERACTION_PATH}/:uid/upstream/:providerId`, async (req, res) => {
+    const { uid, providerId } = req.params;
+    try {
+      const details = await host.current().interactionDetails(req, res);
+      if (details.uid !== uid) {
+        backToLogin(res, details.uid, 'This sign-in has changed. Try again.');
+        return;
+      }
+      pending.delete(uid);
+      res.redirect(HttpStatus.SeeOther, await upstreamFlows.start(providerId, { purpose: FlowPurpose.SignIn, uid }));
+    } catch (error) {
+      console.error(`[upstream] starting ${providerId}:`, error);
+      backToLogin(res, uid, `That provider could not be reached: ${errorMessage(error)}`);
+    }
+  });
+
+  router.get(`${INTERACTION_PATH}/:uid/upstream-return`, async (req, res) => {
+    const provider = host.current();
+    try {
+      const { uid, params } = await provider.interactionDetails(req, res);
+      const clientId = String(params.client_id);
+      const outcome = upstreamFlows.takeForInteraction(uid);
+      if (outcome === null) {
+        backToLogin(res, uid, 'That sign-in took too long, or was already used. Try again.');
+        return;
+      }
+      const upstream = outcome.provider;
+      if (outcome.identity === null) {
+        recordUpstream(req, clientId, AuditType.SignInFailed, upstream, {});
+        backToLogin(res, uid, outcome.error);
+        return;
+      }
+      const resolved = resolveUpstreamUser({ upstreams, users, audit }, upstream, outcome.identity, req.ip ?? null);
+      if (resolved.user === null) {
+        recordUpstream(req, clientId, AuditType.SignInRefused, upstream, {
+          reason: resolved.refusal.reason,
+          identity: outcome.identity.label,
+        });
+        backToLogin(res, uid, resolved.refusal.message);
+        return;
+      }
+      const { user } = resolved;
+      const record = recorder(req, clientId, user);
+      const refusal = await refusalFor(provider, req, res, user, record);
+      if (refusal !== null) {
+        backToLogin(res, uid, refusal);
+        return;
+      }
+      const detail = { provider: upstream.name };
+      if (upstream.countsAsBothFactors) {
+        res.redirect(
+          HttpStatus.SeeOther,
+          await complete(provider, req, res, user, SignInMethod.UpstreamAsBothFactors, detail),
+        );
+        return;
+      }
+      if (factors.hasSecondFactor(user.id)) {
+        pending.set(uid, { userId: user.id, failures: 0, upstream: { id: upstream.id, name: upstream.name } });
+        backToLogin(res, uid);
+        return;
+      }
+      res.redirect(HttpStatus.SeeOther, await complete(provider, req, res, user, SignInMethod.Upstream, detail));
+    } catch (error) {
+      showError(res, errorMessage(error));
     }
   });
 

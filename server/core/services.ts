@@ -28,7 +28,16 @@ import { createPairingStore, type PairingDocument, type PairingStore } from '../
 import { createPasswordLinkStore, type PasswordLinkDocument, type PasswordLinkStore } from '../store/password-links.ts';
 import { openSealedFile } from '../store/sealed-file.ts';
 import { createSettingsStore, type SettingsDocument, type SettingsStore } from '../store/settings.ts';
+import {
+  createUpstreamStore,
+  EMPTY_UPSTREAMS,
+  type UpstreamStore,
+  type UpstreamsDocument,
+  upstreamSecretsIn,
+} from '../store/upstreams.ts';
 import { createUserStore, type User, type UserStore } from '../store/users.ts';
+import { createUpstreamClient } from '../upstream/client.ts';
+import { createUpstreamFlows, type UpstreamFlows } from '../upstream/flows.ts';
 import { createPasswordPolicy, type FetchRange, type PasswordPolicy } from './password-policy.ts';
 import { createSecretBox, type SecretKeys } from './secret-box.ts';
 
@@ -44,6 +53,8 @@ export const DATA_FILES = {
   settings: 'settings.json',
   /** Second factors: authenticator app secrets (sealed), recovery code hashes, passkeys. */
   factors: 'factors.json',
+  /** Upstream sign-in providers (client secrets sealed) and the identities linked to users. */
+  upstreams: 'upstreams.json',
   /** JSON lines, rotated by size into `audit.1.jsonl` and so on. */
   audit: 'audit.jsonl',
   /** A directory: one file per provider model (sessions, codes, tokens...). */
@@ -97,6 +108,8 @@ export interface ServiceSettings {
   secretKeys?: SecretKeys | null;
   /** Fetches from Have I Been Pwned for the breach check. Unset, the global `fetch`. */
   fetchRange?: FetchRange;
+  /** Makes the requests to upstream sign-in providers. Unset, the global `fetch`. */
+  fetchUpstream?: typeof globalThis.fetch;
 }
 
 /** Everything the HTTP app is built from. */
@@ -105,6 +118,10 @@ export interface Services {
   users: UserStore;
   /** Each user's second factors. */
   factors: FactorStore;
+  /** Providers users may sign in through, such as Google or GitHub, and the identities linked to users. */
+  upstreams: UpstreamStore;
+  /** The upstream sign-ins and links under way. */
+  upstreamFlows: UpstreamFlows;
   /** The web app's sessions, for admins and for users on their account page. */
   adminSessions: AdminSessionStore;
   passwordLinks: PasswordLinkStore;
@@ -157,10 +174,12 @@ export function openServices(settings: ServiceSettings): Services {
   const clientFile = openJsonFile<OidcClient[]>(at(DATA_FILES.clients), []);
   const keyFile = openJsonFile<ProviderKeys | null>(at(DATA_FILES.keys), null);
   const factorFile = openJsonFile<FactorsDocument>(at(DATA_FILES.factors), {});
+  const upstreamFile = openJsonFile<UpstreamsDocument>(at(DATA_FILES.upstreams), EMPTY_UPSTREAMS);
   if (box !== null) {
     clientSecretsIn(clientFile.read(), box.open);
     privateKeysIn(keyFile.read(), box.open);
     factorSecretsIn(factorFile.read(), box.open);
+    upstreamSecretsIn(upstreamFile.read(), box.open);
   }
   const providerSettings = createSettingsStore(
     tracked(openJsonFile<SettingsDocument>(at(DATA_FILES.settings), {})),
@@ -173,6 +192,16 @@ export function openServices(settings: ServiceSettings): Services {
   const factors = createFactorStore(tracked(openSealedFile(factorFile, box, factorSecretsIn)), settings.now);
   const audit = openAuditLog(at(DATA_FILES.audit), settings.now);
   const now = settings.now ?? Date.now;
+  const upstreams = createUpstreamStore(tracked(openSealedFile(upstreamFile, box, upstreamSecretsIn)), {
+    now: () => new Date(now()),
+    allowsHttp: () => providerSettings.httpRedirects().isAllowed,
+  });
+  const upstreamFlows = createUpstreamFlows({
+    upstreams,
+    client: createUpstreamClient({ fetch: settings.fetchUpstream ?? globalThis.fetch, now }),
+    issuer: settings.issuer,
+    now,
+  });
   const keys = openKeyStore(tracked(openSealedFile(keyFile, box, privateKeysIn)), () => new Date(now()));
   if (keys.isDue()) {
     const rotated = keys.rotate();
@@ -266,6 +295,8 @@ export function openServices(settings: ServiceSettings): Services {
     clients,
     users,
     factors,
+    upstreams,
+    upstreamFlows,
     adminSessions,
     passwordLinks,
     pairings,

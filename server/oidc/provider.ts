@@ -30,6 +30,8 @@ export const AuthMethod = {
   UserVerified: 'user',
   /** More than one factor. */
   MultiFactor: 'mfa',
+  /** An upstream provider, such as Google or GitHub, vouched for the user. */
+  Federated: 'fed',
 } as const;
 export type AuthMethod = (typeof AuthMethod)[keyof typeof AuthMethod];
 
