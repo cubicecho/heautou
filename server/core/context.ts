@@ -7,6 +7,7 @@ export interface Context
     Services,
     | 'clients'
     | 'users'
+    | 'factors'
     | 'issuer'
     | 'host'
     | 'sessions'
@@ -16,6 +17,7 @@ export interface Context
     | 'adminSessions'
     | 'pairings'
     | 'settings'
+    | 'passwordPolicy'
     | 'audit'
   > {
   /** The signed-in admin making the request. */

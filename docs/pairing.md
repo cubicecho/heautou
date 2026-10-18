@@ -68,6 +68,13 @@ What Heautou accepts:
 | `response_types`            | `code`                                                           | `code`                  |
 | `post_logout_redirect_uris` | Absolute URIs                                                    | None                    |
 | `logo_uri`                  | An `http(s)` URL                                                 | None                    |
+| `backchannel_logout_uri`    | An `http(s)` URL with no fragment, held to the same https rule as redirect URIs | None     |
+| `backchannel_logout_session_required` | `true` to get the session ID (`sid`) in logout and ID tokens | `false`        |
+
+With a `backchannel_logout_uri`, Heautou POSTs a `logout_token` form field there (OpenID Connect Back-Channel Logout
+1.0) when a user signs out at Heautou or an admin ends their sessions. It is a JWT signed with the provider's keys, with
+`aud` the client ID, `sub`, `sid` when asked for, and the `http://schemas.openid.net/event/backchannel-logout` event.
+Check it like an ID token, end the matching session, and answer `200`.
 
 The groups the client lets in and the claim it gets them in are the operator's choice in Heautou. The app doesn't send
 them, and Heautou ignores them if it does.

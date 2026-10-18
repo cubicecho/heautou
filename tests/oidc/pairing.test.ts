@@ -274,6 +274,30 @@ describe('pairing an app with a setup URL', () => {
     ]);
   });
 
+  it('takes a back-channel logout URI, refusing one the store cannot hold', async () => {
+    const pairing = await startPairing();
+    const backchannel = {
+      ...APP_METADATA,
+      backchannel_logout_uri: 'https://app.example/backchannel-logout',
+      backchannel_logout_session_required: true,
+    };
+    const refused = await register(pairing.endpoint, pairing.token, {
+      ...backchannel,
+      backchannel_logout_uri: `${backchannel.backchannel_logout_uri}#fragment`,
+    });
+    expect(refused.status).toBe(HttpStatus.BadRequest);
+    expect((await refused.json()).error).toBe('invalid_client_metadata');
+
+    const res = await register(pairing.endpoint, pairing.token, backchannel);
+    expect(res.status).toBe(HttpStatus.Created);
+    const registered = await res.json();
+    expect(registered.backchannel_logout_uri).toBe(backchannel.backchannel_logout_uri);
+    expect(app.services.clients.find(registered.client_id)).toMatchObject({
+      backchannelLogoutUri: backchannel.backchannel_logout_uri,
+      backchannelLogoutSessionRequired: true,
+    });
+  });
+
   it('gives a public client no secret', async () => {
     const pairing = await startPairing();
     const res = await register(pairing.endpoint, pairing.token, {

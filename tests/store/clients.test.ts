@@ -1,6 +1,12 @@
 import path from 'node:path';
+import { CLIENT_TOKEN_LIFETIME_DEFAULTS } from '../../server/core/defaults.ts';
 import { ErrorCode } from '../../server/core/errors.ts';
-import { ClientAuthMethod, createClientStore, type OidcClient } from '../../server/store/clients.ts';
+import {
+  ClientAuthMethod,
+  createClientStore,
+  DEFAULT_CLIENT_TOKEN_LIFETIMES,
+  type OidcClient,
+} from '../../server/store/clients.ts';
 import { openJsonFile } from '../../server/store/json-file.ts';
 import { tempDir } from '../helpers.ts';
 
@@ -43,6 +49,36 @@ describe('client store', () => {
     );
   });
 
+  it('keeps a client on the default token lifetimes until it is given its own', () => {
+    const { store } = freshStore();
+    const { clientId } = store.create({ ...FIELDS, clientId: 'grafana' });
+    expect(store.find(clientId)?.tokenLifetimes).toEqual(DEFAULT_CLIENT_TOKEN_LIFETIMES);
+    const tokenLifetimes = { accessTokenSeconds: 900, idTokenSeconds: null, refreshTokenSeconds: 2_592_000 };
+    store.update(clientId, { ...FIELDS, tokenLifetimes });
+    expect(store.find(clientId)?.tokenLifetimes).toEqual(tokenLifetimes);
+    store.update(clientId, { ...FIELDS, name: 'Grafana 2' });
+    expect(store.find(clientId)?.tokenLifetimes).toEqual(tokenLifetimes);
+  });
+
+  it('refuses a token lifetime outside the bounds', () => {
+    const { store } = freshStore();
+    const { minSeconds, maxSeconds } = CLIENT_TOKEN_LIFETIME_DEFAULTS;
+    const lifetimes = (accessTokenSeconds: number) => ({ ...FIELDS, tokenLifetimes: { accessTokenSeconds } });
+    expect(() => store.create(lifetimes(minSeconds - 1))).toThrow(/accessTokenSeconds/);
+    expect(() => store.create(lifetimes(maxSeconds + 1))).toThrow(/accessTokenSeconds/);
+    expect(() => store.create(lifetimes(minSeconds + 0.5))).toThrow(/whole number/);
+  });
+
+  it('reads a client saved before lifetimes existed as on the defaults', () => {
+    const file = path.join(tempDir(), 'clients.json');
+    const saved = createClientStore(openJsonFile<OidcClient[]>(file, [])).create({ ...FIELDS, clientId: 'old' });
+    const { tokenLifetimes: _dropped, ...older } = saved;
+    openJsonFile<OidcClient[]>(file, []).update(() => [older as OidcClient]);
+    expect(createClientStore(openJsonFile<OidcClient[]>(file, [])).find('old')?.tokenLifetimes).toEqual(
+      DEFAULT_CLIENT_TOKEN_LIFETIMES,
+    );
+  });
+
   it('refuses a redirect URI that is not a URL', () => {
     const { store } = freshStore();
     expect(() => store.create({ ...FIELDS, redirectUris: ['not a url'] })).toThrow(/redirectUris/);
@@ -62,6 +98,40 @@ describe('client store', () => {
       /postLogoutRedirectUris/,
     );
     expect(store.create({ ...FIELDS, redirectUris: ['http://localhost:8080/cb'] }).clientId).toBeTruthy();
+  });
+
+  it('holds a back-channel logout URI to the https rule, keeps it on update and clears it when blank', () => {
+    const file = path.join(tempDir(), 'clients.json');
+    let allowsHttp = false;
+    const store = createClientStore(openJsonFile<OidcClient[]>(file, []), { allowsHttpRedirects: () => allowsHttp });
+    const backchannelLogoutUri = 'https://grafana.example/logout/backchannel';
+    const { clientId } = store.create({ ...FIELDS, backchannelLogoutUri });
+    expect(store.find(clientId)).toMatchObject({ backchannelLogoutUri, backchannelLogoutSessionRequired: true });
+    store.update(clientId, { ...FIELDS, name: 'Grafana 2' });
+    expect(store.find(clientId)?.backchannelLogoutUri).toBe(backchannelLogoutUri);
+    store.update(clientId, { ...FIELDS, backchannelLogoutUri: '' });
+    expect(store.find(clientId)?.backchannelLogoutUri).toBeNull();
+
+    const http = { ...FIELDS, backchannelLogoutUri: 'http://nas.lan:31001/logout' };
+    expect(() => store.create(http)).toThrow(/backchannelLogoutUri: .*plain http/);
+    expect(() => store.create({ ...FIELDS, backchannelLogoutUri: 'com.example.app:/logout' })).toThrow(
+      /backchannelLogoutUri/,
+    );
+    expect(() => store.create({ ...FIELDS, backchannelLogoutUri: `${backchannelLogoutUri}#x` })).toThrow(/fragment/);
+    expect(store.create({ ...FIELDS, backchannelLogoutUri: 'http://localhost:8080/logout' }).clientId).toBeTruthy();
+    allowsHttp = true;
+    expect(store.create(http).backchannelLogoutUri).toBe(http.backchannelLogoutUri);
+  });
+
+  it('reads a client saved before back-channel logout existed as having none', () => {
+    const file = path.join(tempDir(), 'clients.json');
+    const saved = createClientStore(openJsonFile<OidcClient[]>(file, [])).create({ ...FIELDS, clientId: 'old' });
+    const { backchannelLogoutUri: _uri, backchannelLogoutSessionRequired: _sid, ...older } = saved;
+    openJsonFile<OidcClient[]>(file, []).update(() => [older as OidcClient]);
+    expect(createClientStore(openJsonFile<OidcClient[]>(file, [])).find('old')).toMatchObject({
+      backchannelLogoutUri: null,
+      backchannelLogoutSessionRequired: true,
+    });
   });
 
   it("takes a native app's own scheme for a public client only", () => {

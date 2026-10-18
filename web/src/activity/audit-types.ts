@@ -10,6 +10,7 @@ const LABELS: Record<AuditType, string> = {
   APP_SIGN_IN_FAILED: 'App sign-in request refused',
   APP_TOKEN_REFUSED: 'App token request refused',
   APP_SIGNED_OUT: 'Signed out of an app',
+  APP_LOGOUT_FAILED: 'App not told of a sign-out',
   MACHINE_TOKEN_ISSUED: 'Machine token issued',
   WEB_SIGNED_IN: 'Signed in to this site',
   WEB_SIGNED_OUT: 'Signed out of this site',
@@ -38,10 +39,18 @@ const LABELS: Record<AuditType, string> = {
   BRANDING_NAME_SET: 'Name changed',
   BRANDING_LOGO_SET: 'Logo changed',
   HTTP_REDIRECTS_SET: 'Plain http redirects changed',
+  PASSWORD_RULES_SET: 'Password rules changed',
   ACCOUNT_PASSWORD_CHANGED: 'Changed own password',
   ACCOUNT_PASSWORD_FAILED: 'Wrong current password',
   ACCOUNT_SIGNED_OUT_EVERYWHERE: 'Signed out everywhere',
   ADMIN_SET_UP: 'First admin set up',
+  SECOND_FACTOR_FAILED: 'Second factor failed',
+  TOTP_ADDED: 'Authenticator app added',
+  TOTP_REMOVED: 'Authenticator app removed',
+  RECOVERY_CODES_MADE: 'Recovery codes made',
+  PASSKEY_ADDED: 'Passkey added',
+  PASSKEY_REMOVED: 'Passkey removed',
+  USER_SECOND_FACTORS_RESET: 'Two-factor reset by an admin',
 };
 
 /** The labels by the type's GraphQL name and by the value the account route sends. */
@@ -75,18 +84,19 @@ export function auditTypeLabel(type: string): string {
   return BY_NAME.get(type) ?? type;
 }
 
-/** The types that are a sign-in going wrong, drawn as warnings. */
+/** The types that are a sign-in or sign-out going wrong, drawn as warnings. */
 const WARNINGS = new Set([
   'SIGN_IN_FAILED',
   'SIGN_IN_THROTTLED',
   'SIGN_IN_REFUSED',
   'APP_SIGN_IN_FAILED',
   'APP_TOKEN_REFUSED',
+  'APP_LOGOUT_FAILED',
   'ACCOUNT_PASSWORD_FAILED',
 ]);
 
 /**
- * Says whether a type is a sign-in going wrong.
+ * Says whether a type is a sign-in or sign-out going wrong.
  *
  * @param type - The GraphQL name or the wire value.
  * @returns Whether it is.

@@ -11,6 +11,31 @@ const MAX_HOPS = 10;
 export type Browser = ReturnType<typeof createBrowser>;
 
 /**
+ * Gives the second factor a sign-in asks for after the password.
+ *
+ * @param uid - The interaction.
+ * @param browser - The browser signing in.
+ * @returns The reply to the second-factor POST.
+ */
+export type SecondFactorAnswer = (uid: string, browser: Browser) => Promise<Response>;
+
+/**
+ * POSTs JSON as the sign-in page does.
+ *
+ * @param browser - The browser.
+ * @param path - Where to.
+ * @param body - What to send.
+ * @returns The response.
+ */
+export function postJson(browser: Browser, path: string, body: unknown): Promise<Response> {
+  return browser.send(path, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+/**
  * Makes a browser for one test.
  *
  * @param base - The app's origin; relative URLs resolve against it.
@@ -42,6 +67,7 @@ export function createBrowser(base: string) {
  * @param password - Their password.
  * @param browser - The browser to sign in with, so its cookies can be used after. A fresh one by default.
  * @param callback - Where the client wants the browser back; the walk stops at the first redirect there.
+ * @param [secondFactor] - Answers the second factor, for a user who has one.
  * @returns The callback URL the provider sent the browser to.
  */
 export async function signIn(
@@ -51,20 +77,31 @@ export async function signIn(
   password: string,
   browser: Browser = createBrowser(app.base),
   callback: string = REDIRECT_URI,
+  secondFactor?: SecondFactorAnswer,
 ): Promise<URL> {
   let next = authorizeUrl;
   for (let hop = 0; hop < MAX_HOPS; hop += 1) {
     const loginUid = /^\/login\/([^/]+)$/.exec(next)?.[1];
     if (loginUid !== undefined) {
       const details = await (await browser.send(`/interaction/${loginUid}/details`)).json();
-      expect(details).toEqual({ clientName: expect.any(String) });
+      expect(details).toEqual({ clientName: expect.any(String), passkeysAvailable: expect.any(Boolean) });
       const res = await browser.send(`/interaction/${loginUid}/login`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ username, password }),
       });
       expect(res.status).toBe(HttpStatus.Ok);
-      next = (await res.json()).redirectTo;
+      const reply = await res.json();
+      if (reply.secondFactor !== undefined) {
+        if (secondFactor === undefined) {
+          throw new Error(`${username} has a second factor, and the test gave none.`);
+        }
+        const answered = await secondFactor(loginUid, browser);
+        expect(answered.status).toBe(HttpStatus.Ok);
+        next = (await answered.json()).redirectTo;
+        continue;
+      }
+      next = reply.redirectTo;
       continue;
     }
     const res = await browser.send(next);
@@ -182,6 +219,8 @@ export interface Tokens {
   access_token: string;
   id_token: string;
   refresh_token?: string;
+  /** How long the access token lasts, in seconds. */
+  expires_in: number;
 }
 
 /**

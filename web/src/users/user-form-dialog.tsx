@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { FormElement } from '@/components/ui/form-element';
 import { useCreateUser, useGroupOptions, useUpdateUser } from '@/core/admin';
 import { claimsOf, claimsProblem, claimsText, messageOf } from '@/core/lists';
+import { PasswordStrengthMeter } from '@/passwords/strength-meter';
 
 /** The shortest password the form takes. The server takes any; this is a typo guard. */
 const MIN_PASSWORD_LENGTH = 8;
@@ -100,6 +101,13 @@ export function UserFormDialog({ user, open, onOpenChange, onInvited }: UserForm
               autoComplete="new-password"
               validators={{ onChange: ({ value }) => (value === '' ? undefined : passwordProblem(value)) }}
             />
+          )}
+          {isEdit ? null : (
+            <form.Subscribe selector={(state) => state.values}>
+              {({ password, username, name, email }) => (
+                <PasswordStrengthMeter password={password} owner={[username, name, email]} />
+              )}
+            </form.Subscribe>
           )}
           <InputField form={form} name="name" label="Full name" autoComplete="off" />
           <InputField form={form} name="email" label="Email" type="email" autoComplete="off" />

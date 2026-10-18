@@ -9,6 +9,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { usePasswordLink, useSetPasswordWithLink } from '@/core/account';
 import { BrandIcon, useBrandName } from '@/core/brand';
 import { messageOf } from '@/core/lists';
+import { PasswordStrengthMeter } from '@/passwords/strength-meter';
 import { passwordProblem } from '@/users/user-form-dialog';
 
 export const Route = createFileRoute('/set-password')({ component: SetPasswordPage });
@@ -85,6 +86,9 @@ function SetPasswordPage() {
               autoFocus
               validators={{ onChange: ({ value }) => passwordProblem(value) }}
             />
+            <form.Subscribe selector={(state) => state.values.password}>
+              {(password) => <PasswordStrengthMeter password={password} owner={[who.username]} />}
+            </form.Subscribe>
             <PasswordField
               form={form}
               name="confirm"

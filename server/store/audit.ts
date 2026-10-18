@@ -31,6 +31,11 @@ export const AuditType = {
   AppTokenRefused: 'app_token_refused',
   /** A user signed out from inside an application (RP-initiated logout). */
   AppSignedOut: 'app_signed_out',
+  /**
+   * The provider could not tell an application that one of its users signed out (back-channel logout): the app was
+   * unreachable or refused the logout token. The detail has the error.
+   */
+  AppLogoutFailed: 'app_logout_failed',
   /** A client got a token for itself with the client credentials grant, with no user. */
   MachineTokenIssued: 'machine_token_issued',
   /** A user signed in to the admin UI or their account page. */
@@ -67,12 +72,28 @@ export const AuditType = {
   BrandingLogoSet: 'branding_logo_set',
   /** Plain http redirect URIs allowed, refused, or left to follow the issuer. */
   HttpRedirectsSet: 'http_redirects_set',
+  /** The password strength or breach check rule changed. */
+  PasswordRulesSet: 'password_rules_set',
   AccountPasswordChanged: 'account_password_changed',
   /** A user's own password change with the wrong current password. */
   AccountPasswordFailed: 'account_password_failed',
   AccountSignedOutEverywhere: 'account_signed_out_everywhere',
   /** The first admin was made, or an existing user was made the admin, through `/setup`. */
   AdminSetUp: 'admin_set_up',
+  /** A wrong authenticator code, recovery code or passkey after a password that worked. */
+  SecondFactorFailed: 'second_factor_failed',
+  /** A user set up an authenticator app on their account page. */
+  TotpAdded: 'totp_added',
+  /** A user removed their authenticator app. */
+  TotpRemoved: 'totp_removed',
+  /** A user made new recovery codes, which ends the old ones. */
+  RecoveryCodesMade: 'recovery_codes_made',
+  /** A user registered a passkey. The detail names it. */
+  PasskeyAdded: 'passkey_added',
+  /** A user removed a passkey. The detail names it. */
+  PasskeyRemoved: 'passkey_removed',
+  /** An admin removed every second factor a user had, as for a lost phone. */
+  UserSecondFactorsReset: 'user_second_factors_reset',
 } as const;
 export type AuditType = (typeof AuditType)[keyof typeof AuditType];
 
@@ -87,6 +108,7 @@ export const SIGN_IN_TYPES: readonly AuditType[] = [
   AuditType.SignInFailed,
   AuditType.SignInThrottled,
   AuditType.SignInRefused,
+  AuditType.SecondFactorFailed,
   AuditType.AppSignedIn,
   AuditType.AppSignedOut,
   AuditType.WebSignedIn,
@@ -98,6 +120,8 @@ export const AppSignInVia = {
   Password: 'password',
   /** The user already had a provider session, so nothing was asked. */
   Session: 'session',
+  /** The user signed in with a passkey alone. */
+  Passkey: 'passkey',
 } as const;
 export type AppSignInVia = (typeof AppSignInVia)[keyof typeof AppSignInVia];
 

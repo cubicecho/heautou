@@ -11,6 +11,7 @@ import { FormElement } from '@/components/ui/form-element';
 import { BrandIcon } from '@/core/brand';
 import { jsonReply, postJson } from '@/core/json-reply';
 import { messageOf } from '@/core/lists';
+import { PasswordStrengthMeter } from '@/passwords/strength-meter';
 
 export const Route = createFileRoute('/setup')({ component: SetupPage });
 
@@ -76,6 +77,9 @@ function SetupPage() {
         validators={{ onChange: ({ value }) => (value.trim() ? undefined : 'Enter a username.') }}
       />
       <PasswordField form={form} name="password" label="Password" required autoComplete="new-password" />
+      <form.Subscribe selector={(state) => state.values}>
+        {({ password, username }) => <PasswordStrengthMeter password={password} owner={[username]} />}
+      </form.Subscribe>
       {asksForToken ? (
         <InputField
           form={form}

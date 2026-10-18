@@ -32,17 +32,21 @@ import {
   PairingChangedDocument,
   PairingDocument,
   type PairingInput,
+  PasswordRulesDocument,
   ProviderDocument,
   RenameGroupDocument,
+  ResetSecondFactorsDocument,
   RotateClientSecretDocument,
   RotateKeysDocument,
   SetBrandingLogoDocument,
   SetBrandingNameDocument,
   SetHttpRedirectsDocument,
+  SetPasswordRulesDocument,
   SetUserDisabledDocument,
   SetUserPasswordDocument,
   SignOutUserDocument,
   StartPairingDocument,
+  TokenLifetimeDefaultsDocument,
   UpdateClientDocument,
   UpdateUserDocument,
   type UserInput,
@@ -65,6 +69,10 @@ const KEYS = {
   branding: ['branding'],
   pairings: ['pairings'],
   httpRedirects: ['httpRedirects'],
+  passwordRules: ['passwordRules'],
+  /** The public part of the password rules, which every strength meter reads. */
+  passwordStrength: ['passwordStrength'],
+  tokenLifetimeDefaults: ['tokenLifetimeDefaults'],
   audit: ['audit'],
 } as const;
 
@@ -110,6 +118,19 @@ export async function signOut(): Promise<void> {
  */
 export function useProviderInfo() {
   return useQuery({ queryKey: KEYS.provider, queryFn: async () => (await request(ProviderDocument)).provider });
+}
+
+/**
+ * Reads the token lifetimes a client gets unless it is given its own, and the bounds on its own.
+ *
+ * @returns The query.
+ */
+export function useTokenLifetimeDefaults() {
+  return useQuery({
+    queryKey: KEYS.tokenLifetimeDefaults,
+    queryFn: async () => (await request(TokenLifetimeDefaultsDocument)).tokenLifetimeDefaults,
+    staleTime: Number.POSITIVE_INFINITY,
+  });
 }
 
 /**
@@ -292,6 +313,19 @@ export function useSignOutUser() {
 }
 
 /**
+ * Removes every second factor a user has, as for a lost phone.
+ *
+ * @returns The mutation.
+ */
+export function useResetSecondFactors() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => (await request(ResetSecondFactorsDocument, { id })).resetSecondFactors,
+    onSuccess: refetching(queryClient, KEYS.users),
+  });
+}
+
+/**
  * Makes a setup URL an app pairs itself with.
  *
  * @returns The mutation; it resolves to the pairing and its URL, which is shown only this once.
@@ -452,6 +486,49 @@ export function useSetHttpRedirects() {
       queryClient.setQueryData(KEYS.httpRedirects, setting);
       await queryClient.invalidateQueries({ queryKey: KEYS.clients });
     },
+  });
+}
+
+/**
+ * Reads what a new password must pass.
+ *
+ * @returns The query.
+ */
+export function usePasswordRules() {
+  return useQuery({
+    queryKey: KEYS.passwordRules,
+    queryFn: async () => (await request(PasswordRulesDocument)).passwordRules,
+  });
+}
+
+/**
+ * Changes the password strength or breach check rule. A rule left out keeps its value.
+ *
+ * @returns The mutation.
+ */
+export function useSetPasswordRules() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (changes: { minScore?: number; checkBreaches?: boolean }) =>
+      (await request(SetPasswordRulesDocument, changes)).setPasswordRules,
+    onSuccess: (rules) => {
+      queryClient.setQueryData(KEYS.passwordRules, rules);
+      queryClient.setQueryData(KEYS.passwordStrength, { minScore: rules.minScore });
+    },
+  });
+}
+
+const passwordStrengthSchema = z.object({ minScore: z.number() });
+
+/**
+ * Reads the lowest strength a new password may have. Public: the set-password and setup pages show the meter too.
+ *
+ * @returns The query.
+ */
+export function usePasswordStrengthRule() {
+  return useQuery({
+    queryKey: KEYS.passwordStrength,
+    queryFn: async () => jsonReply(await fetch('/admin/password-rules'), passwordStrengthSchema),
   });
 }
 

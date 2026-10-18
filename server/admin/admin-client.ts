@@ -32,6 +32,8 @@ export const ADMIN_PATH = {
   branding: '/admin/branding',
   /** The logo image. */
   logo: '/admin/branding/logo',
+  /** The lowest password strength the rules take, for the strength meters. */
+  passwordRules: '/admin/password-rules',
 } as const;
 
 /** The web app's pages the server links to. */

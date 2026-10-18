@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { FormElement } from '@/components/ui/form-element';
 import { useSetUserPassword } from '@/core/admin';
 import { messageOf } from '@/core/lists';
+import { PasswordStrengthMeter } from '@/passwords/strength-meter';
 import { passwordProblem } from '@/users/user-form-dialog';
 
 interface PasswordDialogProps {
@@ -47,6 +48,9 @@ export function PasswordDialog({ user, open, onOpenChange }: PasswordDialogProps
             autoComplete="new-password"
             validators={{ onChange: ({ value }) => passwordProblem(value) }}
           />
+          <form.Subscribe selector={(state) => state.values.password}>
+            {(password) => <PasswordStrengthMeter password={password} owner={[user.username, user.name, user.email]} />}
+          </form.Subscribe>
           {setPassword.error === null ? null : (
             <Alert variant="destructive" title="Password not set" description={messageOf(setPassword.error)} />
           )}

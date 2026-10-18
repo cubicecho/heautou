@@ -51,8 +51,10 @@ export interface TokenLifetimeSettings {
   interactionSeconds: number;
   /** A signed-in browser session at the provider, in seconds. */
   sessionSeconds: number;
-  /** What a user has allowed a client to see, in seconds. */
+  /** What a user has allowed a client to see, in seconds. Stretched to a client's longer refresh token. */
   grantSeconds: number;
+  /** An access token a client gets for itself with the client credentials grant, in seconds. */
+  clientCredentialsSeconds: number;
 }
 
 export const TOKEN_LIFETIME_DEFAULTS: Readonly<TokenLifetimeSettings> = Object.freeze({
@@ -62,6 +64,20 @@ export const TOKEN_LIFETIME_DEFAULTS: Readonly<TokenLifetimeSettings> = Object.f
   interactionSeconds: 3600,
   sessionSeconds: 1_209_600,
   grantSeconds: 1_209_600,
+  clientCredentialsSeconds: 600,
+});
+
+/** The bounds on the token lifetimes an operator may give one client. */
+export interface ClientTokenLifetimeSettings {
+  /** Shortest lifetime a client's token may have, in seconds. */
+  minSeconds: number;
+  /** Longest lifetime a client's token may have, in seconds. */
+  maxSeconds: number;
+}
+
+export const CLIENT_TOKEN_LIFETIME_DEFAULTS: Readonly<ClientTokenLifetimeSettings> = Object.freeze({
+  minSeconds: 60,
+  maxSeconds: 31_536_000,
 });
 
 /** How secrets and passwords are made and checked. */
@@ -87,6 +103,25 @@ export const CREDENTIAL_DEFAULTS: Readonly<CredentialSettings> = Object.freeze({
   minPasswordLength: 8,
   passwordLinkSeconds: 86_400,
   passwordLinkBytes: 32,
+});
+
+/** What a new password must pass besides its length. The operator changes the first two under Settings. */
+export interface PasswordRuleSettings {
+  /** The lowest zxcvbn score, from 0 (anything) to 4 (very hard to guess), a new password may have. */
+  minScore: number;
+  /** Whether a new password is looked up in Have I Been Pwned. Off, since it makes outbound requests. */
+  checkBreaches: boolean;
+  /** The Have I Been Pwned range API; the first five hex characters of the password's SHA-1 go after it. */
+  breachRangeUrl: string;
+  /** How long the breach check waits for an answer before it lets the password through, in milliseconds. */
+  breachTimeoutMs: number;
+}
+
+export const PASSWORD_RULE_DEFAULTS: Readonly<PasswordRuleSettings> = Object.freeze({
+  minScore: 3,
+  checkBreaches: false,
+  breachRangeUrl: 'https://api.pwnedpasswords.com/range/',
+  breachTimeoutMs: 3000,
 });
 
 /** The keys the provider signs and seals with, made on first boot. */
@@ -213,4 +248,54 @@ export const AUDIT_DEFAULTS: Readonly<AuditSettings> = Object.freeze({
   pageSize: 50,
   maxPageSize: 200,
   accountEntries: 20,
+});
+
+/** How second factors (an authenticator app, recovery codes, passkeys) are made and checked. */
+export interface TwoFactorSettings {
+  /** Digits in an authenticator app's code. */
+  totpDigits: number;
+  /** How long one authenticator code lasts, in seconds. */
+  totpPeriodSeconds: number;
+  /** Codes either side of the current one still accepted, for a phone whose clock is a little off. */
+  totpDriftSteps: number;
+  /** Random bytes in an authenticator app's secret. */
+  totpSecretBytes: number;
+  /** Recovery codes made at a time. */
+  recoveryCodeCount: number;
+  /** Random bytes in one recovery code, before base32. */
+  recoveryCodeBytes: number;
+  /** How long a user has, after their password is accepted, to give the second factor, in seconds. */
+  pendingSeconds: number;
+  /** Wrong second factors allowed after one password before the sign-in has to start again. */
+  maxAttempts: number;
+  /** How long a browser waits for a passkey, and a passkey challenge stays valid, in seconds. */
+  passkeyTimeoutSeconds: number;
+  /** Most passkeys one user may register. */
+  maxPasskeys: number;
+  /** Longest name a passkey may be given, in characters. */
+  maxPasskeyNameLength: number;
+}
+
+export const TWO_FACTOR_DEFAULTS: Readonly<TwoFactorSettings> = Object.freeze({
+  totpDigits: 6,
+  totpPeriodSeconds: 30,
+  totpDriftSteps: 1,
+  totpSecretBytes: 20,
+  recoveryCodeCount: 10,
+  recoveryCodeBytes: 5,
+  pendingSeconds: 300,
+  maxAttempts: 5,
+  passkeyTimeoutSeconds: 120,
+  maxPasskeys: 20,
+  maxPasskeyNameLength: 60,
+});
+
+/** How the provider tells an app that one of its users signed out (OpenID Connect Back-Channel Logout). */
+export interface BackchannelLogoutSettings {
+  /** How long the provider waits for an app to answer a logout token, in milliseconds. */
+  timeoutMs: number;
+}
+
+export const BACKCHANNEL_LOGOUT_DEFAULTS: Readonly<BackchannelLogoutSettings> = Object.freeze({
+  timeoutMs: 5000,
 });

@@ -94,6 +94,12 @@ export function clientMetadata(client: OidcClient): AdapterPayload {
     post_logout_redirect_uris: client.postLogoutRedirectUris,
     grant_types: grantTypes,
     response_types: signsUsersIn ? RESPONSE_TYPES : [],
+    ...(client.backchannelLogoutUri === null
+      ? {}
+      : {
+          backchannel_logout_uri: client.backchannelLogoutUri,
+          backchannel_logout_session_required: client.backchannelLogoutSessionRequired,
+        }),
   };
 }
 

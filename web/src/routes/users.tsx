@@ -11,8 +11,8 @@ import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { KeyRound, Pencil, Plus, Trash2 } from '@/components/ui/icons';
-import { useDeleteUser, useSetUserDisabled, useUsers } from '@/core/admin';
-import { Ban, Link2, MonitorSmartphone, UserRoundCheck, UsersRound } from '@/core/app-icons';
+import { useDeleteUser, useResetSecondFactors, useSetUserDisabled, useUsers } from '@/core/admin';
+import { Ban, Link2, MonitorSmartphone, ShieldOff, UserRoundCheck, UsersRound } from '@/core/app-icons';
 import { messageOf } from '@/core/lists';
 import { PasswordDialog } from '@/users/password-dialog';
 import { PasswordLinkDialog } from '@/users/password-link-dialog';
@@ -42,16 +42,36 @@ function summaryOf(user: UserFieldsFragment): string {
 }
 
 /**
- * The badges a user's row carries: whether they are disabled, or invited and not signed up yet.
+ * Says whether a user signs in with a second factor.
  *
  * @param user - The user.
- * @returns The badges, or null for a user with neither.
+ * @returns True when they have an authenticator app or a passkey.
+ */
+function hasTwoFactor(user: UserFieldsFragment): boolean {
+  const { hasTotp, passkeyCount } = user.secondFactors;
+  return hasTotp || passkeyCount > 0;
+}
+
+/**
+ * The badges a user's row carries: whether they are disabled, or invited and not signed up yet, and whether they
+ * use a second factor.
+ *
+ * @param user - The user.
+ * @returns The badges, or null for a user with none.
  */
 function badgesOf(user: UserFieldsFragment) {
-  if (user.disabled) {
-    return <Badge variant="destructive">Disabled</Badge>;
-  }
-  return user.hasPassword ? null : <Badge variant="outline">Invited</Badge>;
+  const state = user.disabled ? (
+    <Badge variant="destructive">Disabled</Badge>
+  ) : user.hasPassword ? null : (
+    <Badge variant="outline">Invited</Badge>
+  );
+  const twoFactor = hasTwoFactor(user) ? <Badge variant="outline">Two-factor</Badge> : null;
+  return state === null && twoFactor === null ? null : (
+    <>
+      {state}
+      {twoFactor}
+    </>
+  );
 }
 
 /**
@@ -61,7 +81,8 @@ function UsersPage() {
   const query = useUsers();
   const remove = useDeleteUser();
   const setDisabled = useSetUserDisabled();
-  const failure = remove.error ?? setDisabled.error;
+  const resetTwoFactor = useResetSecondFactors();
+  const failure = remove.error ?? setDisabled.error ?? resetTwoFactor.error;
   const users = query.data ?? [];
   const [dialog, setDialog] = useState<Dialog>({ kind: 'closed' });
   const close = (open: boolean) => {
@@ -153,6 +174,19 @@ function UsersPage() {
                       iconSlot={<MonitorSmartphone />}
                       onClick={() => setDialog({ kind: 'sessions', user })}
                     />
+                    {hasTwoFactor(user) ? (
+                      <ConfirmButton
+                        aria-label={`Reset ${user.username}'s two-factor sign-in`}
+                        hint="Reset two-factor"
+                        variant="destructive-outline"
+                        size="icon-sm"
+                        iconSlot={<ShieldOff />}
+                        title={`Reset ${user.username}'s two-factor sign-in?`}
+                        description="Their authenticator app, passkeys and recovery codes are removed, as for a lost phone. They sign in with their password alone until they add one again."
+                        confirmLabel="Reset"
+                        onConfirm={() => resetTwoFactor.mutate(user.id)}
+                      />
+                    ) : null}
                     {user.disabled ? (
                       <Button
                         aria-label={`Enable ${user.username}`}

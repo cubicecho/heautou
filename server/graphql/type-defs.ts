@@ -1,5 +1,6 @@
 import { AUDIT_DEFAULTS } from '../core/defaults.ts';
 import { AUDIT_TYPES, AuditTargetKind } from '../store/audit.ts';
+import { MAX_PASSWORD_SCORE } from '../store/settings.ts';
 
 /** The admin API the web app uses to set up clients and users. */
 export const TYPE_DEFS = /* GraphQL */ `
@@ -44,10 +45,39 @@ export const TYPE_DEFS = /* GraphQL */ `
     source: ClientSource!
     "The logo the app gave when it paired. Null for none."
     logoUri: String
+    "How long its tokens stay valid, where the operator changed it."
+    tokenLifetimes: ClientTokenLifetimes!
+    "Where the provider posts a logout token when one of its users signs out (back-channel logout). Null for none."
+    backchannelLogoutUri: String
+    "Whether the logout token, and its ID tokens, carry the session ID (sid) the app can match its session by."
+    backchannelLogoutSessionRequired: Boolean!
     "Its redirect and post-logout URIs the redirect rule refuses now. Saved before the rule applied, they still work; saving the client again needs them changed."
     refusedRedirectUris: [String!]!
     "When it was added, as an ISO 8601 string."
     createdAt: String!
+  }
+
+  "How long one client's tokens stay valid, in seconds. Null is the server's default."
+  type ClientTokenLifetimes {
+    "Its access tokens, for a user or, with client credentials, for itself."
+    accessTokenSeconds: Int
+    "Its ID tokens."
+    idTokenSeconds: Int
+    "Its refresh tokens."
+    refreshTokenSeconds: Int
+  }
+
+  "How long tokens stay valid when their client does not say, in seconds, and the bounds a client's own must keep to."
+  type TokenLifetimeDefaults {
+    accessTokenSeconds: Int!
+    "An access token a client gets for itself with client credentials."
+    clientCredentialsSeconds: Int!
+    idTokenSeconds: Int!
+    refreshTokenSeconds: Int!
+    "Shortest lifetime a client may give its tokens."
+    minSeconds: Int!
+    "Longest lifetime a client may give its tokens."
+    maxSeconds: Int!
   }
 
   "Where a setup URL is."
@@ -116,8 +146,20 @@ export const TYPE_DEFS = /* GraphQL */ `
     hasPassword: Boolean!
     "The browsers signed in as them, newest first."
     sessions: [Session!]!
+    "What they can give as a second factor after their password."
+    secondFactors: SecondFactors!
     "When they were added, as an ISO 8601 string."
     createdAt: String!
+  }
+
+  "A user's second factors, without any secret."
+  type SecondFactors {
+    "Whether an authenticator app is set up."
+    hasTotp: Boolean!
+    "How many unused recovery codes they have."
+    recoveryCodesLeft: Int!
+    "How many passkeys they registered."
+    passkeyCount: Int!
   }
 
   "A name users hold in their groups claim and clients may be limited to."
@@ -159,6 +201,14 @@ export const TYPE_DEFS = /* GraphQL */ `
     isSet: Boolean!
     "Whether ISSUER_URL is plain http."
     isIssuerHttp: Boolean!
+  }
+
+  "What a new password must pass besides its length. Existing passwords keep working."
+  type PasswordRules {
+    "The lowest zxcvbn score a new password may have, from 0 (anything) to ${MAX_PASSWORD_SCORE} (very hard to guess)."
+    minScore: Int!
+    "Whether a new password is looked up in Have I Been Pwned, by the first 5 characters of its SHA-1."
+    checkBreaches: Boolean!
   }
 
   "What the sign-in page and the sidebar show the provider as."
@@ -255,6 +305,9 @@ export const TYPE_DEFS = /* GraphQL */ `
     branding: Branding!
     "Whether redirect URIs may be plain http."
     httpRedirects: HttpRedirects!
+    passwordRules: PasswordRules!
+    "The token lifetimes a client gets unless it is given its own."
+    tokenLifetimeDefaults: TokenLifetimeDefaults!
     "A pairing. Null once it has expired or been cancelled."
     pairing(id: ID!): Pairing
     """
@@ -280,6 +333,17 @@ export const TYPE_DEFS = /* GraphQL */ `
     allowedGroups: [String!]
     groupsClaim: String
     allowClientCredentials: Boolean
+    tokenLifetimes: ClientTokenLifetimesInput
+    "Where the provider posts a logout token when one of its users signs out. An empty string removes it."
+    backchannelLogoutUri: String
+    backchannelLogoutSessionRequired: Boolean
+  }
+
+  "How long one client's tokens stay valid, in seconds. A lifetime left out or null is the server's default."
+  input ClientTokenLifetimesInput {
+    accessTokenSeconds: Int
+    idTokenSeconds: Int
+    refreshTokenSeconds: Int
   }
 
   "What the client of an app that pairs gets."
@@ -297,6 +361,10 @@ export const TYPE_DEFS = /* GraphQL */ `
     allowedGroups: [String!]
     groupsClaim: String
     allowClientCredentials: Boolean
+    tokenLifetimes: ClientTokenLifetimesInput
+    "Where the provider posts a logout token when one of its users signs out. An empty string removes it."
+    backchannelLogoutUri: String
+    backchannelLogoutSessionRequired: Boolean
   }
 
   "A user to add. Without a password they are invited, and set one through createPasswordLink's link."
@@ -345,6 +413,8 @@ export const TYPE_DEFS = /* GraphQL */ `
     endUserSession(id: ID!, sessionId: ID!): User!
     "Ends every session and token of a user."
     signOutUser(id: ID!): User!
+    "Removes every second factor a user has, as for a lost phone. They sign in with their password alone until they add one again."
+    resetSecondFactors(id: ID!): User!
     "Makes a link that sets a user's password, for an invite or a reset. Their previous link stops working."
     createPasswordLink(id: ID!): PasswordLink!
     "Renames a group in every user and client."
@@ -359,6 +429,8 @@ export const TYPE_DEFS = /* GraphQL */ `
     setBrandingLogo(dataUrl: String): Branding!
     "Allows or refuses plain http redirect URIs for clients saved from now on. Null follows the issuer again."
     setHttpRedirects(allowed: Boolean): HttpRedirects!
+    "Changes what a new password must pass. A rule left out keeps its value."
+    setPasswordRules(minScore: Int, checkBreaches: Boolean): PasswordRules!
   }
 
   "Live updates, over server-sent events. The admin session is checked when the stream opens."

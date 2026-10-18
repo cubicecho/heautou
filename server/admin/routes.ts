@@ -3,6 +3,7 @@ import express, { type CookieOptions, type Request, type RequestHandler, type Re
 import { z } from 'zod';
 import { ADMIN_DEFAULTS, HTTP_DEFAULTS } from '../core/defaults.ts';
 import { errorMessage } from '../core/errors.ts';
+import type { PasswordPolicy } from '../core/password-policy.ts';
 import { HttpStatus, MS_PER_SECOND } from '../core/wire.ts';
 import { readCookie, signValue, verifyValue } from '../http/cookies.ts';
 import { sameOriginJson, sendRefusal } from '../http/guards.ts';
@@ -65,6 +66,7 @@ export interface AdminDeps {
   issuer: string;
   throttle: LoginThrottle;
   audit: AuditLog;
+  passwordPolicy: PasswordPolicy;
 }
 
 /**
@@ -164,7 +166,7 @@ function showError(res: Response, error: string, description: string): void {
  * first admin: a new user without a token for a while after boot, otherwise with the token from the server log.
  */
 export function createAdminRouter(deps: AdminDeps): Router {
-  const { host, users, adminSessions, setup, keys, issuer, throttle, audit } = deps;
+  const { host, users, adminSessions, setup, keys, issuer, throttle, audit, passwordPolicy } = deps;
   const urls = adminUrls(issuer);
   const guard = sameOriginJson(urls.origin);
   const cookieBase: CookieOptions = { httpOnly: true, secure: urls.isHttps };
@@ -316,6 +318,7 @@ export function createAdminRouter(deps: AdminDeps): Router {
     }
     try {
       if (existing === null) {
+        await passwordPolicy.check(password, { username });
         const created = users.create({ username, password, email: '', name: '', groups: [ADMIN_DEFAULTS.group] });
         audit.record({
           type: AuditType.AdminSetUp,

@@ -2,6 +2,7 @@ import type { GraphQLSchema } from 'graphql';
 import { createSchema, Repeater } from 'graphql-yoga';
 import { adminUrls, type BrandingView, brandingView, sessionClientName, WEB_APP_PAGE } from '../admin/admin-client.ts';
 import type { Context } from '../core/context.ts';
+import { CLIENT_TOKEN_LIFETIME_DEFAULTS, TOKEN_LIFETIME_DEFAULTS } from '../core/defaults.ts';
 import { notFound } from '../core/errors.ts';
 import { type StartedPairing, startPairing } from '../oidc/pairing.ts';
 import { SCOPES } from '../oidc/provider.ts';
@@ -31,7 +32,7 @@ import { deleteGroup, type Group, listGroups, renameGroup } from '../store/group
 import type { ProviderKeys } from '../store/keys.ts';
 import type { Pairing, PairingInput } from '../store/pairings.ts';
 import { refusedRedirectUris } from '../store/redirect-uris.ts';
-import type { HttpRedirectSetting } from '../store/settings.ts';
+import type { HttpRedirectSetting, PasswordRules } from '../store/settings.ts';
 import type { NewUser, PublicUser, UserFields } from '../store/users.ts';
 import { TYPE_DEFS } from './type-defs.ts';
 
@@ -280,10 +281,11 @@ function pairingChanges(ctx: Context, id: string): Repeater<{ pairingChanged: Pa
  *
  * @param ctx - Request context.
  * @param userId - The user.
+ * @returns Once the apps with a back-channel logout URI have been told.
  */
-function signOutEverywhere(ctx: Context, userId: string): void {
-  ctx.sessions.revokeAccount(userId);
+async function signOutEverywhere(ctx: Context, userId: string): Promise<void> {
   ctx.adminSessions.removeUser(userId);
+  await ctx.sessions.revokeAccount(userId, ctx.ip);
 }
 
 /**
@@ -396,8 +398,36 @@ const resolvers = {
         ...session,
         clientNames: clientIds.map((clientId) => sessionClientName(clientId, ctx.clients, ctx.branding.read())),
       })),
+    /**
+     * Resolves `User.secondFactors`.
+     *
+     * @param user - The user.
+     * @param _args - Unused.
+     * @param ctx - Request context.
+     * @returns What they have set up.
+     */
+    secondFactors: (user: PublicUser, _args: unknown, ctx: Context) => {
+      const { hasTotp, recoveryCodesLeft, passkeys } = ctx.factors.summary(user.id);
+      return { hasTotp, recoveryCodesLeft, passkeyCount: passkeys.length };
+    },
   },
   Query: {
+    /**
+     * Resolves `Query.tokenLifetimeDefaults`.
+     *
+     * @returns The server's token lifetimes and the bounds on a client's own.
+     */
+    tokenLifetimeDefaults: () => {
+      const { accessTokenSeconds, clientCredentialsSeconds, idTokenSeconds, refreshTokenSeconds } =
+        TOKEN_LIFETIME_DEFAULTS;
+      return {
+        accessTokenSeconds,
+        clientCredentialsSeconds,
+        idTokenSeconds,
+        refreshTokenSeconds,
+        ...CLIENT_TOKEN_LIFETIME_DEFAULTS,
+      };
+    },
     /**
      * Resolves `Query.provider`.
      *
@@ -495,6 +525,15 @@ const resolvers = {
      */
     httpRedirects: (_parent: unknown, _args: unknown, ctx: Context): HttpRedirectSetting =>
       ctx.settings.httpRedirects(),
+    /**
+     * Resolves `Query.passwordRules`.
+     *
+     * @param _parent - Unused.
+     * @param _args - Unused.
+     * @param ctx - Request context.
+     * @returns The strength and breach rules.
+     */
+    passwordRules: (_parent: unknown, _args: unknown, ctx: Context): PasswordRules => ctx.settings.passwordRules(),
     /**
      * Resolves `Query.pairing`.
      *
@@ -652,7 +691,12 @@ const resolvers = {
      * @param ctx - Request context.
      * @returns The new user.
      */
-    createUser: (_parent: unknown, args: { input: NewUser }, ctx: Context): PublicUser => {
+    createUser: async (_parent: unknown, args: { input: NewUser }, ctx: Context): Promise<PublicUser> => {
+      const { password, username, name, email } = args.input;
+      const hasPassword = password !== undefined && password !== null && password !== '';
+      if (hasPassword) {
+        await ctx.passwordPolicy.check(password, { username, name, email });
+      }
       const user = ctx.users.create(args.input);
       return audited(ctx, AuditType.UserCreated, userTarget(user), refreshed(ctx, user));
     },
@@ -676,7 +720,16 @@ const resolvers = {
      * @param ctx - Request context.
      * @returns The user.
      */
-    setUserPassword: (_parent: unknown, args: { id: string; password: string }, ctx: Context): PublicUser => {
+    setUserPassword: async (
+      _parent: unknown,
+      args: { id: string; password: string },
+      ctx: Context,
+    ): Promise<PublicUser> => {
+      const owner = ctx.users.find(args.id);
+      if (owner === null) {
+        throw notFound(`No user has the ID "${args.id}".`);
+      }
+      await ctx.passwordPolicy.check(args.password, owner);
       const user = ctx.users.setPassword(args.id, args.password);
       ctx.passwordLinks.cancelFor(user.id);
       return audited(ctx, AuditType.UserPasswordSet, userTarget(user), user);
@@ -689,10 +742,11 @@ const resolvers = {
      * @param ctx - Request context.
      * @returns The removed user.
      */
-    deleteUser: (_parent: unknown, args: { id: string }, ctx: Context): PublicUser => {
+    deleteUser: async (_parent: unknown, args: { id: string }, ctx: Context): Promise<PublicUser> => {
       const user = ctx.users.remove(args.id);
-      signOutEverywhere(ctx, user.id);
+      await signOutEverywhere(ctx, user.id);
       ctx.passwordLinks.cancelFor(user.id);
+      ctx.factors.removeAll(user.id);
       return audited(ctx, AuditType.UserDeleted, userTarget(user), refreshed(ctx, user));
     },
     /**
@@ -703,10 +757,14 @@ const resolvers = {
      * @param ctx - Request context.
      * @returns The user.
      */
-    setUserDisabled: (_parent: unknown, args: { id: string; disabled: boolean }, ctx: Context): PublicUser => {
+    setUserDisabled: async (
+      _parent: unknown,
+      args: { id: string; disabled: boolean },
+      ctx: Context,
+    ): Promise<PublicUser> => {
       const user = ctx.users.setDisabled(args.id, args.disabled);
       if (user.disabled) {
-        signOutEverywhere(ctx, user.id);
+        await signOutEverywhere(ctx, user.id);
       }
       return audited(ctx, user.disabled ? AuditType.UserDisabled : AuditType.UserEnabled, userTarget(user), user);
     },
@@ -719,9 +777,14 @@ const resolvers = {
      * @returns The user.
      * @throws NOT_FOUND when the user has no such session.
      */
-    endUserSession: (_parent: unknown, args: { id: string; sessionId: string }, ctx: Context): PublicUser => {
+    endUserSession: async (
+      _parent: unknown,
+      args: { id: string; sessionId: string },
+      ctx: Context,
+    ): Promise<PublicUser> => {
       const user = loadUser(ctx, args.id);
-      if (ctx.sessions.endSession(user.id, args.sessionId) === false) {
+      const isEnded = await ctx.sessions.endSession(user.id, args.sessionId, ctx.ip);
+      if (isEnded === false) {
         throw notFound(`"${user.username}" has no session "${args.sessionId}".`);
       }
       return audited(ctx, AuditType.UserSessionEnded, userTarget(user), user, { sessionId: args.sessionId });
@@ -734,10 +797,23 @@ const resolvers = {
      * @param ctx - Request context.
      * @returns The user.
      */
-    signOutUser: (_parent: unknown, args: { id: string }, ctx: Context): PublicUser => {
+    signOutUser: async (_parent: unknown, args: { id: string }, ctx: Context): Promise<PublicUser> => {
       const user = loadUser(ctx, args.id);
-      signOutEverywhere(ctx, user.id);
+      await signOutEverywhere(ctx, user.id);
       return audited(ctx, AuditType.UserSignedOut, userTarget(user), user);
+    },
+    /**
+     * Resolves `Mutation.resetSecondFactors`.
+     *
+     * @param _parent - Unused.
+     * @param args - The user's id.
+     * @param ctx - Request context.
+     * @returns The user.
+     */
+    resetSecondFactors: (_parent: unknown, args: { id: string }, ctx: Context): PublicUser => {
+      const user = loadUser(ctx, args.id);
+      ctx.factors.removeAll(user.id);
+      return audited(ctx, AuditType.UserSecondFactorsReset, userTarget(user), user);
     },
     /**
      * Resolves `Mutation.createPasswordLink`.
@@ -832,6 +908,30 @@ const resolvers = {
       return audited(ctx, AuditType.HttpRedirectsSet, SETTINGS_TARGET, setting, {
         httpRedirects: setting.isAllowed ? 'allowed' : 'refused',
         chosenBy: setting.isSet ? 'operator' : 'issuer',
+      });
+    },
+    /**
+     * Resolves `Mutation.setPasswordRules`.
+     *
+     * @param _parent - Unused.
+     * @param args - The rules to change; null or left out keeps one.
+     * @param ctx - Request context.
+     * @returns The rules.
+     */
+    setPasswordRules: (
+      _parent: unknown,
+      args: { minScore?: number | null; checkBreaches?: boolean | null },
+      ctx: Context,
+    ): PasswordRules => {
+      const rules = ctx.settings.setPasswordRules({
+        ...(args.minScore === undefined || args.minScore === null ? {} : { minScore: args.minScore }),
+        ...(args.checkBreaches === undefined || args.checkBreaches === null
+          ? {}
+          : { checkBreaches: args.checkBreaches }),
+      });
+      return audited(ctx, AuditType.PasswordRulesSet, SETTINGS_TARGET, rules, {
+        minScore: String(rules.minScore),
+        breachCheck: rules.checkBreaches ? 'on' : 'off',
       });
     },
   },

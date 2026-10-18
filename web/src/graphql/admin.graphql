@@ -12,6 +12,13 @@ fragment ClientFields on Client {
   logoUri
   createdAt
   refusedRedirectUris
+  tokenLifetimes {
+    accessTokenSeconds
+    idTokenSeconds
+    refreshTokenSeconds
+  }
+  backchannelLogoutUri
+  backchannelLogoutSessionRequired
 }
 
 fragment PairingFields on Pairing {
@@ -38,6 +45,11 @@ fragment UserFields on User {
   disabled
   hasPassword
   createdAt
+  secondFactors {
+    hasTotp
+    recoveryCodesLeft
+    passkeyCount
+  }
 }
 
 query Provider {
@@ -163,6 +175,12 @@ mutation EndUserSession($id: ID!, $sessionId: ID!) {
   }
 }
 
+mutation ResetSecondFactors($id: ID!) {
+  resetSecondFactors(id: $id) {
+    id
+  }
+}
+
 mutation SignOutUser($id: ID!) {
   signOutUser(id: $id) {
     id
@@ -227,6 +245,17 @@ fragment HttpRedirectsFields on HttpRedirects {
   isIssuerHttp
 }
 
+query TokenLifetimeDefaults {
+  tokenLifetimeDefaults {
+    accessTokenSeconds
+    clientCredentialsSeconds
+    idTokenSeconds
+    refreshTokenSeconds
+    minSeconds
+    maxSeconds
+  }
+}
+
 query HttpRedirects {
   httpRedirects {
     ...HttpRedirectsFields
@@ -236,6 +265,23 @@ query HttpRedirects {
 mutation SetHttpRedirects($allowed: Boolean) {
   setHttpRedirects(allowed: $allowed) {
     ...HttpRedirectsFields
+  }
+}
+
+fragment PasswordRulesFields on PasswordRules {
+  minScore
+  checkBreaches
+}
+
+query PasswordRules {
+  passwordRules {
+    ...PasswordRulesFields
+  }
+}
+
+mutation SetPasswordRules($minScore: Int, $checkBreaches: Boolean) {
+  setPasswordRules(minScore: $minScore, checkBreaches: $checkBreaches) {
+    ...PasswordRulesFields
   }
 }
 

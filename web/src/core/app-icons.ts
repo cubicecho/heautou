@@ -9,6 +9,7 @@ export {
   LogOut,
   MonitorSmartphone,
   ShieldCheck,
+  ShieldOff,
   Tags,
   UserRoundCheck,
   UsersRound,
