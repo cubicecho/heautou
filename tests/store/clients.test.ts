@@ -1,6 +1,12 @@
 import path from 'node:path';
+import { CLIENT_TOKEN_LIFETIME_DEFAULTS } from '../../server/core/defaults.ts';
 import { ErrorCode } from '../../server/core/errors.ts';
-import { ClientAuthMethod, createClientStore, type OidcClient } from '../../server/store/clients.ts';
+import {
+  ClientAuthMethod,
+  createClientStore,
+  DEFAULT_CLIENT_TOKEN_LIFETIMES,
+  type OidcClient,
+} from '../../server/store/clients.ts';
 import { openJsonFile } from '../../server/store/json-file.ts';
 import { tempDir } from '../helpers.ts';
 
@@ -40,6 +46,36 @@ describe('client store', () => {
     store.create({ ...FIELDS, clientId: 'grafana' });
     expect(() => store.create({ ...FIELDS, clientId: 'grafana' })).toThrow(
       expect.objectContaining({ extensions: expect.objectContaining({ code: ErrorCode.BadUserInput }) }),
+    );
+  });
+
+  it('keeps a client on the default token lifetimes until it is given its own', () => {
+    const { store } = freshStore();
+    const { clientId } = store.create({ ...FIELDS, clientId: 'grafana' });
+    expect(store.find(clientId)?.tokenLifetimes).toEqual(DEFAULT_CLIENT_TOKEN_LIFETIMES);
+    const tokenLifetimes = { accessTokenSeconds: 900, idTokenSeconds: null, refreshTokenSeconds: 2_592_000 };
+    store.update(clientId, { ...FIELDS, tokenLifetimes });
+    expect(store.find(clientId)?.tokenLifetimes).toEqual(tokenLifetimes);
+    store.update(clientId, { ...FIELDS, name: 'Grafana 2' });
+    expect(store.find(clientId)?.tokenLifetimes).toEqual(tokenLifetimes);
+  });
+
+  it('refuses a token lifetime outside the bounds', () => {
+    const { store } = freshStore();
+    const { minSeconds, maxSeconds } = CLIENT_TOKEN_LIFETIME_DEFAULTS;
+    const lifetimes = (accessTokenSeconds: number) => ({ ...FIELDS, tokenLifetimes: { accessTokenSeconds } });
+    expect(() => store.create(lifetimes(minSeconds - 1))).toThrow(/accessTokenSeconds/);
+    expect(() => store.create(lifetimes(maxSeconds + 1))).toThrow(/accessTokenSeconds/);
+    expect(() => store.create(lifetimes(minSeconds + 0.5))).toThrow(/whole number/);
+  });
+
+  it('reads a client saved before lifetimes existed as on the defaults', () => {
+    const file = path.join(tempDir(), 'clients.json');
+    const saved = createClientStore(openJsonFile<OidcClient[]>(file, [])).create({ ...FIELDS, clientId: 'old' });
+    const { tokenLifetimes: _dropped, ...older } = saved;
+    openJsonFile<OidcClient[]>(file, []).update(() => [older as OidcClient]);
+    expect(createClientStore(openJsonFile<OidcClient[]>(file, [])).find('old')?.tokenLifetimes).toEqual(
+      DEFAULT_CLIENT_TOKEN_LIFETIMES,
     );
   });
 

@@ -51,8 +51,10 @@ export interface TokenLifetimeSettings {
   interactionSeconds: number;
   /** A signed-in browser session at the provider, in seconds. */
   sessionSeconds: number;
-  /** What a user has allowed a client to see, in seconds. */
+  /** What a user has allowed a client to see, in seconds. Stretched to a client's longer refresh token. */
   grantSeconds: number;
+  /** An access token a client gets for itself with the client credentials grant, in seconds. */
+  clientCredentialsSeconds: number;
 }
 
 export const TOKEN_LIFETIME_DEFAULTS: Readonly<TokenLifetimeSettings> = Object.freeze({
@@ -62,6 +64,20 @@ export const TOKEN_LIFETIME_DEFAULTS: Readonly<TokenLifetimeSettings> = Object.f
   interactionSeconds: 3600,
   sessionSeconds: 1_209_600,
   grantSeconds: 1_209_600,
+  clientCredentialsSeconds: 600,
+});
+
+/** The bounds on the token lifetimes an operator may give one client. */
+export interface ClientTokenLifetimeSettings {
+  /** Shortest lifetime a client's token may have, in seconds. */
+  minSeconds: number;
+  /** Longest lifetime a client's token may have, in seconds. */
+  maxSeconds: number;
+}
+
+export const CLIENT_TOKEN_LIFETIME_DEFAULTS: Readonly<ClientTokenLifetimeSettings> = Object.freeze({
+  minSeconds: 60,
+  maxSeconds: 31_536_000,
 });
 
 /** How secrets and passwords are made and checked. */

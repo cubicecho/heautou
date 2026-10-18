@@ -1,4 +1,4 @@
-import { ADMIN_DEFAULTS } from '../../server/core/defaults.ts';
+import { ADMIN_DEFAULTS, TOKEN_LIFETIME_DEFAULTS } from '../../server/core/defaults.ts';
 import { HttpStatus } from '../../server/core/wire.ts';
 import { AuditType } from '../../server/store/audit.ts';
 import { ClientAuthMethod, type OidcClient } from '../../server/store/clients.ts';
@@ -211,6 +211,62 @@ describe('who may sign in, and what clients see', () => {
       actor: null,
       target: { id: service.clientId, name: 'Backup job' },
     });
+  });
+
+  it('gives a client the token lifetimes set for it, and the defaults to others', async () => {
+    const lifetimes = { accessTokenSeconds: 300, idTokenSeconds: 600, refreshTokenSeconds: 2_419_200 };
+    const own = app.services.clients.update(client.clientId, { ...client, tokenLifetimes: lifetimes });
+    const tokens = await signInForTokens(app, own, 'ada', 'openid offline_access');
+    expect(tokens.expires_in).toBe(lifetimes.accessTokenSeconds);
+    const idToken = payloadOf(tokens.id_token);
+    expect(Number(idToken.exp) - Number(idToken.iat)).toBe(lifetimes.idTokenSeconds);
+    const introspect = await fetch(`${app.services.issuer}/token/introspection`, {
+      method: 'POST',
+      headers: { authorization: basicAuth(own), 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ token: tokens.refresh_token ?? '' }),
+    });
+    const refresh = await introspect.json();
+    expect(refresh.exp - refresh.iat).toBe(lifetimes.refreshTokenSeconds);
+    // The grant outlives its refresh token's default, so the refresh token still works.
+    const refreshed = await fetch(`${app.services.issuer}/token`, {
+      method: 'POST',
+      headers: { authorization: basicAuth(own), 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: tokens.refresh_token ?? '' }),
+    });
+    expect((await refreshed.json()).expires_in).toBe(lifetimes.accessTokenSeconds);
+
+    const other = app.services.clients.create({
+      name: 'Notes',
+      authMethod: ClientAuthMethod.SecretBasic,
+      redirectUris: [REDIRECT_URI],
+      postLogoutRedirectUris: [],
+    });
+    expect((await signInForTokens(app, other, 'ada')).expires_in).toBe(TOKEN_LIFETIME_DEFAULTS.accessTokenSeconds);
+  });
+
+  it('gives client credentials tokens the client’s access token lifetime', async () => {
+    const service = app.services.clients.create({
+      name: 'Backup job',
+      authMethod: ClientAuthMethod.SecretBasic,
+      redirectUris: [],
+      postLogoutRedirectUris: [],
+      allowClientCredentials: true,
+    });
+    const machineToken = async () => {
+      const res = await fetch(`${app.services.issuer}/token`, {
+        method: 'POST',
+        headers: { authorization: basicAuth(service), 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ grant_type: 'client_credentials' }),
+      });
+      return res.json();
+    };
+    expect((await machineToken()).expires_in).toBe(TOKEN_LIFETIME_DEFAULTS.clientCredentialsSeconds);
+    const accessTokenSeconds = 7200;
+    app.services.clients.update(service.clientId, {
+      ...service,
+      tokenLifetimes: { accessTokenSeconds, idTokenSeconds: null, refreshTokenSeconds: null },
+    });
+    expect((await machineToken()).expires_in).toBe(accessTokenSeconds);
   });
 
   it('refuses client credentials to a client not allowed them', async () => {

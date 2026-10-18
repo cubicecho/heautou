@@ -2,6 +2,7 @@ import type { GraphQLSchema } from 'graphql';
 import { createSchema, Repeater } from 'graphql-yoga';
 import { adminUrls, type BrandingView, brandingView, sessionClientName, WEB_APP_PAGE } from '../admin/admin-client.ts';
 import type { Context } from '../core/context.ts';
+import { CLIENT_TOKEN_LIFETIME_DEFAULTS, TOKEN_LIFETIME_DEFAULTS } from '../core/defaults.ts';
 import { notFound } from '../core/errors.ts';
 import { type StartedPairing, startPairing } from '../oidc/pairing.ts';
 import { SCOPES } from '../oidc/provider.ts';
@@ -398,6 +399,22 @@ const resolvers = {
       })),
   },
   Query: {
+    /**
+     * Resolves `Query.tokenLifetimeDefaults`.
+     *
+     * @returns The server's token lifetimes and the bounds on a client's own.
+     */
+    tokenLifetimeDefaults: () => {
+      const { accessTokenSeconds, clientCredentialsSeconds, idTokenSeconds, refreshTokenSeconds } =
+        TOKEN_LIFETIME_DEFAULTS;
+      return {
+        accessTokenSeconds,
+        clientCredentialsSeconds,
+        idTokenSeconds,
+        refreshTokenSeconds,
+        ...CLIENT_TOKEN_LIFETIME_DEFAULTS,
+      };
+    },
     /**
      * Resolves `Query.provider`.
      *

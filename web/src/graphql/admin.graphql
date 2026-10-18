@@ -12,6 +12,11 @@ fragment ClientFields on Client {
   logoUri
   createdAt
   refusedRedirectUris
+  tokenLifetimes {
+    accessTokenSeconds
+    idTokenSeconds
+    refreshTokenSeconds
+  }
 }
 
 fragment PairingFields on Pairing {
@@ -225,6 +230,17 @@ fragment HttpRedirectsFields on HttpRedirects {
   isAllowed
   isSet
   isIssuerHttp
+}
+
+query TokenLifetimeDefaults {
+  tokenLifetimeDefaults {
+    accessTokenSeconds
+    clientCredentialsSeconds
+    idTokenSeconds
+    refreshTokenSeconds
+    minSeconds
+    maxSeconds
+  }
 }
 
 query HttpRedirects {

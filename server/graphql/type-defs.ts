@@ -44,10 +44,35 @@ export const TYPE_DEFS = /* GraphQL */ `
     source: ClientSource!
     "The logo the app gave when it paired. Null for none."
     logoUri: String
+    "How long its tokens stay valid, where the operator changed it."
+    tokenLifetimes: ClientTokenLifetimes!
     "Its redirect and post-logout URIs the redirect rule refuses now. Saved before the rule applied, they still work; saving the client again needs them changed."
     refusedRedirectUris: [String!]!
     "When it was added, as an ISO 8601 string."
     createdAt: String!
+  }
+
+  "How long one client's tokens stay valid, in seconds. Null is the server's default."
+  type ClientTokenLifetimes {
+    "Its access tokens, for a user or, with client credentials, for itself."
+    accessTokenSeconds: Int
+    "Its ID tokens."
+    idTokenSeconds: Int
+    "Its refresh tokens."
+    refreshTokenSeconds: Int
+  }
+
+  "How long tokens stay valid when their client does not say, in seconds, and the bounds a client's own must keep to."
+  type TokenLifetimeDefaults {
+    accessTokenSeconds: Int!
+    "An access token a client gets for itself with client credentials."
+    clientCredentialsSeconds: Int!
+    idTokenSeconds: Int!
+    refreshTokenSeconds: Int!
+    "Shortest lifetime a client may give its tokens."
+    minSeconds: Int!
+    "Longest lifetime a client may give its tokens."
+    maxSeconds: Int!
   }
 
   "Where a setup URL is."
@@ -255,6 +280,8 @@ export const TYPE_DEFS = /* GraphQL */ `
     branding: Branding!
     "Whether redirect URIs may be plain http."
     httpRedirects: HttpRedirects!
+    "The token lifetimes a client gets unless it is given its own."
+    tokenLifetimeDefaults: TokenLifetimeDefaults!
     "A pairing. Null once it has expired or been cancelled."
     pairing(id: ID!): Pairing
     """
@@ -280,6 +307,14 @@ export const TYPE_DEFS = /* GraphQL */ `
     allowedGroups: [String!]
     groupsClaim: String
     allowClientCredentials: Boolean
+    tokenLifetimes: ClientTokenLifetimesInput
+  }
+
+  "How long one client's tokens stay valid, in seconds. A lifetime left out or null is the server's default."
+  input ClientTokenLifetimesInput {
+    accessTokenSeconds: Int
+    idTokenSeconds: Int
+    refreshTokenSeconds: Int
   }
 
   "What the client of an app that pairs gets."
@@ -297,6 +332,7 @@ export const TYPE_DEFS = /* GraphQL */ `
     allowedGroups: [String!]
     groupsClaim: String
     allowClientCredentials: Boolean
+    tokenLifetimes: ClientTokenLifetimesInput
   }
 
   "A user to add. Without a password they are invited, and set one through createPasswordLink's link."

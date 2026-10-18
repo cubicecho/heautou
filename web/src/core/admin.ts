@@ -43,6 +43,7 @@ import {
   SetUserPasswordDocument,
   SignOutUserDocument,
   StartPairingDocument,
+  TokenLifetimeDefaultsDocument,
   UpdateClientDocument,
   UpdateUserDocument,
   type UserInput,
@@ -65,6 +66,7 @@ const KEYS = {
   branding: ['branding'],
   pairings: ['pairings'],
   httpRedirects: ['httpRedirects'],
+  tokenLifetimeDefaults: ['tokenLifetimeDefaults'],
   audit: ['audit'],
 } as const;
 
@@ -110,6 +112,19 @@ export async function signOut(): Promise<void> {
  */
 export function useProviderInfo() {
   return useQuery({ queryKey: KEYS.provider, queryFn: async () => (await request(ProviderDocument)).provider });
+}
+
+/**
+ * Reads the token lifetimes a client gets unless it is given its own, and the bounds on its own.
+ *
+ * @returns The query.
+ */
+export function useTokenLifetimeDefaults() {
+  return useQuery({
+    queryKey: KEYS.tokenLifetimeDefaults,
+    queryFn: async () => (await request(TokenLifetimeDefaultsDocument)).tokenLifetimeDefaults,
+    staleTime: Number.POSITIVE_INFINITY,
+  });
 }
 
 /**

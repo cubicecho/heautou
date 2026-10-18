@@ -182,6 +182,8 @@ export interface Tokens {
   access_token: string;
   id_token: string;
   refresh_token?: string;
+  /** How long the access token lasts, in seconds. */
+  expires_in: number;
 }
 
 /**

@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { ADMIN_DEFAULTS, CREDENTIAL_DEFAULTS } from '../core/defaults.ts';
+import { ADMIN_DEFAULTS, CLIENT_TOKEN_LIFETIME_DEFAULTS, CREDENTIAL_DEFAULTS } from '../core/defaults.ts';
 import { badInput, notFound } from '../core/errors.ts';
 import { parseInput } from '../core/validation.ts';
 import { DEFAULT_GROUPS_CLAIM, groupsClaimSchema, replaceGroupIn, withoutBlanks } from './claims.ts';
@@ -26,6 +26,26 @@ export const CLIENT_SOURCE_PAIRED = 'paired' as const;
 /** How a client came to be. */
 export type ClientSource = typeof CLIENT_SOURCE_ADMIN | typeof CLIENT_SOURCE_PAIRED;
 
+/**
+ * How long the tokens one client is given stay valid, in seconds. A null lifetime is the server's default
+ * (`TOKEN_LIFETIME_DEFAULTS`).
+ */
+export interface ClientTokenLifetimes {
+  /** Its access tokens, for a user or, with client credentials, for itself. */
+  accessTokenSeconds: number | null;
+  /** Its ID tokens. */
+  idTokenSeconds: number | null;
+  /** Its refresh tokens. */
+  refreshTokenSeconds: number | null;
+}
+
+/** Every lifetime left to the server's default. */
+export const DEFAULT_CLIENT_TOKEN_LIFETIMES: Readonly<ClientTokenLifetimes> = Object.freeze({
+  accessTokenSeconds: null,
+  idTokenSeconds: null,
+  refreshTokenSeconds: null,
+});
+
 /** An application that signs its users in through this provider. */
 export interface OidcClient {
   /** What the application is configured with as its client ID. */
@@ -49,6 +69,8 @@ export interface OidcClient {
   source: ClientSource;
   /** The app's logo, as the app gave it when it paired. Null for none. */
   logoUri: string | null;
+  /** How long its tokens stay valid, where the operator changed it. */
+  tokenLifetimes: ClientTokenLifetimes;
   /** When it was added, as an ISO 8601 string. */
   createdAt: string;
 }
@@ -57,6 +79,19 @@ export interface OidcClient {
 const CLIENT_ID_PATTERN = /^[A-Za-z0-9._-]+$/;
 
 const uriList = z.array(z.url({ protocol: /^[a-z][a-z0-9+.-]*$/ }).trim());
+
+const { minSeconds, maxSeconds } = CLIENT_TOKEN_LIFETIME_DEFAULTS;
+const lifetime = z
+  .number()
+  .int('give a whole number of seconds')
+  .min(minSeconds, `make it at least ${minSeconds} seconds`)
+  .max(maxSeconds, `make it at most ${maxSeconds} seconds`)
+  .nullable()
+  .default(null);
+
+const tokenLifetimesSchema = z
+  .object({ accessTokenSeconds: lifetime, idTokenSeconds: lifetime, refreshTokenSeconds: lifetime })
+  .default({ ...DEFAULT_CLIENT_TOKEN_LIFETIMES });
 
 /** What the operator writes when adding or changing a client. */
 const clientFields = z.object({
@@ -75,6 +110,7 @@ const clientFields = z.object({
     .trim()
     .nullable()
     .default(null),
+  tokenLifetimes: tokenLifetimesSchema,
 });
 
 /**
@@ -152,6 +188,7 @@ function withDefaults(client: OidcClient): OidcClient {
     allowClientCredentials: client.allowClientCredentials ?? false,
     source: client.source ?? CLIENT_SOURCE_ADMIN,
     logoUri: client.logoUri ?? null,
+    tokenLifetimes: { ...DEFAULT_CLIENT_TOKEN_LIFETIMES, ...client.tokenLifetimes },
   };
 }
 
@@ -241,8 +278,9 @@ export function createClientStore(file: JsonFile<OidcClient[]>, options: ClientS
     update: (clientId, input) => {
       const current = load(clientId);
       // What the input leaves out keeps its value, rather than taking the default a new client gets.
-      const { allowedGroups, groupsClaim, allowClientCredentials, logoUri } = current;
-      const merged = { allowedGroups, groupsClaim, allowClientCredentials, logoUri, ...withoutBlanks(input) };
+      const { allowedGroups, groupsClaim, allowClientCredentials, logoUri, tokenLifetimes } = current;
+      const kept = { allowedGroups, groupsClaim, allowClientCredentials, logoUri, tokenLifetimes };
+      const merged = { ...kept, ...withoutBlanks(input) };
       const fields = parseInput(clientFieldsSchema, merged);
       checkRedirects(fields);
       return replace(withSecretFor({ ...current, ...fields }));

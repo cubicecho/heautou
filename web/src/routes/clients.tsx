@@ -3,6 +3,7 @@ import { useState } from 'react';
 import type { ClientFieldsFragment } from '@/__generated__/graphql';
 import { AUTH_METHODS } from '@/clients/auth-methods';
 import { ClientFormDialog } from '@/clients/client-form-dialog';
+import { durationText } from '@/clients/durations';
 import { PairDialog } from '@/clients/pair-dialog';
 import { ConfirmButton } from '@/components/confirm-button';
 import { DescriptionList, PropertyRow } from '@/components/description-list';
@@ -33,6 +34,23 @@ type Editing = { kind: 'closed' } | { kind: 'new' } | { kind: 'pair' } | { kind:
  */
 function uriList(uris: readonly string[]) {
   return uris.length === 0 ? '—' : uris.join('\n');
+}
+
+/**
+ * The lifetimes a client was given, by token.
+ *
+ * @param lifetimes - Its own lifetimes, null where it has the server's.
+ * @returns Each token's lifetime, or "Server defaults" when it was given none.
+ */
+function lifetimesText(lifetimes: ClientFieldsFragment['tokenLifetimes']): string {
+  const { accessTokenSeconds, idTokenSeconds, refreshTokenSeconds } = lifetimes;
+  const named = [
+    { label: 'access', seconds: accessTokenSeconds },
+    { label: 'ID', seconds: idTokenSeconds },
+    { label: 'refresh', seconds: refreshTokenSeconds },
+  ].map(({ label, seconds }) => `${label} ${seconds === null ? 'default' : durationText(seconds)}`);
+  const isAllDefault = [accessTokenSeconds, idTokenSeconds, refreshTokenSeconds].every((seconds) => seconds === null);
+  return isAllDefault ? 'Server defaults' : named.join(', ');
 }
 
 /**
@@ -110,6 +128,7 @@ function ClientCredentials({ client }: { client: ClientFieldsFragment }) {
             label="Client credentials"
             value={client.allowClientCredentials ? 'Allowed' : 'Not allowed'}
           />,
+          <PropertyRow key="lifetimes" label="Token lifetimes" value={lifetimesText(client.tokenLifetimes)} />,
         ]}
       />
       {rotate.error === null ? null : (

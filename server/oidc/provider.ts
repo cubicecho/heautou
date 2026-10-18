@@ -1,7 +1,7 @@
 import Provider, { type Account, type AdapterFactory, interactionPolicy } from 'oidc-provider';
 import { TOKEN_LIFETIME_DEFAULTS } from '../core/defaults.ts';
 import { DEFAULT_GROUPS_CLAIM } from '../store/claims.ts';
-import { ClientAuthMethod, type ClientStore, type OidcClient } from '../store/clients.ts';
+import { ClientAuthMethod, type ClientStore, type ClientTokenLifetimes, type OidcClient } from '../store/clients.ts';
 import type { ProviderKeys } from '../store/keys.ts';
 import type { PairingStore } from '../store/pairings.ts';
 import type { SettingsStore } from '../store/settings.ts';
@@ -135,6 +135,52 @@ function originOf(uri: string): string | null {
   return URL.canParse(uri) ? new URL(uri).origin : null;
 }
 
+/** What the provider's `ttl` functions are handed for the client a token is for. */
+interface TokenOwner {
+  clientId?: string;
+}
+
+/**
+ * Builds the provider's token lifetimes: each client's own where the operator set one, the server's default
+ * otherwise.
+ *
+ * @param clients - The client store, read when each token is made so a change applies to the next one.
+ * @returns The `ttl` configuration.
+ */
+export function tokenLifetimesFor(clients: ClientStore) {
+  const {
+    accessTokenSeconds,
+    idTokenSeconds,
+    refreshTokenSeconds,
+    interactionSeconds,
+    sessionSeconds,
+    grantSeconds,
+    clientCredentialsSeconds,
+  } = TOKEN_LIFETIME_DEFAULTS;
+
+  const lifetimeOf = (owner: TokenOwner | undefined, pick: keyof ClientTokenLifetimes, fallback: number): number => {
+    const client = owner?.clientId === undefined ? null : clients.find(owner.clientId);
+    return client?.tokenLifetimes[pick] ?? fallback;
+  };
+
+  return {
+    AccessToken: (_ctx: unknown, _token: unknown, client?: TokenOwner) =>
+      lifetimeOf(client, 'accessTokenSeconds', accessTokenSeconds),
+    ClientCredentials: (_ctx: unknown, _token: unknown, client?: TokenOwner) =>
+      lifetimeOf(client, 'accessTokenSeconds', clientCredentialsSeconds),
+    IdToken: (_ctx: unknown, _token: unknown, client?: TokenOwner) =>
+      lifetimeOf(client, 'idTokenSeconds', idTokenSeconds),
+    RefreshToken: (_ctx: unknown, _token: unknown, client?: TokenOwner) =>
+      lifetimeOf(client, 'refreshTokenSeconds', refreshTokenSeconds),
+    // A refresh token is useless once its grant is gone, so a client with longer refresh tokens keeps its grant
+    // as long.
+    Grant: (_ctx: unknown, grant: TokenOwner) =>
+      Math.max(grantSeconds, lifetimeOf(grant, 'refreshTokenSeconds', grantSeconds)),
+    Interaction: interactionSeconds,
+    Session: sessionSeconds,
+  };
+}
+
 /**
  * Builds the OpenID provider. It is a Koa app; `app.ts` mounts its callback under `/oidc`.
  *
@@ -142,9 +188,6 @@ function originOf(uri: string): string | null {
  * @returns The provider.
  */
 export function createProvider(deps: ProviderDeps): Provider {
-  const { accessTokenSeconds, idTokenSeconds, refreshTokenSeconds, interactionSeconds, sessionSeconds, grantSeconds } =
-    TOKEN_LIFETIME_DEFAULTS;
-
   const { logoutSource, postLogoutSuccessSource, renderError } = createPageSources(deps.clients);
 
   const provider = new Provider(deps.issuer, {
@@ -204,14 +247,7 @@ export function createProvider(deps: ProviderDeps): Provider {
     },
     // A browser app may call the token endpoint from the origins it was registered to return to.
     clientBasedCORS: (_ctx, origin, client) => (client.redirectUris ?? []).some((uri) => originOf(uri) === origin),
-    ttl: {
-      AccessToken: accessTokenSeconds,
-      IdToken: idTokenSeconds,
-      RefreshToken: refreshTokenSeconds,
-      Interaction: interactionSeconds,
-      Session: sessionSeconds,
-      Grant: grantSeconds,
-    },
+    ttl: tokenLifetimesFor(deps.clients),
   });
   provider.proxy = deps.isProxied;
   // The browser only sees "server_error"; this is the one trace of what went wrong.
