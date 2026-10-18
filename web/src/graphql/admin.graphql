@@ -17,6 +17,8 @@ fragment ClientFields on Client {
     idTokenSeconds
     refreshTokenSeconds
   }
+  backchannelLogoutUri
+  backchannelLogoutSessionRequired
 }
 
 fragment PairingFields on Pairing {

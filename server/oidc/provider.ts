@@ -1,5 +1,5 @@
 import Provider, { type Account, type AdapterFactory, interactionPolicy } from 'oidc-provider';
-import { TOKEN_LIFETIME_DEFAULTS } from '../core/defaults.ts';
+import { BACKCHANNEL_LOGOUT_DEFAULTS, TOKEN_LIFETIME_DEFAULTS } from '../core/defaults.ts';
 import { DEFAULT_GROUPS_CLAIM } from '../store/claims.ts';
 import { ClientAuthMethod, type ClientStore, type ClientTokenLifetimes, type OidcClient } from '../store/clients.ts';
 import type { ProviderKeys } from '../store/keys.ts';
@@ -124,6 +124,8 @@ export interface ProviderDeps {
   isProxied: boolean;
   /** The claim names the operator added. */
   claimNames: ClaimNames;
+  /** Makes the provider's outgoing requests: the logout tokens it posts to apps. */
+  fetch?: typeof globalThis.fetch;
 }
 
 /**
@@ -204,6 +206,24 @@ export function tokenLifetimesFor(clients: ClientStore) {
 }
 
 /**
+ * Wraps the fetch the provider's outgoing requests go through, which are the logout tokens it posts to apps.
+ *
+ * @param send - The fetch to make them with.
+ * @returns The provider's `fetch` option.
+ *
+ * @remarks
+ * oidc-provider refuses private and loopback addresses, to keep an app it doesn't trust from aiming it at the local
+ * network. Here every URI it calls was saved by the operator or by an app paired with the operator's setup URL, and
+ * the apps are on the local network, so that dispatcher is dropped.
+ */
+function outgoingFetch(send: typeof globalThis.fetch): typeof globalThis.fetch {
+  return (input, init = {}) => {
+    const { dispatcher: _ssrfGuard, ...rest }: RequestInit & { dispatcher?: unknown } = init;
+    return send(input, { ...rest, signal: AbortSignal.timeout(BACKCHANNEL_LOGOUT_DEFAULTS.timeoutMs) });
+  };
+}
+
+/**
  * Builds the OpenID provider. It is a Koa app; `app.ts` mounts its callback under `/oidc`.
  *
  * @param deps - What the provider is built from.
@@ -268,7 +288,11 @@ export function createProvider(deps: ProviderDeps): Provider {
       },
       // The app can update or remove itself later with the registration access token it was given (RFC 7592).
       registrationManagement: { enabled: true, rotateRegistrationAccessToken: true },
+      // A sign-out at the provider posts a logout token to each app the session signed in to that has a
+      // `backchannel_logout_uri`. Sessions an admin ends are told by `backchannel.ts`.
+      backchannelLogout: { enabled: true },
     },
+    fetch: outgoingFetch(deps.fetch ?? globalThis.fetch),
     // A browser app may call the token endpoint from the origins it was registered to return to.
     clientBasedCORS: (_ctx, origin, client) => (client.redirectUris ?? []).some((uri) => originOf(uri) === origin),
     ttl: tokenLifetimesFor(deps.clients),

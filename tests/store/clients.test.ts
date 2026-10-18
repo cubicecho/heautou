@@ -100,6 +100,40 @@ describe('client store', () => {
     expect(store.create({ ...FIELDS, redirectUris: ['http://localhost:8080/cb'] }).clientId).toBeTruthy();
   });
 
+  it('holds a back-channel logout URI to the https rule, keeps it on update and clears it when blank', () => {
+    const file = path.join(tempDir(), 'clients.json');
+    let allowsHttp = false;
+    const store = createClientStore(openJsonFile<OidcClient[]>(file, []), { allowsHttpRedirects: () => allowsHttp });
+    const backchannelLogoutUri = 'https://grafana.example/logout/backchannel';
+    const { clientId } = store.create({ ...FIELDS, backchannelLogoutUri });
+    expect(store.find(clientId)).toMatchObject({ backchannelLogoutUri, backchannelLogoutSessionRequired: true });
+    store.update(clientId, { ...FIELDS, name: 'Grafana 2' });
+    expect(store.find(clientId)?.backchannelLogoutUri).toBe(backchannelLogoutUri);
+    store.update(clientId, { ...FIELDS, backchannelLogoutUri: '' });
+    expect(store.find(clientId)?.backchannelLogoutUri).toBeNull();
+
+    const http = { ...FIELDS, backchannelLogoutUri: 'http://nas.lan:31001/logout' };
+    expect(() => store.create(http)).toThrow(/backchannelLogoutUri: .*plain http/);
+    expect(() => store.create({ ...FIELDS, backchannelLogoutUri: 'com.example.app:/logout' })).toThrow(
+      /backchannelLogoutUri/,
+    );
+    expect(() => store.create({ ...FIELDS, backchannelLogoutUri: `${backchannelLogoutUri}#x` })).toThrow(/fragment/);
+    expect(store.create({ ...FIELDS, backchannelLogoutUri: 'http://localhost:8080/logout' }).clientId).toBeTruthy();
+    allowsHttp = true;
+    expect(store.create(http).backchannelLogoutUri).toBe(http.backchannelLogoutUri);
+  });
+
+  it('reads a client saved before back-channel logout existed as having none', () => {
+    const file = path.join(tempDir(), 'clients.json');
+    const saved = createClientStore(openJsonFile<OidcClient[]>(file, [])).create({ ...FIELDS, clientId: 'old' });
+    const { backchannelLogoutUri: _uri, backchannelLogoutSessionRequired: _sid, ...older } = saved;
+    openJsonFile<OidcClient[]>(file, []).update(() => [older as OidcClient]);
+    expect(createClientStore(openJsonFile<OidcClient[]>(file, [])).find('old')).toMatchObject({
+      backchannelLogoutUri: null,
+      backchannelLogoutSessionRequired: true,
+    });
+  });
+
   it("takes a native app's own scheme for a public client only", () => {
     const { store } = freshStore();
     const native = { ...FIELDS, redirectUris: ['com.example.app:/callback'] };

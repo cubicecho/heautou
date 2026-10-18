@@ -156,11 +156,11 @@ export function createAccountRouter(deps: AccountDeps): Router {
     }
   });
 
-  router.post(ADMIN_PATH.accountSignOut, ...json, (req, res) => {
+  router.post(ADMIN_PATH.accountSignOut, ...json, async (req, res) => {
     const user = signedInUser(deps, req);
     if (user !== null) {
-      sessions.revokeAccount(user.id);
       adminSessions.removeUser(user.id);
+      await sessions.revokeAccount(user.id, req.ip ?? null);
       audit.record({ type: AuditType.AccountSignedOutEverywhere, actor: actorOf(user), ip: req.ip ?? null });
     }
     res.clearCookie(COOKIE.session, sessionCookieOptions(issuer));

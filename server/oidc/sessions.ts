@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { MS_PER_SECOND } from '../core/wire.ts';
 import { isLive, type ModelDocument, type ModelFiles } from './adapter.ts';
+import type { AppLogout, LogoutNotifier } from './backchannel.ts';
 
 /** The provider's models that belong to one signed-in user. */
 const ACCOUNT_MODELS = ['Session', 'Grant', 'AccessToken', 'RefreshToken', 'AuthorizationCode'] as const;
@@ -14,7 +15,9 @@ const sessionPayloadSchema = z.object({
   accountId: z.string().optional(),
   /** When they signed in, in epoch seconds. */
   loginTs: z.number().optional(),
-  authorizations: z.record(z.string(), z.object({ grantId: z.string().optional() }).loose()).optional(),
+  authorizations: z
+    .record(z.string(), z.object({ grantId: z.string().optional(), sid: z.string().optional() }).loose())
+    .optional(),
 });
 
 /** One browser signed in to the provider. */
@@ -39,20 +42,28 @@ export interface SessionTools {
    */
   sessionsOf: (accountId: string) => SessionInfo[];
   /**
-   * Ends one session, and the grants and tokens it gave clients.
+   * Ends one session, and the grants and tokens it gave clients, then tells the clients it signed in to that have a
+   * back-channel logout URI.
    *
    * @param accountId - The user's id.
    * @param sessionId - The session's id.
-   * @returns False when the user has no such session.
+   * @param ip - The address of the request ending it, for the audit log.
+   * @returns False when the user has no such session. A client that can't be told never fails it.
    */
-  endSession: (accountId: string, sessionId: string) => boolean;
+  endSession: (accountId: string, sessionId: string, ip: string | null) => Promise<boolean>;
   /**
-   * Ends every session, grant and token of a user. Clients find their tokens revoked at the next refresh or
-   * userinfo call; ID tokens already issued stay valid until they expire.
+   * Ends every session, grant and token of a user, and tells the clients their sessions signed in to that have a
+   * back-channel logout URI.
    *
    * @param accountId - The user's id.
+   * @param ip - The address of the request ending them, for the audit log.
+   * @returns Once the clients have been told. A client that can't be told never fails it.
+   *
+   * @remarks
+   * Other clients find their tokens revoked at the next refresh or userinfo call; ID tokens already issued stay valid
+   * until they expire.
    */
-  revokeAccount: (accountId: string) => void;
+  revokeAccount: (accountId: string, ip: string | null) => Promise<void>;
 }
 
 /**
@@ -86,14 +97,22 @@ function isoOrNull(ms: number | null): string | null {
   return ms === null ? null : new Date(ms).toISOString();
 }
 
+/** What the session tools know of a session besides what they show. */
+interface StoredSession extends SessionInfo {
+  grantIds: string[];
+  /** The clients it signed in to, with the session ID each was given. */
+  logouts: AppLogout[];
+}
+
 /**
  * Builds the session tools over the provider's model files.
  *
  * @param files - The files the provider's adapter keeps its models in.
+ * @param [notifyLogout] - Tells clients the sessions they signed in with have ended.
  * @returns The tools.
  */
-export function createSessionTools(files: ModelFiles): SessionTools {
-  const sessionsOf = (accountId: string): (SessionInfo & { grantIds: string[] })[] => {
+export function createSessionTools(files: ModelFiles, notifyLogout: LogoutNotifier = async () => {}): SessionTools {
+  const sessionsOf = (accountId: string): StoredSession[] => {
     const now = files.now();
     return Object.entries(files.open(SESSION_MODEL).read())
       .filter(([, entry]) => isLive(entry, now))
@@ -113,6 +132,7 @@ export function createSessionTools(files: ModelFiles): SessionTools {
             expiresAt: isoOrNull(entry.expiresAt),
             clientIds: Object.keys(authorizations),
             grantIds,
+            logouts: Object.entries(authorizations).map(([clientId, { sid }]) => ({ accountId, clientId, sid })),
           },
         ];
       })
@@ -120,8 +140,8 @@ export function createSessionTools(files: ModelFiles): SessionTools {
   };
 
   return {
-    sessionsOf: (accountId) => sessionsOf(accountId).map(({ grantIds: _grantIds, ...info }) => info),
-    endSession: (accountId, sessionId) => {
+    sessionsOf: (accountId) => sessionsOf(accountId).map(({ grantIds: _grantIds, logouts: _logouts, ...info }) => info),
+    endSession: async (accountId, sessionId, ip) => {
       const session = sessionsOf(accountId).find((candidate) => candidate.id === sessionId);
       if (session === undefined) {
         return false;
@@ -132,12 +152,15 @@ export function createSessionTools(files: ModelFiles): SessionTools {
       for (const model of GRANT_MODELS) {
         dropWhere(files, model, (_key, payload) => grants.has(String(payload.grantId)));
       }
+      await notifyLogout(session.logouts, ip);
       return true;
     },
-    revokeAccount: (accountId) => {
+    revokeAccount: async (accountId, ip) => {
+      const logouts = sessionsOf(accountId).flatMap((session) => session.logouts);
       for (const model of ACCOUNT_MODELS) {
         dropWhere(files, model, (_key, payload) => payload.accountId === accountId);
       }
+      await notifyLogout(logouts, ip);
     },
   };
 }

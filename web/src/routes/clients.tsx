@@ -54,6 +54,20 @@ function lifetimesText(lifetimes: ClientFieldsFragment['tokenLifetimes']): strin
 }
 
 /**
+ * Where a client is told its users signed out.
+ *
+ * @param client - The client.
+ * @returns Its back-channel logout URI, marked when the logout token carries no session ID, or a dash for none.
+ */
+function backchannelText(client: ClientFieldsFragment): string {
+  const { backchannelLogoutUri, backchannelLogoutSessionRequired } = client;
+  if (backchannelLogoutUri === null || backchannelLogoutUri === undefined) {
+    return '—';
+  }
+  return backchannelLogoutSessionRequired ? backchannelLogoutUri : `${backchannelLogoutUri} (no session ID)`;
+}
+
+/**
  * What an application is configured with: its ID, its secret, its URIs.
  *
  * @param props - The client.
@@ -116,6 +130,12 @@ function ClientCredentials({ client }: { client: ClientFieldsFragment }) {
             label="Post-logout URIs"
             value={uriList(client.postLogoutRedirectUris)}
             valueClassName="font-mono break-all whitespace-pre-line"
+          />,
+          <PropertyRow
+            key="backchannel"
+            label="Back-channel logout"
+            value={backchannelText(client)}
+            valueClassName={client.backchannelLogoutUri === null ? undefined : 'font-mono break-all'}
           />,
           <PropertyRow
             key="groups"

@@ -31,6 +31,11 @@ export const AuditType = {
   AppTokenRefused: 'app_token_refused',
   /** A user signed out from inside an application (RP-initiated logout). */
   AppSignedOut: 'app_signed_out',
+  /**
+   * The provider could not tell an application that one of its users signed out (back-channel logout): the app was
+   * unreachable or refused the logout token. The detail has the error.
+   */
+  AppLogoutFailed: 'app_logout_failed',
   /** A client got a token for itself with the client credentials grant, with no user. */
   MachineTokenIssued: 'machine_token_issued',
   /** A user signed in to the admin UI or their account page. */

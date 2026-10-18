@@ -281,10 +281,11 @@ function pairingChanges(ctx: Context, id: string): Repeater<{ pairingChanged: Pa
  *
  * @param ctx - Request context.
  * @param userId - The user.
+ * @returns Once the apps with a back-channel logout URI have been told.
  */
-function signOutEverywhere(ctx: Context, userId: string): void {
-  ctx.sessions.revokeAccount(userId);
+async function signOutEverywhere(ctx: Context, userId: string): Promise<void> {
   ctx.adminSessions.removeUser(userId);
+  await ctx.sessions.revokeAccount(userId, ctx.ip);
 }
 
 /**
@@ -741,9 +742,9 @@ const resolvers = {
      * @param ctx - Request context.
      * @returns The removed user.
      */
-    deleteUser: (_parent: unknown, args: { id: string }, ctx: Context): PublicUser => {
+    deleteUser: async (_parent: unknown, args: { id: string }, ctx: Context): Promise<PublicUser> => {
       const user = ctx.users.remove(args.id);
-      signOutEverywhere(ctx, user.id);
+      await signOutEverywhere(ctx, user.id);
       ctx.passwordLinks.cancelFor(user.id);
       ctx.factors.removeAll(user.id);
       return audited(ctx, AuditType.UserDeleted, userTarget(user), refreshed(ctx, user));
@@ -756,10 +757,14 @@ const resolvers = {
      * @param ctx - Request context.
      * @returns The user.
      */
-    setUserDisabled: (_parent: unknown, args: { id: string; disabled: boolean }, ctx: Context): PublicUser => {
+    setUserDisabled: async (
+      _parent: unknown,
+      args: { id: string; disabled: boolean },
+      ctx: Context,
+    ): Promise<PublicUser> => {
       const user = ctx.users.setDisabled(args.id, args.disabled);
       if (user.disabled) {
-        signOutEverywhere(ctx, user.id);
+        await signOutEverywhere(ctx, user.id);
       }
       return audited(ctx, user.disabled ? AuditType.UserDisabled : AuditType.UserEnabled, userTarget(user), user);
     },
@@ -772,9 +777,14 @@ const resolvers = {
      * @returns The user.
      * @throws NOT_FOUND when the user has no such session.
      */
-    endUserSession: (_parent: unknown, args: { id: string; sessionId: string }, ctx: Context): PublicUser => {
+    endUserSession: async (
+      _parent: unknown,
+      args: { id: string; sessionId: string },
+      ctx: Context,
+    ): Promise<PublicUser> => {
       const user = loadUser(ctx, args.id);
-      if (ctx.sessions.endSession(user.id, args.sessionId) === false) {
+      const isEnded = await ctx.sessions.endSession(user.id, args.sessionId, ctx.ip);
+      if (isEnded === false) {
         throw notFound(`"${user.username}" has no session "${args.sessionId}".`);
       }
       return audited(ctx, AuditType.UserSessionEnded, userTarget(user), user, { sessionId: args.sessionId });
@@ -787,9 +797,9 @@ const resolvers = {
      * @param ctx - Request context.
      * @returns The user.
      */
-    signOutUser: (_parent: unknown, args: { id: string }, ctx: Context): PublicUser => {
+    signOutUser: async (_parent: unknown, args: { id: string }, ctx: Context): Promise<PublicUser> => {
       const user = loadUser(ctx, args.id);
-      signOutEverywhere(ctx, user.id);
+      await signOutEverywhere(ctx, user.id);
       return audited(ctx, AuditType.UserSignedOut, userTarget(user), user);
     },
     /**

@@ -289,3 +289,13 @@ export const TWO_FACTOR_DEFAULTS: Readonly<TwoFactorSettings> = Object.freeze({
   maxPasskeys: 20,
   maxPasskeyNameLength: 60,
 });
+
+/** How the provider tells an app that one of its users signed out (OpenID Connect Back-Channel Logout). */
+export interface BackchannelLogoutSettings {
+  /** How long the provider waits for an app to answer a logout token, in milliseconds. */
+  timeoutMs: number;
+}
+
+export const BACKCHANNEL_LOGOUT_DEFAULTS: Readonly<BackchannelLogoutSettings> = Object.freeze({
+  timeoutMs: 5000,
+});

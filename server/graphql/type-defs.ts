@@ -47,6 +47,10 @@ export const TYPE_DEFS = /* GraphQL */ `
     logoUri: String
     "How long its tokens stay valid, where the operator changed it."
     tokenLifetimes: ClientTokenLifetimes!
+    "Where the provider posts a logout token when one of its users signs out (back-channel logout). Null for none."
+    backchannelLogoutUri: String
+    "Whether the logout token, and its ID tokens, carry the session ID (sid) the app can match its session by."
+    backchannelLogoutSessionRequired: Boolean!
     "Its redirect and post-logout URIs the redirect rule refuses now. Saved before the rule applied, they still work; saving the client again needs them changed."
     refusedRedirectUris: [String!]!
     "When it was added, as an ISO 8601 string."
@@ -330,6 +334,9 @@ export const TYPE_DEFS = /* GraphQL */ `
     groupsClaim: String
     allowClientCredentials: Boolean
     tokenLifetimes: ClientTokenLifetimesInput
+    "Where the provider posts a logout token when one of its users signs out. An empty string removes it."
+    backchannelLogoutUri: String
+    backchannelLogoutSessionRequired: Boolean
   }
 
   "How long one client's tokens stay valid, in seconds. A lifetime left out or null is the server's default."
@@ -355,6 +362,9 @@ export const TYPE_DEFS = /* GraphQL */ `
     groupsClaim: String
     allowClientCredentials: Boolean
     tokenLifetimes: ClientTokenLifetimesInput
+    "Where the provider posts a logout token when one of its users signs out. An empty string removes it."
+    backchannelLogoutUri: String
+    backchannelLogoutSessionRequired: Boolean
   }
 
   "A user to add. Without a password they are invited, and set one through createPasswordLink's link."

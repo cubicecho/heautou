@@ -93,6 +93,8 @@ export function ClientFormDialog({ client, open, onOpenChange, onSaved }: Client
       accessToken: lifetimeText(ownLifetimes?.accessTokenSeconds),
       idToken: lifetimeText(ownLifetimes?.idTokenSeconds),
       refreshToken: lifetimeText(ownLifetimes?.refreshTokenSeconds),
+      backchannelLogoutUri: client?.backchannelLogoutUri ?? '',
+      backchannelLogoutSessionRequired: client?.backchannelLogoutSessionRequired ?? true,
     },
     onSubmit: async ({ value }) => {
       const input = {
@@ -108,6 +110,9 @@ export function ClientFormDialog({ client, open, onOpenChange, onSaved }: Client
           idTokenSeconds: secondsIn(value.idToken) ?? null,
           refreshTokenSeconds: secondsIn(value.refreshToken) ?? null,
         },
+        // Blank removes it: null would keep what is saved.
+        backchannelLogoutUri: value.backchannelLogoutUri.trim(),
+        backchannelLogoutSessionRequired: value.backchannelLogoutSessionRequired,
       };
       const saved = isEdit
         ? await update.mutateAsync({ clientId: client.clientId, input })
@@ -171,6 +176,19 @@ export function ClientFormDialog({ client, open, onOpenChange, onSaved }: Client
             label="Post-logout redirect URIs"
             rows={URI_ROWS}
             description="One per line. Where the application may send users after signing out. Optional."
+          />
+          <InputField
+            form={form}
+            name="backchannelLogoutUri"
+            label="Back-channel logout URI"
+            description="Optional. This provider posts a logout token here when a user signs out or an admin ends their sessions, so the application ends its own session too."
+            placeholder="https://app.example.com/oidc/backchannel-logout"
+          />
+          <SwitchField
+            form={form}
+            name="backchannelLogoutSessionRequired"
+            label="Send the session ID"
+            description="Puts the session ID (sid) in the logout token and the ID tokens, for an application that ends sessions by it."
           />
           <ComboboxField
             form={form}

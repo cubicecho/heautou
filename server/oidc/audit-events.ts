@@ -2,6 +2,7 @@ import type Provider from 'oidc-provider';
 import type { KoaContextWithOIDC } from 'oidc-provider';
 import { ADMIN_CLIENT_NAME } from '../admin/admin-client.ts';
 import { ADMIN_DEFAULTS } from '../core/defaults.ts';
+import { errorMessage } from '../core/errors.ts';
 import {
   AppSignInVia,
   type AuditEvent,
@@ -75,8 +76,56 @@ function viaOf(login: { amr?: string[] } | undefined): AppSignInVia {
 }
 
 /**
+ * Names a client the way the admin knows it.
+ *
+ * @param clients - The client store.
+ * @param clientId - The client.
+ * @param [fallback] - The name the request gave, for a client the store doesn't have.
+ * @returns The target.
+ */
+function clientTargetIn(clients: ClientStore, clientId: string, fallback?: string): AuditTarget {
+  return {
+    kind: AuditTargetKind.Client,
+    id: clientId,
+    name:
+      clientId === ADMIN_DEFAULTS.clientId ? ADMIN_CLIENT_NAME : (clients.find(clientId)?.name ?? fallback ?? clientId),
+  };
+}
+
+/** A logout token an application did not take. */
+export interface AppLogoutFailure {
+  clientId: string;
+  /** The user who signed out. */
+  accountId: string;
+  /** Why: the app was unreachable, too slow, or answered with an error. */
+  error: unknown;
+  /** The address of the request that ended the session, or null when the server ended it itself. */
+  ip: string | null;
+}
+
+/**
+ * Logs and records a back-channel logout an application did not take. The logout token is never part of it.
+ *
+ * @param deps - The log and the stores that name users and clients.
+ * @param failure - The client, the user and the error.
+ */
+export function recordAppLogoutFailed({ audit, users, clients }: ProviderAuditDeps, failure: AppLogoutFailure): void {
+  const { clientId, accountId, error, ip } = failure;
+  const reason = errorMessage(error);
+  console.error(`[oidc] back-channel logout to client "${clientId}" failed: ${reason}`);
+  const user = users.find(accountId);
+  audit.record({
+    type: AuditType.AppLogoutFailed,
+    actor: user === null ? null : actorOf(user),
+    ip,
+    target: clientTargetIn(clients, clientId),
+    detail: { error: reason },
+  });
+}
+
+/**
  * Records what the provider does that the operator wants to see: each code handed back to an app, sign-in
- * requests and token requests it refused, sign-outs from apps, and machine tokens.
+ * requests and token requests it refused, sign-outs from apps, logout tokens apps did not take, and machine tokens.
  *
  * @param provider - The provider, freshly built.
  * @param deps - The log and the stores that name users and clients.
@@ -93,12 +142,8 @@ export function recordProviderEvents(provider: Provider, { audit, users, clients
    * @param [fallback] - The name the request gave, for a client the store doesn't have.
    * @returns The target.
    */
-  const clientTarget = (clientId: string, fallback?: string): AuditTarget => ({
-    kind: AuditTargetKind.Client,
-    id: clientId,
-    name:
-      clientId === ADMIN_DEFAULTS.clientId ? ADMIN_CLIENT_NAME : (clients.find(clientId)?.name ?? fallback ?? clientId),
-  });
+  const clientTarget = (clientId: string, fallback?: string): AuditTarget =>
+    clientTargetIn(clients, clientId, fallback);
   /**
    * Names the request's client: the one the provider found, else the `client_id` it was sent.
    *
@@ -191,5 +236,10 @@ export function recordProviderEvents(provider: Provider, { audit, users, clients
       return;
     }
     audit.record({ type: AuditType.AppSignedOut, actor: actorIn(ctx), ip: ctx.ip, target: targetOf(ctx) });
+  });
+
+  // A sign-out at the provider tells each app the session was signed in to; one that misses it is worth knowing.
+  provider.on('backchannel.error', (ctx, error, client, accountId) => {
+    recordAppLogoutFailed({ audit, users, clients }, { clientId: client.clientId, accountId, error, ip: ctx.ip });
   });
 }

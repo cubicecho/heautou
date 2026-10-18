@@ -135,6 +135,9 @@ export function clientFieldsFrom(metadata: ClientMetadata): ClientFields {
     postLogoutRedirectUris: [...(metadata.post_logout_redirect_uris ?? [])],
     allowClientCredentials: grantTypes.includes(CLIENT_CREDENTIALS),
     logoUri: metadata.logo_uri ?? null,
+    backchannelLogoutUri: metadata.backchannel_logout_uri ?? null,
+    // RFC 7591 metadata leaves it false unless the app asks; the store's own default is for the operator.
+    backchannelLogoutSessionRequired: metadata.backchannel_logout_session_required ?? false,
   };
 }
 

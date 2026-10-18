@@ -10,6 +10,7 @@ const LABELS: Record<AuditType, string> = {
   APP_SIGN_IN_FAILED: 'App sign-in request refused',
   APP_TOKEN_REFUSED: 'App token request refused',
   APP_SIGNED_OUT: 'Signed out of an app',
+  APP_LOGOUT_FAILED: 'App not told of a sign-out',
   MACHINE_TOKEN_ISSUED: 'Machine token issued',
   WEB_SIGNED_IN: 'Signed in to this site',
   WEB_SIGNED_OUT: 'Signed out of this site',
@@ -83,18 +84,19 @@ export function auditTypeLabel(type: string): string {
   return BY_NAME.get(type) ?? type;
 }
 
-/** The types that are a sign-in going wrong, drawn as warnings. */
+/** The types that are a sign-in or sign-out going wrong, drawn as warnings. */
 const WARNINGS = new Set([
   'SIGN_IN_FAILED',
   'SIGN_IN_THROTTLED',
   'SIGN_IN_REFUSED',
   'APP_SIGN_IN_FAILED',
   'APP_TOKEN_REFUSED',
+  'APP_LOGOUT_FAILED',
   'ACCOUNT_PASSWORD_FAILED',
 ]);
 
 /**
- * Says whether a type is a sign-in going wrong.
+ * Says whether a type is a sign-in or sign-out going wrong.
  *
  * @param type - The GraphQL name or the wire value.
  * @returns Whether it is.

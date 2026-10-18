@@ -5,7 +5,7 @@ import { badInput, notFound } from '../core/errors.ts';
 import { parseInput } from '../core/validation.ts';
 import { DEFAULT_GROUPS_CLAIM, groupsClaimSchema, replaceGroupIn, withoutBlanks } from './claims.ts';
 import type { JsonFile } from './json-file.ts';
-import { redirectProblem } from './redirect-uris.ts';
+import { redirectProblem, redirectUriProblem } from './redirect-uris.ts';
 import type { SecretMapper } from './sealed-file.ts';
 
 /** How a client proves who it is at the token endpoint. */
@@ -71,6 +71,10 @@ export interface OidcClient {
   logoUri: string | null;
   /** How long its tokens stay valid, where the operator changed it. */
   tokenLifetimes: ClientTokenLifetimes;
+  /** Where the provider posts a logout token when one of its users signs out (back-channel logout). Null for none. */
+  backchannelLogoutUri: string | null;
+  /** Whether the logout token, and its ID tokens, carry the session ID (`sid`) the app can match its session by. */
+  backchannelLogoutSessionRequired: boolean;
   /** When it was added, as an ISO 8601 string. */
   createdAt: string;
 }
@@ -111,6 +115,18 @@ const clientFields = z.object({
     .nullable()
     .default(null),
   tokenLifetimes: tokenLifetimesSchema,
+  backchannelLogoutUri: z
+    .literal('')
+    .transform(() => null)
+    .or(
+      z
+        .url({ protocol: /^https?$/ })
+        .trim()
+        .refine((uri) => new URL(uri).hash === '', 'leave the fragment out of the back-channel logout URI'),
+    )
+    .nullable()
+    .default(null),
+  backchannelLogoutSessionRequired: z.boolean().default(true),
 });
 
 /**
@@ -189,6 +205,8 @@ function withDefaults(client: OidcClient): OidcClient {
     source: client.source ?? CLIENT_SOURCE_ADMIN,
     logoUri: client.logoUri ?? null,
     tokenLifetimes: { ...DEFAULT_CLIENT_TOKEN_LIFETIMES, ...client.tokenLifetimes },
+    backchannelLogoutUri: client.backchannelLogoutUri ?? null,
+    backchannelLogoutSessionRequired: client.backchannelLogoutSessionRequired ?? true,
   };
 }
 
@@ -227,8 +245,8 @@ export const clientSecretsIn: SecretMapper<OidcClient[]> = (clients, change) =>
   );
 
 /**
- * Builds the client store over a JSON file. Redirect URIs are checked against the https rule
- * (`redirect-uris.ts`) when a client is saved; clients already in the file are read as they are.
+ * Builds the client store over a JSON file. Redirect and back-channel logout URIs are checked against the https
+ * rule (`redirect-uris.ts`) when a client is saved; clients already in the file are read as they are.
  *
  * @param file - The file holding every client.
  * @param [options] - The clock and whether plain http redirect URIs are allowed.
@@ -236,13 +254,22 @@ export const clientSecretsIn: SecretMapper<OidcClient[]> = (clients, change) =>
  */
 export function createClientStore(file: JsonFile<OidcClient[]>, options: ClientStoreOptions = {}): ClientStore {
   const { now = () => new Date(), allowsHttpRedirects = () => false } = options;
-  const checkRedirects = (client: Pick<OidcClient, 'authMethod' | 'redirectUris' | 'postLogoutRedirectUris'>) => {
-    const problem = redirectProblem(client, {
-      allowsHttp: allowsHttpRedirects(),
-      isPublic: client.authMethod === ClientAuthMethod.None,
-    });
+  type CheckedUris = Pick<
+    OidcClient,
+    'authMethod' | 'redirectUris' | 'postLogoutRedirectUris' | 'backchannelLogoutUri'
+  >;
+  const checkRedirects = (client: CheckedUris) => {
+    const allowsHttp = allowsHttpRedirects();
+    const problem = redirectProblem(client, { allowsHttp, isPublic: client.authMethod === ClientAuthMethod.None });
     if (problem !== null) {
       throw badInput(`${problem.field}: ${problem.message}.`);
+    }
+    // The provider calls this one itself, so it is held to the https rule as a confidential client's URI is.
+    const { backchannelLogoutUri } = client;
+    const backchannelProblem =
+      backchannelLogoutUri === null ? null : redirectUriProblem(backchannelLogoutUri, { allowsHttp, isPublic: false });
+    if (backchannelProblem !== null) {
+      throw badInput(`backchannelLogoutUri: ${backchannelProblem}.`);
     }
   };
   const stored = (): OidcClient[] => file.read().map(withDefaults);
@@ -279,7 +306,16 @@ export function createClientStore(file: JsonFile<OidcClient[]>, options: ClientS
       const current = load(clientId);
       // What the input leaves out keeps its value, rather than taking the default a new client gets.
       const { allowedGroups, groupsClaim, allowClientCredentials, logoUri, tokenLifetimes } = current;
-      const kept = { allowedGroups, groupsClaim, allowClientCredentials, logoUri, tokenLifetimes };
+      const { backchannelLogoutUri, backchannelLogoutSessionRequired } = current;
+      const kept = {
+        allowedGroups,
+        groupsClaim,
+        allowClientCredentials,
+        logoUri,
+        tokenLifetimes,
+        backchannelLogoutUri,
+        backchannelLogoutSessionRequired,
+      };
       const merged = { ...kept, ...withoutBlanks(input) };
       const fields = parseInput(clientFieldsSchema, merged);
       checkRedirects(fields);

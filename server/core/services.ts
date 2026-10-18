@@ -5,6 +5,7 @@ import { adminClientMetadata } from '../admin/admin-client.ts';
 import { createSetupGate, type SetupGate } from '../admin/setup.ts';
 import { createAdapterFactory, createModelFiles } from '../oidc/adapter.ts';
 import { recordProviderEvents } from '../oidc/audit-events.ts';
+import { createLogoutNotifier } from '../oidc/backchannel.ts';
 import { createProviderHost, type ProviderHost } from '../oidc/host.ts';
 import { claimNamesIn, createProvider } from '../oidc/provider.ts';
 import { createSessionTools, type SessionTools } from '../oidc/sessions.ts';
@@ -199,7 +200,7 @@ export function openServices(settings: ServiceSettings): Services {
     setup,
     keys,
     host,
-    sessions: createSessionTools(files),
+    sessions: createSessionTools(files, createLogoutNotifier(host, { audit, users, clients })),
     issuer: settings.issuer,
   };
 }
