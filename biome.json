@@ -8,7 +8,15 @@
   "plugins": ["./no-negation.grit"],
   "files": {
     "ignoreUnknown": true,
-    "includes": ["**", "!**/dist", "!**/__generated__", "!**/*.gen.ts", "!**/storybook-static", "!tests/fixtures"]
+    "includes": [
+      "**",
+      "!**/dist",
+      "!**/__generated__",
+      "!**/*.gen.ts",
+      "!**/storybook-static",
+      "!tests/fixtures",
+      "!site"
+    ]
   },
   "formatter": {
     "enabled": true,

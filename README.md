@@ -1,5 +1,7 @@
 # Heautou
 
+[Website](https://cubicecho.github.io/heautou/)
+
 A minimal OpenID Connect provider for self-hosted setups. It gives your apps one shared sign-in
 ("Sign in with Heautou") without running Keycloak or Authentik.
 
