@@ -1,3 +1,13 @@
+# [1.10.0](https://github.com/cubicecho/heautou/compare/v1.9.0...v1.10.0) (2026-10-18)
+
+
+### Features
+
+* check new passwords for strength and known breaches ([64678aa](https://github.com/cubicecho/heautou/commit/64678aa1595ffef169782efae1e5acfe2c1f8ed6))
+* let each client set its own token lifetimes ([ef27878](https://github.com/cubicecho/heautou/commit/ef27878f0a6db00536ff6ac768d84e1404fe148f))
+* tell apps when their users sign out (back-channel logout) ([bfdb117](https://github.com/cubicecho/heautou/commit/bfdb117408eaeae1cac3cf5ffbde18a22f232447))
+* two-factor sign-in with authenticator apps and passkeys ([98905d7](https://github.com/cubicecho/heautou/commit/98905d7f391f84562daf57a6410287742e4d170b)), closes [#2](https://github.com/cubicecho/heautou/issues/2)
+
 # [1.9.0](https://github.com/cubicecho/heautou/compare/v1.8.0...v1.9.0) (2026-10-17)
 
 
