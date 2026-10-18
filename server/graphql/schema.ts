@@ -397,6 +397,18 @@ const resolvers = {
         ...session,
         clientNames: clientIds.map((clientId) => sessionClientName(clientId, ctx.clients, ctx.branding.read())),
       })),
+    /**
+     * Resolves `User.secondFactors`.
+     *
+     * @param user - The user.
+     * @param _args - Unused.
+     * @param ctx - Request context.
+     * @returns What they have set up.
+     */
+    secondFactors: (user: PublicUser, _args: unknown, ctx: Context) => {
+      const { hasTotp, recoveryCodesLeft, passkeys } = ctx.factors.summary(user.id);
+      return { hasTotp, recoveryCodesLeft, passkeyCount: passkeys.length };
+    },
   },
   Query: {
     /**
@@ -710,6 +722,7 @@ const resolvers = {
       const user = ctx.users.remove(args.id);
       signOutEverywhere(ctx, user.id);
       ctx.passwordLinks.cancelFor(user.id);
+      ctx.factors.removeAll(user.id);
       return audited(ctx, AuditType.UserDeleted, userTarget(user), refreshed(ctx, user));
     },
     /**
@@ -755,6 +768,19 @@ const resolvers = {
       const user = loadUser(ctx, args.id);
       signOutEverywhere(ctx, user.id);
       return audited(ctx, AuditType.UserSignedOut, userTarget(user), user);
+    },
+    /**
+     * Resolves `Mutation.resetSecondFactors`.
+     *
+     * @param _parent - Unused.
+     * @param args - The user's id.
+     * @param ctx - Request context.
+     * @returns The user.
+     */
+    resetSecondFactors: (_parent: unknown, args: { id: string }, ctx: Context): PublicUser => {
+      const user = loadUser(ctx, args.id);
+      ctx.factors.removeAll(user.id);
+      return audited(ctx, AuditType.UserSecondFactorsReset, userTarget(user), user);
     },
     /**
      * Resolves `Mutation.createPasswordLink`.

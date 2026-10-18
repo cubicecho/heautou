@@ -1,3 +1,8 @@
+import {
+  browserSupportsWebAuthn,
+  type PublicKeyCredentialRequestOptionsJSON,
+  startAuthentication,
+} from '@simplewebauthn/browser';
 import { useQuery } from '@tanstack/react-query';
 import { createFileRoute } from '@tanstack/react-router';
 import { useState } from 'react';
@@ -6,73 +11,246 @@ import { InputField, useAppForm } from '@/components/app-form';
 import { CenteredLayout } from '@/components/centered-layout';
 import { PasswordField } from '@/components/password-field';
 import { Alert } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
 import { FormElement } from '@/components/ui/form-element';
+import { KeyRound } from '@/components/ui/icons';
 import { BrandIcon, useBrandName } from '@/core/brand';
-import { jsonReply, postJson } from '@/core/json-reply';
 import { messageOf } from '@/core/lists';
 
 export const Route = createFileRoute('/login/$uid')({ component: LoginPage });
 
-const FORM_ID = 'login-form';
+const PASSWORD_FORM_ID = 'login-form';
+const CODE_FORM_ID = 'second-factor-form';
 
-const detailsSchema = z.object({ clientName: z.string() });
+const detailsSchema = z.object({ clientName: z.string(), passkeysAvailable: z.boolean() });
+const choiceSchema = z.object({ totp: z.boolean(), passkey: z.boolean(), recoveryCode: z.boolean() });
+/** The login POST's reply: where to go next, or which second factors to ask for. */
+const loginSchema = z.union([z.object({ redirectTo: z.string() }), z.object({ secondFactor: choiceSchema })]);
 const resultSchema = z.object({ redirectTo: z.string() });
+const failureSchema = z.object({ error: z.string(), restart: z.boolean().optional() });
+const passkeyOptionsSchema = z.object({
+  options: z.custom<PublicKeyCredentialRequestOptionsJSON>(
+    (value) => typeof value === 'object' && value !== null && 'challenge' in value,
+  ),
+});
+
+/** The second factors the page may ask for. */
+type SecondFactorChoice = z.infer<typeof choiceSchema>;
+
+/** A refusal from an interaction route: what to show, and whether the sign-in has to start again. */
+class SignInRefusal extends Error {
+  readonly restart: boolean;
+
+  /**
+   * @param message - What to show.
+   * @param restart - Whether the sign-in has to start again from the password.
+   */
+  constructor(message: string, restart: boolean) {
+    super(message);
+    this.restart = restart;
+  }
+}
 
 /**
- * The sign-in page the provider sends a browser to. It names the client asking and, once the
- * password matches, sends the browser back to the provider to finish.
+ * POSTs JSON to an interaction route and reads the reply.
+ *
+ * @typeParam T - The reply's shape.
+ * @param url - The route.
+ * @param body - What to send.
+ * @param schema - The reply's shape.
+ * @returns The reply.
+ * @throws SignInRefusal with the server's message when it refuses.
+ */
+async function post<T>(url: string, body: unknown, schema: z.ZodType<T>): Promise<T> {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const reply: unknown = await response.json().catch(() => null);
+  if (response.ok) {
+    return schema.parse(reply);
+  }
+  const failure = failureSchema.safeParse(reply);
+  throw failure.success
+    ? new SignInRefusal(failure.data.error, failure.data.restart === true)
+    : new SignInRefusal(`The server answered ${response.status}.`, false);
+}
+
+/**
+ * Says what the second-factor step asks for.
+ *
+ * @param choice - The factors the user has.
+ * @returns A sentence.
+ */
+function secondFactorPrompt(choice: SecondFactorChoice): string {
+  if (choice.totp) {
+    return choice.passkey
+      ? 'Type the code from your authenticator app, or use your passkey.'
+      : 'Type the code from your authenticator app.';
+  }
+  return choice.passkey ? 'Use your passkey to finish signing in.' : 'Type one of your recovery codes.';
+}
+
+/**
+ * The sign-in page the provider sends a browser to. It names the client asking, takes the password, then a second
+ * factor for a user who has one, and sends the browser back to the provider to finish. A passkey can also sign in on
+ * its own, with no username.
  */
 function LoginPage() {
   const { uid } = Route.useParams();
   const base = `/interaction/${encodeURIComponent(uid)}`;
   const [failure, setFailure] = useState<string | null>(null);
+  const [secondFactor, setSecondFactor] = useState<SecondFactorChoice | null>(null);
+  const [isUsingPasskey, setUsingPasskey] = useState(false);
 
   const details = useQuery({
     queryKey: ['interaction', uid],
-    queryFn: async () => jsonReply(await fetch(`${base}/details`), detailsSchema),
+    queryFn: async () => {
+      const response = await fetch(`${base}/details`);
+      const reply: unknown = await response.json().catch(() => null);
+      if (response.ok === false) {
+        throw new Error(failureSchema.safeParse(reply).data?.error ?? `The server answered ${response.status}.`);
+      }
+      return detailsSchema.parse(reply);
+    },
     retry: false,
   });
 
-  const form = useAppForm({
+  /**
+   * Reports a refusal, going back to the password when the sign-in has to start again.
+   *
+   * @param error - What was thrown.
+   */
+  const refused = (error: unknown): void => {
+    const isRestart = error instanceof SignInRefusal && error.restart;
+    if (isRestart) {
+      setSecondFactor(null);
+    }
+    setFailure(messageOf(error));
+  };
+
+  /** Signs in with a passkey: after the password, or on its own. */
+  const signInWithPasskey = async (): Promise<void> => {
+    setFailure(null);
+    setUsingPasskey(true);
+    try {
+      const { options } = await post(`${base}/passkey/options`, {}, passkeyOptionsSchema);
+      const response = await startAuthentication({ optionsJSON: options });
+      const { redirectTo } = await post(`${base}/passkey`, { response }, resultSchema);
+      window.location.assign(redirectTo);
+    } catch (error) {
+      refused(error);
+    } finally {
+      setUsingPasskey(false);
+    }
+  };
+
+  const passwordForm = useAppForm({
     defaultValues: { username: '', password: '' },
     onSubmit: async ({ value }) => {
       setFailure(null);
       try {
-        const { redirectTo } = await jsonReply(await postJson(`${base}/login`, value), resultSchema);
+        const reply = await post(`${base}/login`, value, loginSchema);
+        if ('secondFactor' in reply) {
+          setSecondFactor(reply.secondFactor);
+          return;
+        }
+        window.location.assign(reply.redirectTo);
+      } catch (error) {
+        refused(error);
+      }
+    },
+  });
+
+  const codeForm = useAppForm({
+    defaultValues: { code: '' },
+    onSubmit: async ({ value, formApi }) => {
+      setFailure(null);
+      try {
+        const { redirectTo } = await post(`${base}/second-factor`, value, resultSchema);
         window.location.assign(redirectTo);
       } catch (error) {
-        setFailure(messageOf(error));
+        formApi.reset();
+        refused(error);
       }
     },
   });
 
   const brandName = useBrandName();
+  const canUsePasskeys = details.data?.passkeysAvailable === true && browserSupportsWebAuthn();
+  const isAskingCode = secondFactor !== null && (secondFactor.totp || secondFactor.recoveryCode);
   const description =
-    details.data === undefined
-      ? `Sign in with your ${brandName} account to continue.`
-      : `Sign in with your ${brandName} account to continue to ${details.data.clientName}.`;
+    secondFactor !== null
+      ? secondFactorPrompt(secondFactor)
+      : details.data === undefined
+        ? `Sign in with your ${brandName} account to continue.`
+        : `Sign in with your ${brandName} account to continue to ${details.data.clientName}.`;
+  const failureAlert =
+    failure === null ? null : <Alert variant="destructive" title="Not signed in" description={failure} />;
+  const passkeyButton = (
+    <Button
+      variant="outline"
+      iconSlot={<KeyRound />}
+      content={secondFactor === null ? 'Sign in with a passkey' : 'Use your passkey'}
+      loading={isUsingPasskey}
+      onClick={() => {
+        void signInWithPasskey();
+      }}
+    />
+  );
+
+  const passwordStep = (
+    <FormElement id={PASSWORD_FORM_ID} onSubmit={() => passwordForm.handleSubmit()} className="grid gap-4">
+      <InputField
+        form={passwordForm}
+        name="username"
+        label="Username"
+        required
+        autoComplete="username webauthn"
+        autoFocus
+        validators={{ onChange: ({ value }) => (value.trim() ? undefined : 'Enter your username.') }}
+      />
+      <PasswordField form={passwordForm} name="password" label="Password" required autoComplete="current-password" />
+      {failureAlert}
+    </FormElement>
+  );
+
+  const secondFactorStep = (
+    <FormElement id={CODE_FORM_ID} onSubmit={() => codeForm.handleSubmit()} className="grid gap-4">
+      {isAskingCode ? (
+        <InputField
+          form={codeForm}
+          name="code"
+          label={secondFactor?.totp ? 'Code' : 'Recovery code'}
+          description={
+            secondFactor?.totp && secondFactor.recoveryCode
+              ? 'Lost your phone? Type a recovery code instead.'
+              : undefined
+          }
+          required
+          autoComplete="one-time-code"
+          autoFocus
+          validators={{ onChange: ({ value }) => (value.trim() ? undefined : 'Type the code.') }}
+        />
+      ) : null}
+      {failureAlert}
+    </FormElement>
+  );
 
   return (
     <CenteredLayout
       level={1}
       iconSlot={<BrandIcon className="size-5" />}
-      title="Sign in"
+      title={secondFactor === null ? 'Sign in' : 'Confirm it’s you'}
       description={description}
       contentSlot={
         details.error === null ? (
-          <FormElement id={FORM_ID} onSubmit={() => form.handleSubmit()} className="grid gap-4">
-            <InputField
-              form={form}
-              name="username"
-              label="Username"
-              required
-              autoComplete="username"
-              autoFocus
-              validators={{ onChange: ({ value }) => (value.trim() ? undefined : 'Enter your username.') }}
-            />
-            <PasswordField form={form} name="password" label="Password" required autoComplete="current-password" />
-            {failure === null ? null : <Alert variant="destructive" title="Not signed in" description={failure} />}
-          </FormElement>
+          secondFactor === null ? (
+            passwordStep
+          ) : (
+            secondFactorStep
+          )
         ) : (
           <Alert
             variant="destructive"
@@ -82,11 +260,23 @@ function LoginPage() {
         )
       }
       footerActionsSlot={
-        details.error === null ? (
-          <form.AppForm>
-            <form.SubmitButton content="Sign in" />
-          </form.AppForm>
-        ) : undefined
+        details.error !== null ? undefined : secondFactor === null ? (
+          <>
+            {canUsePasskeys ? passkeyButton : null}
+            <passwordForm.AppForm>
+              <passwordForm.SubmitButton content="Sign in" />
+            </passwordForm.AppForm>
+          </>
+        ) : (
+          <>
+            {secondFactor.passkey && canUsePasskeys ? passkeyButton : null}
+            {isAskingCode ? (
+              <codeForm.AppForm>
+                <codeForm.SubmitButton content="Continue" />
+              </codeForm.AppForm>
+            ) : null}
+          </>
+        )
       }
     />
   );

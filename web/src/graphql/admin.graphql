@@ -43,6 +43,11 @@ fragment UserFields on User {
   disabled
   hasPassword
   createdAt
+  secondFactors {
+    hasTotp
+    recoveryCodesLeft
+    passkeyCount
+  }
 }
 
 query Provider {
@@ -164,6 +169,12 @@ query UserSessions($id: ID!) {
 
 mutation EndUserSession($id: ID!, $sessionId: ID!) {
   endUserSession(id: $id, sessionId: $sessionId) {
+    id
+  }
+}
+
+mutation ResetSecondFactors($id: ID!) {
+  resetSecondFactors(id: $id) {
     id
   }
 }

@@ -12,6 +12,7 @@ import { type AdminSessionDocument, type AdminSessionStore, createAdminSessionSt
 import { type AuditLog, AuditTargetKind, AuditType, KEYS_TARGET, openAuditLog } from '../store/audit.ts';
 import { type Branding, type BrandingStore, createBrandingStore } from '../store/branding.ts';
 import { type ClientStore, clientSecretsIn, createClientStore, type OidcClient } from '../store/clients.ts';
+import { createFactorStore, type FactorStore, type FactorsDocument, factorSecretsIn } from '../store/factors.ts';
 import { openJsonFile } from '../store/json-file.ts';
 import { type KeyStore, openKeyStore, type ProviderKeys, privateKeysIn } from '../store/keys.ts';
 import { createPairingStore, type PairingDocument, type PairingStore } from '../store/pairings.ts';
@@ -31,6 +32,8 @@ const DATA_FILES = {
   branding: 'branding.json',
   pairings: 'pairings.json',
   settings: 'settings.json',
+  /** Second factors: authenticator app secrets (sealed), recovery code hashes, passkeys. */
+  factors: 'factors.json',
   /** JSON lines, rotated by size into `audit.1.jsonl` and so on. */
   audit: 'audit.jsonl',
   /** A directory: one file per provider model (sessions, codes, tokens...). */
@@ -55,6 +58,8 @@ export interface ServiceSettings {
 export interface Services {
   clients: ClientStore;
   users: UserStore;
+  /** Each user's second factors. */
+  factors: FactorStore;
   /** The web app's sessions, for admins and for users on their account page. */
   adminSessions: AdminSessionStore;
   passwordLinks: PasswordLinkStore;
@@ -87,12 +92,14 @@ export function openServices(settings: ServiceSettings): Services {
   const at = (name: string): string => path.join(settings.dataDir, name);
   const sealingKeys = settings.secretKeys ?? null;
   const box = sealingKeys === null ? null : createSecretBox(sealingKeys);
-  // Both files are opened, and so checked against the key, before either is re-sealed.
+  // Every sealed file is opened, and so checked against the key, before any is re-sealed.
   const clientFile = openJsonFile<OidcClient[]>(at(DATA_FILES.clients), []);
   const keyFile = openJsonFile<ProviderKeys | null>(at(DATA_FILES.keys), null);
+  const factorFile = openJsonFile<FactorsDocument>(at(DATA_FILES.factors), {});
   if (box !== null) {
     clientSecretsIn(clientFile.read(), box.open);
     privateKeysIn(keyFile.read(), box.open);
+    factorSecretsIn(factorFile.read(), box.open);
   }
   const providerSettings = createSettingsStore(
     openJsonFile<SettingsDocument>(at(DATA_FILES.settings), {}),
@@ -102,6 +109,7 @@ export function openServices(settings: ServiceSettings): Services {
     allowsHttpRedirects: () => providerSettings.httpRedirects().isAllowed,
   });
   const users = createUserStore(openJsonFile<User[]>(at(DATA_FILES.users), []));
+  const factors = createFactorStore(openSealedFile(factorFile, box, factorSecretsIn), settings.now);
   const audit = openAuditLog(at(DATA_FILES.audit), settings.now);
   const now = settings.now ?? Date.now;
   const keys = openKeyStore(openSealedFile(keyFile, box, privateKeysIn), () => new Date(now()));
@@ -175,6 +183,7 @@ export function openServices(settings: ServiceSettings): Services {
   return {
     clients,
     users,
+    factors,
     adminSessions,
     passwordLinks,
     pairings,

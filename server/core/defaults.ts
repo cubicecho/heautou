@@ -230,3 +230,43 @@ export const AUDIT_DEFAULTS: Readonly<AuditSettings> = Object.freeze({
   maxPageSize: 200,
   accountEntries: 20,
 });
+
+/** How second factors (an authenticator app, recovery codes, passkeys) are made and checked. */
+export interface TwoFactorSettings {
+  /** Digits in an authenticator app's code. */
+  totpDigits: number;
+  /** How long one authenticator code lasts, in seconds. */
+  totpPeriodSeconds: number;
+  /** Codes either side of the current one still accepted, for a phone whose clock is a little off. */
+  totpDriftSteps: number;
+  /** Random bytes in an authenticator app's secret. */
+  totpSecretBytes: number;
+  /** Recovery codes made at a time. */
+  recoveryCodeCount: number;
+  /** Random bytes in one recovery code, before base32. */
+  recoveryCodeBytes: number;
+  /** How long a user has, after their password is accepted, to give the second factor, in seconds. */
+  pendingSeconds: number;
+  /** Wrong second factors allowed after one password before the sign-in has to start again. */
+  maxAttempts: number;
+  /** How long a browser waits for a passkey, and a passkey challenge stays valid, in seconds. */
+  passkeyTimeoutSeconds: number;
+  /** Most passkeys one user may register. */
+  maxPasskeys: number;
+  /** Longest name a passkey may be given, in characters. */
+  maxPasskeyNameLength: number;
+}
+
+export const TWO_FACTOR_DEFAULTS: Readonly<TwoFactorSettings> = Object.freeze({
+  totpDigits: 6,
+  totpPeriodSeconds: 30,
+  totpDriftSteps: 1,
+  totpSecretBytes: 20,
+  recoveryCodeCount: 10,
+  recoveryCodeBytes: 5,
+  pendingSeconds: 300,
+  maxAttempts: 5,
+  passkeyTimeoutSeconds: 120,
+  maxPasskeys: 20,
+  maxPasskeyNameLength: 60,
+});

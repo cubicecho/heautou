@@ -13,6 +13,7 @@ import {
 } from '../store/audit.ts';
 import type { ClientStore } from '../store/clients.ts';
 import type { UserStore } from '../store/users.ts';
+import { AuthMethod } from './provider.ts';
 
 /** What the provider's audit listeners read and write. */
 export interface ProviderAuditDeps {
@@ -58,6 +59,19 @@ function definedDetail(detail: Record<string, string | undefined>): Record<strin
   return Object.fromEntries(
     Object.entries(detail).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
   );
+}
+
+/**
+ * Says how an app sign-in was made.
+ *
+ * @param login - The sign-in the interaction finished with, or undefined when the session was reused.
+ * @returns The `via` detail.
+ */
+function viaOf(login: { amr?: string[] } | undefined): AppSignInVia {
+  if (login === undefined) {
+    return AppSignInVia.Session;
+  }
+  return login.amr?.includes(AuthMethod.Password) === false ? AppSignInVia.Passkey : AppSignInVia.Password;
 }
 
 /**
@@ -122,7 +136,7 @@ export function recordProviderEvents(provider: Provider, { audit, users, clients
       ip: ctx.ip,
       target: targetOf(ctx),
       detail: definedDetail({
-        via: ctx.oidc.result?.login === undefined ? AppSignInVia.Session : AppSignInVia.Password,
+        via: viaOf(ctx.oidc.result?.login),
         redirectUri: paramOf(ctx, 'redirect_uri'),
       }),
     });

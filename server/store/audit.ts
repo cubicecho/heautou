@@ -73,6 +73,20 @@ export const AuditType = {
   AccountSignedOutEverywhere: 'account_signed_out_everywhere',
   /** The first admin was made, or an existing user was made the admin, through `/setup`. */
   AdminSetUp: 'admin_set_up',
+  /** A wrong authenticator code, recovery code or passkey after a password that worked. */
+  SecondFactorFailed: 'second_factor_failed',
+  /** A user set up an authenticator app on their account page. */
+  TotpAdded: 'totp_added',
+  /** A user removed their authenticator app. */
+  TotpRemoved: 'totp_removed',
+  /** A user made new recovery codes, which ends the old ones. */
+  RecoveryCodesMade: 'recovery_codes_made',
+  /** A user registered a passkey. The detail names it. */
+  PasskeyAdded: 'passkey_added',
+  /** A user removed a passkey. The detail names it. */
+  PasskeyRemoved: 'passkey_removed',
+  /** An admin removed every second factor a user had, as for a lost phone. */
+  UserSecondFactorsReset: 'user_second_factors_reset',
 } as const;
 export type AuditType = (typeof AuditType)[keyof typeof AuditType];
 
@@ -87,6 +101,7 @@ export const SIGN_IN_TYPES: readonly AuditType[] = [
   AuditType.SignInFailed,
   AuditType.SignInThrottled,
   AuditType.SignInRefused,
+  AuditType.SecondFactorFailed,
   AuditType.AppSignedIn,
   AuditType.AppSignedOut,
   AuditType.WebSignedIn,
@@ -98,6 +113,8 @@ export const AppSignInVia = {
   Password: 'password',
   /** The user already had a provider session, so nothing was asked. */
   Session: 'session',
+  /** The user signed in with a passkey alone. */
+  Passkey: 'passkey',
 } as const;
 export type AppSignInVia = (typeof AppSignInVia)[keyof typeof AppSignInVia];
 

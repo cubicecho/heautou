@@ -42,6 +42,13 @@ const LABELS: Record<AuditType, string> = {
   ACCOUNT_PASSWORD_FAILED: 'Wrong current password',
   ACCOUNT_SIGNED_OUT_EVERYWHERE: 'Signed out everywhere',
   ADMIN_SET_UP: 'First admin set up',
+  SECOND_FACTOR_FAILED: 'Second factor failed',
+  TOTP_ADDED: 'Authenticator app added',
+  TOTP_REMOVED: 'Authenticator app removed',
+  RECOVERY_CODES_MADE: 'Recovery codes made',
+  PASSKEY_ADDED: 'Passkey added',
+  PASSKEY_REMOVED: 'Passkey removed',
+  USER_SECOND_FACTORS_RESET: 'Two-factor reset by an admin',
 };
 
 /** The labels by the type's GraphQL name and by the value the account route sends. */

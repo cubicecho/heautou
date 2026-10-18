@@ -34,6 +34,7 @@ import {
   type PairingInput,
   ProviderDocument,
   RenameGroupDocument,
+  ResetSecondFactorsDocument,
   RotateClientSecretDocument,
   RotateKeysDocument,
   SetBrandingLogoDocument,
@@ -303,6 +304,19 @@ export function useSignOutUser() {
   return useMutation({
     mutationFn: async (id: string) => (await request(SignOutUserDocument, { id })).signOutUser,
     onSuccess: refetching(queryClient, KEYS.sessions),
+  });
+}
+
+/**
+ * Removes every second factor a user has, as for a lost phone.
+ *
+ * @returns The mutation.
+ */
+export function useResetSecondFactors() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => (await request(ResetSecondFactorsDocument, { id })).resetSecondFactors,
+    onSuccess: refetching(queryClient, KEYS.users),
   });
 }
 

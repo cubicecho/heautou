@@ -28,9 +28,9 @@ or to promote an existing user, it needs the token the boot log prints.
 
 ## Layout
 
-- `server/core/` config getters, `defaults.ts` groups (token lifetimes, key sizes and rotation, link lifetimes, branding limits), coded errors, preflight, `secret-box.ts` (AES-256-GCM `enc:v1:` envelopes under `SECRET_KEY`), `services.ts` (opens the stores, sealing their secrets, and builds the provider)
-- `server/store/` flat-file stores: `json-file.ts` (atomic whole-file writes, mode 0600), `sealed-file.ts` (a JSON file whose secrets are sealed on disk and plain in memory; each store exports the `SecretMapper` that finds them), `clients.ts` (a client's own token lifetimes within `CLIENT_TOKEN_LIFETIME_DEFAULTS`, null for the server's), `users.ts` (scrypt password hashes, custom claims, disabled, the last-admin rule), `keys.ts` (signing and cookie keys, made on first boot, rotated every `KEY_DEFAULTS.rotationDays` keeping `keptKeys`), `admin-sessions.ts`, `password-links.ts` (invite and reset tokens, stored hashed), `branding.ts`, `settings.ts` (operator settings: plain http redirect URIs), `redirect-uris.ts` (the redirect URI rule), `groups.ts` (groups derived from users and clients: list, rename, delete), `claims.ts` (claim name rules), `pairings.ts` (setup URLs waiting for an app, the token stored hashed), `audit.ts` (the append-only `audit.jsonl`, rotated by size under `AUDIT_DEFAULTS`; a failed write is logged, never thrown; `onRecord` tells subscriptions)
-- `server/admin/` the admin UI as a built-in client (`admin-client.ts`), its sign-in, callback, logout and setup routes and `requireAdmin` (`routes.ts`), the first-admin token (`setup.ts`), and `account.ts`: `/admin/account` (any signed-in user: profile, password, sessions), the password-link routes and `/admin/branding` and `/admin/logo`
+- `server/core/` config getters, `defaults.ts` groups (token lifetimes, key sizes and rotation, link lifetimes, branding limits), coded errors, preflight, `secret-box.ts` (AES-256-GCM `enc:v1:` envelopes under `SECRET_KEY`), `totp.ts` (RFC 6238 codes and base32), `webauthn.ts` (the passkey relying party: the issuer's host, available on https or loopback only), `expiring-map.ts`, `services.ts` (opens the stores, sealing their secrets, and builds the provider)
+- `server/store/` flat-file stores: `json-file.ts` (atomic whole-file writes, mode 0600), `sealed-file.ts` (a JSON file whose secrets are sealed on disk and plain in memory; each store exports the `SecretMapper` that finds them), `clients.ts` (a client's own token lifetimes within `CLIENT_TOKEN_LIFETIME_DEFAULTS`, null for the server's), `users.ts` (scrypt password hashes, custom claims, disabled, the last-admin rule), `keys.ts` (signing and cookie keys, made on first boot, rotated every `KEY_DEFAULTS.rotationDays` keeping `keptKeys`), `admin-sessions.ts`, `password-links.ts` (invite and reset tokens, stored hashed), `branding.ts`, `settings.ts` (operator settings: plain http redirect URIs), `redirect-uris.ts` (the redirect URI rule), `groups.ts` (groups derived from users and clients: list, rename, delete), `claims.ts` (claim name rules), `factors.ts` (second factors in `factors.json`: authenticator app secrets sealed, recovery codes hashed, passkeys), `pairings.ts` (setup URLs waiting for an app, the token stored hashed), `audit.ts` (the append-only `audit.jsonl`, rotated by size under `AUDIT_DEFAULTS`; a failed write is logged, never thrown; `onRecord` tells subscriptions)
+- `server/admin/` the admin UI as a built-in client (`admin-client.ts`), its sign-in, callback, logout and setup routes and `requireAdmin` (`routes.ts`), the first-admin token (`setup.ts`), `factors.ts` (`/admin/account/totp/*`, `/recovery-codes`, `/passkeys/*`: a user sets up their own second factors; removing one needs the password), and `account.ts`: `/admin/account` (any signed-in user: profile, password, sessions), the password-link routes and `/admin/branding` and `/admin/logo`
 - `server/oidc/` `audit-events.ts` (the provider's events as audit entries), `provider.ts` (oidc-provider config: scopes, claims, TTLs, each read per token so a client's own `tokenLifetimes` win over `TOKEN_LIFETIME_DEFAULTS`; `findAccount` turns away disabled users and those outside a client's `allowedGroups`), `host.ts` (rebuilds the provider when the keys or claim names change; read `services.host.current()` per request), `sessions.ts` (a user's sessions and tokens in the model files), `adapter.ts` (oidc-provider models as JSON files under `oidc/`; clients come from the client store), `interactions.ts` (login and automatic consent), `pairing.ts` (setup URLs and the dynamic registration policy that writes paired clients to the client store)
 - `server/graphql/` SDL, schema, operation limits, logger; `write-schema.ts` prints `schema.graphql`
 - `server/http/` `createApp(services)`, health, shutdown, `guards.ts` (same-origin JSON POSTs), `rate-limit.ts`, `headers.ts` (security headers, the web app's CSP), `cookies.ts`; `server/index.ts` only boots
@@ -46,6 +46,11 @@ or to promote an existing user, it needs the token the boot log prints.
 1. An application sends the browser to `/oidc/auth`. The provider sends it to `/interaction/:uid`.
 2. A login prompt is redirected to the web app's `/login/:uid`, which reads `/interaction/:uid/details` and posts the
    username and password as JSON to `/interaction/:uid/login`. The reply says where the browser goes next.
+   A user with a second factor gets `{ secondFactor }` back instead, and the page posts an authenticator or recovery
+   code to `/interaction/:uid/second-factor`, or a passkey to `/interaction/:uid/passkey` (after
+   `/interaction/:uid/passkey/options`). The same passkey routes, with no password first, sign a user in with a passkey
+   alone (user verification required). Waiting sign-ins and challenges are kept in memory; the ID token's `amr`
+   (`pwd`, `otp`, `hwk`, `user`, `mfa`) and `acr` (`pwd` or `mfa`) say how the user signed in.
 3. A consent prompt is granted on the spot: the operator added the client, so there is no consent screen.
 
 A user the client refuses (disabled, or in none of its `allowedGroups`) gets a 403 from the login POST. One already
@@ -72,12 +77,12 @@ the `pairingChanged(id)` subscription until it is PAIRED.
 ## Security model
 
 Built for a trusted network. The admin UI and `/graphql` need an admin session, and `/graphql`, the admin POSTs and
-the login POST take only same-origin `application/json` POSTs (`sameOriginJson`); Yoga's CORS is off. Login failures
-are throttled per IP and per username; `/oidc/reg` shares the sign-in rate limit, and a setup URL is single use and
-lasts 10 minutes (its token sits in `oidc/` like other provider tokens until then). With `SECRET_KEY` set, client secrets and the private
-signing and cookie keys are sealed in `DATA_DIR` (re-sealed at boot when plain or under `SECRET_KEY_PREVIOUS`; a wrong
+the login POST take only same-origin `application/json` POSTs (`sameOriginJson`); Yoga's CORS is off. Login failures,
+wrong second factors included, are throttled per IP and per username; `/oidc/reg` shares the sign-in rate limit, and a setup URL is single use and
+lasts 10 minutes (its token sits in `oidc/` like other provider tokens until then). With `SECRET_KEY` set, client secrets, the private
+signing and cookie keys and authenticator app secrets are sealed in `DATA_DIR` (re-sealed at boot when plain or under `SECRET_KEY_PREVIOUS`; a wrong
 or missing key stops boot without writing); without it they are plain text and boot warns. User passwords, admin
-session tokens and password-link tokens are hashed. The provider's own tokens in `oidc/` are neither: they are
+session tokens, password-link tokens and recovery codes are hashed. The provider's own tokens in `oidc/` are neither: they are
 looked up by value. There is no TLS in the server: run it behind a
 proxy with `ISSUER_URL=https://…` and `TRUST_PROXY`. Redirect URIs must be https (or plain http on loopback, or an app's own scheme for a public client) unless the
 operator allows plain http under Settings (`settings.json`; unset, it follows `ISSUER_URL`). The client store checks

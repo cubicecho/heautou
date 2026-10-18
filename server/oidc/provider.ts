@@ -12,9 +12,31 @@ import { createPairingPolicy, PAIRING_POLICY } from './pairing.ts';
 /** The scopes clients may ask for. */
 export const SCOPES = ['openid', 'offline_access', 'profile', 'email', 'groups'] as const;
 
+/**
+ * How a user signed in, in the `acr` claim: a password alone, or with a second factor (or a passkey that checked
+ * the user). The `amr` claim lists the methods (RFC 8176).
+ */
+export const AuthLevel = { Password: 'pwd', MultiFactor: 'mfa' } as const;
+export type AuthLevel = (typeof AuthLevel)[keyof typeof AuthLevel];
+
+/** How a user proved who they are, in the `amr` claim (RFC 8176). */
+export const AuthMethod = {
+  Password: 'pwd',
+  /** A one-time code: an authenticator app's, or a recovery code. */
+  OneTimeCode: 'otp',
+  /** A passkey: a key held in hardware or a password manager. */
+  HardwareKey: 'hwk',
+  /** The passkey checked the user, with a PIN or a fingerprint. */
+  UserVerified: 'user',
+  /** More than one factor. */
+  MultiFactor: 'mfa',
+} as const;
+export type AuthMethod = (typeof AuthMethod)[keyof typeof AuthMethod];
+
 /** Which claims each scope releases, before the operator's own. */
 const CLAIMS_BY_SCOPE = {
-  openid: ['sub'],
+  // How the user signed in goes in every ID token, so an app can ask for a second factor.
+  openid: ['sub', 'acr', 'amr'],
   profile: ['name', 'preferred_username'],
   email: ['email', 'email_verified'],
   groups: [DEFAULT_GROUPS_CLAIM],
@@ -196,7 +218,9 @@ export function createProvider(deps: ProviderDeps): Provider {
     jwks: { keys: deps.keys.jwks },
     cookies: { keys: deps.keys.cookieKeys },
     scopes: [...SCOPES],
+    acrValues: Object.values(AuthLevel),
     claims: {
+      amr: null,
       ...CLAIMS_BY_SCOPE,
       profile: [...CLAIMS_BY_SCOPE.profile, ...deps.claimNames.custom],
       groups: [...new Set([...CLAIMS_BY_SCOPE.groups, ...deps.claimNames.groups])],

@@ -4,6 +4,7 @@ import express, { type Express, type Request, type Response } from 'express';
 import { createYoga } from 'graphql-yoga';
 import { createAccountRouter } from '../admin/account.ts';
 import { adminUrls } from '../admin/admin-client.ts';
+import { createFactorRouter } from '../admin/factors.ts';
 import { createAdminRouter, requireAdmin } from '../admin/routes.ts';
 import { isProduction, OIDC_MOUNT_PATH, trustProxy } from '../core/config.ts';
 import type { Context } from '../core/context.ts';
@@ -51,6 +52,7 @@ export function createApp(services: Services): Express {
     context: ({ req, res }): Context => ({
       clients: services.clients,
       users: services.users,
+      factors: services.factors,
       issuer: services.issuer,
       host: services.host,
       sessions: services.sessions,
@@ -83,6 +85,7 @@ export function createApp(services: Services): Express {
   app.all(GRAPHQL_ENDPOINT, (req, res) => yoga(req, res));
   app.use(createAdminRouter({ ...services, throttle }));
   app.use(createAccountRouter({ ...services, throttle }));
+  app.use(createFactorRouter({ ...services, throttle }));
   app.use(createInteractionRouter({ ...services, origin, throttle }));
   app.use(OIDC_MOUNT_PATH, (req, res) => services.host.handle(req, res));
 

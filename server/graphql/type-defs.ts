@@ -141,8 +141,20 @@ export const TYPE_DEFS = /* GraphQL */ `
     hasPassword: Boolean!
     "The browsers signed in as them, newest first."
     sessions: [Session!]!
+    "What they can give as a second factor after their password."
+    secondFactors: SecondFactors!
     "When they were added, as an ISO 8601 string."
     createdAt: String!
+  }
+
+  "A user's second factors, without any secret."
+  type SecondFactors {
+    "Whether an authenticator app is set up."
+    hasTotp: Boolean!
+    "How many unused recovery codes they have."
+    recoveryCodesLeft: Int!
+    "How many passkeys they registered."
+    passkeyCount: Int!
   }
 
   "A name users hold in their groups claim and clients may be limited to."
@@ -381,6 +393,8 @@ export const TYPE_DEFS = /* GraphQL */ `
     endUserSession(id: ID!, sessionId: ID!): User!
     "Ends every session and token of a user."
     signOutUser(id: ID!): User!
+    "Removes every second factor a user has, as for a lost phone. They sign in with their password alone until they add one again."
+    resetSecondFactors(id: ID!): User!
     "Makes a link that sets a user's password, for an invite or a reset. Their previous link stops working."
     createPasswordLink(id: ID!): PasswordLink!
     "Renames a group in every user and client."

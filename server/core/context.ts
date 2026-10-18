@@ -7,6 +7,7 @@ export interface Context
     Services,
     | 'clients'
     | 'users'
+    | 'factors'
     | 'issuer'
     | 'host'
     | 'sessions'
