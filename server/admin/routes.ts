@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import express, { type CookieOptions, type Request, type RequestHandler, type Response, Router } from 'express';
 import { z } from 'zod';
 import { ADMIN_DEFAULTS, HTTP_DEFAULTS } from '../core/defaults.ts';
@@ -8,6 +8,7 @@ import { HttpStatus, MS_PER_SECOND } from '../core/wire.ts';
 import { readCookie, signValue, verifyValue } from '../http/cookies.ts';
 import { sameOriginJson, sendRefusal } from '../http/guards.ts';
 import { type LoginThrottle, sendTooMany } from '../http/rate-limit.ts';
+import { pkceChallenge, redeemCode } from '../oidc/code-exchange.ts';
 import type { ProviderHost } from '../oidc/host.ts';
 import { PAGE_PARAM, pageUrl, WEB_PAGE } from '../oidc/pages.ts';
 import type { AdminSessionStore } from '../store/admin-sessions.ts';
@@ -204,7 +205,7 @@ export function createAdminRouter(deps: AdminDeps): Router {
       response_type: 'code',
       scope: 'openid',
       state: login.state,
-      code_challenge: createHash('sha256').update(login.verifier).digest('base64url'),
+      code_challenge: pkceChallenge(login.verifier),
       code_challenge_method: 'S256',
       prompt: 'login',
     }).toString();
@@ -228,19 +229,16 @@ export function createAdminRouter(deps: AdminDeps): Router {
       return;
     }
     try {
-      const code = await host.current().AuthorizationCode.find(codeValue);
-      const challenge = createHash('sha256').update(login.data.verifier).digest('base64url');
-      const isValid =
-        code?.isValid === true &&
-        code.clientId === ADMIN_DEFAULTS.clientId &&
-        code.redirectUri === urls.callback &&
-        code.codeChallengeMethod === 'S256' &&
-        code.codeChallenge === challenge;
-      if (isValid === false) {
+      const code = await redeemCode(host.current(), {
+        code: codeValue,
+        verifier: login.data.verifier,
+        clientId: ADMIN_DEFAULTS.clientId,
+        redirectUri: urls.callback,
+      });
+      if (code === null) {
         showError(res, AdminError.signInFailed, 'The provider sent a code that is not for this sign-in.');
         return;
       }
-      await code.consume();
       const user = users.find(code.accountId ?? '');
       if (user === null || user.disabled) {
         showError(res, AdminError.disabled, 'That account is disabled or was removed. Ask an admin.');

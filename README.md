@@ -116,6 +116,15 @@ The setup URL works once, for 10 minutes. Closing the dialog before the app regi
 is standard OAuth 2.0 Dynamic Client Registration with an initial access token, so any app that supports that with
 a pasted token can use it too. [docs/pairing.md](docs/pairing.md) is the spec for adding pairing to an app.
 
+### Apps with no sign-in of their own (forward auth)
+
+For an app that can't use OIDC, such as Sonarr or a dashboard, your reverse proxy can ask Heautou about every request
+and send the browser here to sign in. Under **Protected sites**, set the cookie domain (the parent domain Heautou and
+the apps share, such as `home.lan`) and add each app's host, with the groups that may reach it and whether it needs a
+second factor. Then point the proxy's forward auth at `/auth/verify`. The app receives the user in `Remote-User`,
+`Remote-Name`, `Remote-Email` and `Remote-Groups`. [docs/forward-auth.md](docs/forward-auth.md) has a tested HAProxy
+configuration and snippets for nginx, Caddy and Traefik.
+
 ### Claims
 
 | Scope     | Claims                                                                    |
@@ -226,6 +235,8 @@ Set these as environment variables, under `environment:` in Compose.
 | `S3_BUCKET`   | none                          | The bucket. Keep it private: Heautou serves the pictures itself.                                  |
 | `S3_REGION`   | `us-east-1`                   | The region requests are signed for. Most self-hosted stores take any.                             |
 | `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | none | The key Heautou uses the bucket with. Every `S3_` variable has a `_FILE` form too.     |
+| `FORWARD_AUTH_COOKIE_DOMAIN` | none           | The parent domain of the protected sites, such as `home.lan`. Wins over the one set in the UI.    |
+| `FORWARD_AUTH_TRUSTED_PROXIES` | loopback, `TRUST_PROXY` | The proxies that may call `/auth/verify`: addresses or CIDR ranges, comma-separated.  |
 
 ### Profile pictures
 
@@ -314,6 +325,8 @@ Everything lives in the data folder, which is the `heautou-data` volume in Docke
 - `branding.json`: the name and logo
 - `upstreams.json`: sign-in providers (client secrets sealed with `SECRET_KEY`) and the accounts linked to users
 - `apis.json`: your APIs, their scopes and the clients allowed to ask for them
+- `protected-sites.json`: the sites forward auth protects, and the cookie domain
+- `proxy-sessions.json`: browsers signed in to the protected sites (hashed tokens)
 - `audit.jsonl`: the activity log, one entry a line; at 1 MB it moves to `audit.1.jsonl`, and two old files are kept
 - `oidc/`: sessions, codes and tokens. These are not sealed: they are short-lived, and the provider looks
   tokens up by their value, so they sit in the clear until they expire.

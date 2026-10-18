@@ -24,6 +24,8 @@ export interface Context
     | 'audit'
     | 'mail'
     | 'pictures'
+    | 'protectedSites'
+    | 'forwardAuth'
   > {
   /** The signed-in admin making the request. */
   viewer: PublicUser;

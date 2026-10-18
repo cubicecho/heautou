@@ -1,0 +1,55 @@
+fragment ProtectedSiteFields on ProtectedSite {
+  id
+  name
+  host
+  pathPrefix
+  allowedGroups
+  requireSecondFactor
+  createdAt
+}
+
+fragment ForwardAuthFields on ForwardAuth {
+  cookieDomain
+  isCookieDomainFromEnvironment
+  verifyUrl
+  verifyRedirectUrl
+  signOutUrl
+  trustedProxies
+  maxNameLength
+}
+
+query ProtectedSites {
+  protectedSites {
+    ...ProtectedSiteFields
+  }
+}
+
+query ForwardAuth {
+  forwardAuth {
+    ...ForwardAuthFields
+  }
+}
+
+mutation CreateProtectedSite($input: ProtectedSiteInput!) {
+  createProtectedSite(input: $input) {
+    ...ProtectedSiteFields
+  }
+}
+
+mutation UpdateProtectedSite($id: ID!, $input: ProtectedSiteInput!) {
+  updateProtectedSite(id: $id, input: $input) {
+    ...ProtectedSiteFields
+  }
+}
+
+mutation DeleteProtectedSite($id: ID!) {
+  deleteProtectedSite(id: $id) {
+    id
+  }
+}
+
+mutation SetForwardAuthCookieDomain($domain: String) {
+  setForwardAuthCookieDomain(domain: $domain) {
+    ...ForwardAuthFields
+  }
+}

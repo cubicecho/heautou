@@ -5,6 +5,8 @@ import { adminClientMetadata, adminUrls } from '../admin/admin-client.ts';
 import { createSetupGate, type SetupGate } from '../admin/setup.ts';
 import { createMailer, type Mailer, type MailTransportFactory, smtpTransport } from '../mail/mailer.ts';
 import { sendNotifications } from '../mail/notifications.ts';
+import { forwardAuthUrls, proxyClientMetadata } from '../forward-auth/client.ts';
+import type { ForwardAuthConfig } from '../forward-auth/routes.ts';
 import { createAdapterFactory, createModelFiles } from '../oidc/adapter.ts';
 import { recordProviderEvents } from '../oidc/audit-events.ts';
 import { createLogoutNotifier } from '../oidc/backchannel.ts';
@@ -30,6 +32,13 @@ import { type KeyStore, openKeyStore, type ProviderKeys, privateKeysIn } from '.
 import { createMailStore, type MailDocument, type MailServer, mailSecretsIn } from '../store/mail.ts';
 import { createPairingStore, type PairingDocument, type PairingStore } from '../store/pairings.ts';
 import { createPasswordLinkStore, type PasswordLinkDocument, type PasswordLinkStore } from '../store/password-links.ts';
+import {
+  createProtectedSiteStore,
+  EMPTY_PROTECTED_SITES,
+  type ProtectedSiteStore,
+  type ProtectedSitesDocument,
+} from '../store/protected-sites.ts';
+import { createProxySessionStore, type ProxySessionDocument, type ProxySessionStore } from '../store/proxy-sessions.ts';
 import { openSealedFile } from '../store/sealed-file.ts';
 import { createSettingsStore, type SettingsDocument, type SettingsStore } from '../store/settings.ts';
 import {
@@ -69,6 +78,10 @@ export const DATA_FILES = {
   oidc: 'oidc',
   /** The SMTP server saved under Settings (password sealed) and the email options. */
   mail: 'mail.json',
+  /** The sites forward auth protects, and the proxy cookie's domain. */
+  protectedSites: 'protected-sites.json',
+  /** Forward auth sessions, by the hash of their token. */
+  proxySessions: 'proxy-sessions.json',
 } as const;
 
 /**
@@ -78,7 +91,7 @@ export const DATA_FILES = {
 export const BACKUP_LAYOUT: BackupLayout = Object.freeze({
   sessionsDir: DATA_FILES.oidc,
   /** The web app's sessions: a restore signs everyone out rather than bringing back sessions from the backup. */
-  skipped: Object.freeze([DATA_FILES.adminSessions]),
+  skipped: Object.freeze([DATA_FILES.adminSessions, DATA_FILES.proxySessions]),
   required: Object.freeze([DATA_FILES.keys]),
 });
 
@@ -126,6 +139,10 @@ export interface ServiceSettings {
   mailTransport?: MailTransportFactory;
   /** The S3 bucket profile pictures are kept in. Unset or null, pictures are off. */
   objectStorage?: ObjectStorage | null;
+  /** `FORWARD_AUTH_COOKIE_DOMAIN`, which wins over the admin's choice. Unset or null leaves it to the admin. */
+  proxyCookieDomain?: string | null;
+  /** `FORWARD_AUTH_TRUSTED_PROXIES`. Unset or null falls back to `TRUST_PROXY` and loopback. */
+  trustedProxies?: readonly string[] | null;
 }
 
 /** Everything the HTTP app is built from. */
@@ -166,6 +183,12 @@ export interface Services {
   issuer: string;
   /** Sends invite and reset links, the forgot-password link and notifications, once SMTP is set up. */
   mail: Mailer;
+  /** The sites behind the reverse proxy that forward auth protects. */
+  protectedSites: ProtectedSiteStore;
+  /** The forward auth sessions the verify endpoint reads. */
+  proxySessions: ProxySessionStore;
+  /** Forward auth's cookie domain and trusted proxies. */
+  forwardAuth: ForwardAuthConfig;
 }
 
 /**
@@ -267,11 +290,25 @@ export function openServices(settings: ServiceSettings): Services {
     audit,
   });
   sendNotifications({ audit, mailer: mail, users, branding });
+  const protectedSites = createProtectedSiteStore(
+    tracked(openJsonFile<ProtectedSitesDocument>(at(DATA_FILES.protectedSites), EMPTY_PROTECTED_SITES)),
+    { issuerHost: forwardAuthUrls(settings.issuer).host, now },
+  );
+  const proxySessions = createProxySessionStore(
+    tracked(openJsonFile<ProxySessionDocument>(at(DATA_FILES.proxySessions), {})),
+    now,
+  );
+  const environmentCookieDomain = settings.proxyCookieDomain ?? null;
+  const forwardAuth: ForwardAuthConfig = {
+    cookieDomain: () => environmentCookieDomain ?? protectedSites.cookieDomain(),
+    environmentCookieDomain,
+    trustedProxies: settings.trustedProxies ?? null,
+  };
   const files = createModelFiles(at(DATA_FILES.oidc));
   const adapter = createAdapterFactory({
     files,
     clients,
-    builtInClients: [adminClientMetadata(settings.issuer)],
+    builtInClients: [adminClientMetadata(settings.issuer), proxyClientMetadata(settings.issuer)],
   });
   const build = (): Provider => {
     const provider = createProvider({
@@ -358,5 +395,8 @@ export function openServices(settings: ServiceSettings): Services {
     pictures,
     issuer: settings.issuer,
     mail,
+    protectedSites,
+    proxySessions,
+    forwardAuth,
   };
 }

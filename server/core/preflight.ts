@@ -1,9 +1,10 @@
 // Runs before anything listens, so a misconfigured instance fails with a sentence, not a stack trace.
 import { accessSync, constants, mkdirSync } from 'node:fs';
 import { mailServerFromEnv } from '../mail/env.ts';
+import { createProxyTrust } from '../forward-auth/trust.ts';
 import { DIR_MODE } from '../store/json-file.ts';
 import { LOOPBACK_HOSTS } from '../store/redirect-uris.ts';
-import { dataDir, isProduction, issuerUrl, type S3Config, s3Config, secretKeys } from './config.ts';
+import { dataDir, forwardAuthTrustedProxies, isProduction, issuerUrl, type S3Config, s3Config, secretKeys } from './config.ts';
 import { errorMessage } from './errors.ts';
 import { createObjectStorage } from './object-storage.ts';
 import { SecretKeyError } from './secret-box.ts';
@@ -23,6 +24,8 @@ try {
   mailServerFromEnv();
   // Half an S3 configuration stops boot; a bucket that can't be reached only warns, below.
   bucket = s3Config();
+  // So does a trusted proxy list with an entry that is not an address or a range.
+  createProxyTrust(forwardAuthTrustedProxies(), () => false);
   const directory = dataDir();
   // Owner only when made here; an existing directory, such as a mounted volume, keeps its mode.
   mkdirSync(directory, { recursive: true, mode: DIR_MODE });

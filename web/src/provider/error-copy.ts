@@ -63,6 +63,17 @@ const COPY: Record<string, ErrorCopy> = {
     description: 'It took too long, or began in another tab or browser. Open the admin UI again to start over.',
     isClientSetup: false,
   },
+  proxy_sign_in_failed: {
+    title: 'Signing in to the protected site didn’t finish',
+    description: 'It took too long, or began in another tab or browser. Open the site again to start over.',
+    isClientSetup: false,
+  },
+  proxy_return_refused: {
+    title: 'Heautou won’t send you back there',
+    description:
+      'The sign-in was asked to return to an address that is not a protected site. Open the site you meant to visit and sign in from there.',
+    isClientSetup: false,
+  },
   server_error: {
     title: 'Heautou hit a problem',
     description:

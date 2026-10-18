@@ -132,6 +132,20 @@ export const AuditType = {
   PictureSet: 'picture_set',
   /** A user's profile picture was removed: by them, or by an admin. */
   PictureRemoved: 'picture_removed',
+  /** A user signed in to the protected sites (forward auth). The detail names the host they were going to. */
+  ProxySignedIn: 'proxy_signed_in',
+  /** A user signed out of the protected sites. */
+  ProxySignedOut: 'proxy_signed_out',
+  /**
+   * A signed-in user was turned away from a protected site: not in its groups, or without the second factor it asks
+   * for. Logged once per user and site every `FORWARD_AUTH_DEFAULTS.refusalLogSeconds`.
+   */
+  ProxyRefused: 'proxy_refused',
+  ProtectedSiteCreated: 'protected_site_created',
+  ProtectedSiteUpdated: 'protected_site_updated',
+  ProtectedSiteDeleted: 'protected_site_deleted',
+  /** The parent domain the forward auth session cookie is set on changed. */
+  ProxyCookieDomainSet: 'proxy_cookie_domain_set',
 } as const;
 export type AuditType = (typeof AuditType)[keyof typeof AuditType];
 
@@ -150,6 +164,7 @@ export const SIGN_IN_TYPES: readonly AuditType[] = [
   AuditType.AppSignedIn,
   AuditType.AppSignedOut,
   AuditType.WebSignedIn,
+  AuditType.ProxySignedIn,
 ];
 
 /** How an app sign-in was made, in its `via` detail. */
@@ -178,6 +193,8 @@ export const AuditTargetKind = {
   Upstream: 'upstream',
   /** An API (resource server) apps ask for access tokens to. */
   Api: 'api',
+  /** A site behind the reverse proxy that forward auth protects. */
+  ProtectedSite: 'protected_site',
 } as const;
 export type AuditTargetKind = (typeof AuditTargetKind)[keyof typeof AuditTargetKind];
 

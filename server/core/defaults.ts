@@ -431,3 +431,34 @@ export const OBJECT_STORAGE_DEFAULTS: Readonly<ObjectStorageSettings> = Object.f
   region: 'us-east-1',
   timeoutMs: 10_000,
 });
+
+/** How a reverse proxy asks whether a request may reach a protected site (forward auth), and the session it reads. */
+export interface ForwardAuthSettings {
+  /** The built-in client the proxy session signs in as. It is not in the client list and cannot be added there. */
+  clientId: string;
+  /** How long a proxy session lasts from its sign-in, however much it is used, in seconds. */
+  sessionSeconds: number;
+  /** How long a proxy session lasts without a request, in seconds. */
+  idleSeconds: number;
+  /** How often a session's last request is written down at most, in seconds, so not every request writes the file. */
+  touchSeconds: number;
+  /** How long a started proxy sign-in may take to come back, in seconds. */
+  loginSeconds: number;
+  /** Random bytes in a proxy session token, before base64url. */
+  tokenBytes: number;
+  /** How long one user's refusals at one site are logged once, in seconds, so a page and its assets are one entry. */
+  refusalLogSeconds: number;
+  /** Longest name a protected site may have, in characters. */
+  maxNameLength: number;
+}
+
+export const FORWARD_AUTH_DEFAULTS: Readonly<ForwardAuthSettings> = Object.freeze({
+  clientId: 'heautou-proxy',
+  sessionSeconds: 43_200,
+  idleSeconds: 7200,
+  touchSeconds: 60,
+  loginSeconds: 600,
+  tokenBytes: 32,
+  refusalLogSeconds: 300,
+  maxNameLength: 60,
+});

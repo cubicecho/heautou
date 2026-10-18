@@ -70,6 +70,13 @@ const LABELS: Record<AuditType, string> = {
   PASSWORD_RESET_REQUESTED: 'Password reset asked for',
   PICTURE_SET: 'Profile picture set',
   PICTURE_REMOVED: 'Profile picture removed',
+  PROXY_SIGNED_IN: 'Signed in to the protected sites',
+  PROXY_SIGNED_OUT: 'Signed out of the protected sites',
+  PROXY_REFUSED: 'Turned away from a protected site',
+  PROTECTED_SITE_CREATED: 'Protected site added',
+  PROTECTED_SITE_UPDATED: 'Protected site changed',
+  PROTECTED_SITE_DELETED: 'Protected site removed',
+  PROXY_COOKIE_DOMAIN_SET: 'Proxy cookie domain changed',
 };
 
 /** The labels by the type's GraphQL name and by the value the account route sends. */
@@ -113,6 +120,7 @@ const WARNINGS = new Set([
   'APP_LOGOUT_FAILED',
   'ACCOUNT_PASSWORD_FAILED',
   'MAIL_FAILED',
+  'PROXY_REFUSED',
 ]);
 
 /**

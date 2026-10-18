@@ -12,6 +12,9 @@ import { isProduction, OIDC_MOUNT_PATH, trustProxy } from '../core/config.ts';
 import type { Context } from '../core/context.ts';
 import { HTTP_DEFAULTS } from '../core/defaults.ts';
 import type { Services } from '../core/services.ts';
+import { FORWARD_AUTH_PATH } from '../forward-auth/client.ts';
+import { createForwardAuthRouter } from '../forward-auth/routes.ts';
+import { createProxyTrust } from '../forward-auth/trust.ts';
 import { graphqlLogger } from '../graphql/logger.ts';
 import { useOperationLimits } from '../graphql/operation-limits.ts';
 import { schema } from '../graphql/schema.ts';
@@ -27,9 +30,16 @@ import { createLoginThrottle, limitRequests } from './rate-limit.ts';
 const GRAPHQL_ENDPOINT = '/graphql';
 const HEALTH_ENDPOINT = '/healthz';
 /** Every path but the server's own, so the web app's routes load index.html. */
-const WEB_ROUTES = /^(?!\/(graphql|healthz)$|\/(oidc|interaction|admin|upstream)(\/|$)).*/;
+const WEB_ROUTES = /^(?!\/(graphql|healthz)$|\/(oidc|interaction|admin|upstream|auth)(\/|$)).*/;
 /** The routes that start sign-ins or write files, limited per address. */
-const LIMITED_ROUTES = [`${OIDC_MOUNT_PATH}/auth`, `${OIDC_MOUNT_PATH}/reg`, '/interaction', '/admin', '/upstream'];
+const LIMITED_ROUTES = [
+  `${OIDC_MOUNT_PATH}/auth`,
+  `${OIDC_MOUNT_PATH}/reg`,
+  '/interaction',
+  '/admin',
+  '/upstream',
+  FORWARD_AUTH_PATH.signIn,
+];
 /** Where `npm run build` puts the web app. */
 const WEB_DIST = fileURLToPath(new URL('../../dist', import.meta.url));
 
@@ -73,6 +83,8 @@ export function createApp(services: Services): Express {
       audit: services.audit,
       mail: services.mail,
       pictures: services.pictures,
+      protectedSites: services.protectedSites,
+      forwardAuth: services.forwardAuth,
       viewer: res.locals.viewer as PublicUser,
       ip: req.ip ?? null,
     }),
@@ -101,6 +113,10 @@ export function createApp(services: Services): Express {
   app.use(createInteractionRouter({ ...services, origin, throttle }));
   app.use(createForgotPasswordRouter({ ...services, mailer: services.mail, origin }));
   app.use(createUpstreamRouter(services));
+  // The proxy calls verify on every request to a protected site, so it is not rate limited; sign-in is.
+  const trustsHop: (address: string, hop: number) => boolean = app.get('trust proxy fn');
+  const trust = createProxyTrust(services.forwardAuth.trustedProxies, (address) => trustsHop(address, 0));
+  app.use(createForwardAuthRouter({ ...services, trust }));
   app.use(OIDC_MOUNT_PATH, (req, res) => services.host.handle(req, res));
 
   const hasWebBuild = existsSync(WEB_DIST);

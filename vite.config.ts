@@ -35,6 +35,7 @@ export default defineConfig({
       '/upstream': API_ORIGIN,
       // A user's profile picture; `/users` itself is the web app's page.
       '^/users/[^/]+/picture': API_ORIGIN,
+      '/auth': API_ORIGIN,
     },
   },
 });

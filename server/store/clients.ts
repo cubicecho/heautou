@@ -1,6 +1,11 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { ADMIN_DEFAULTS, CLIENT_TOKEN_LIFETIME_DEFAULTS, CREDENTIAL_DEFAULTS } from '../core/defaults.ts';
+import {
+  ADMIN_DEFAULTS,
+  CLIENT_TOKEN_LIFETIME_DEFAULTS,
+  CREDENTIAL_DEFAULTS,
+  FORWARD_AUTH_DEFAULTS,
+} from '../core/defaults.ts';
 import { badInput, notFound } from '../core/errors.ts';
 import { parseInput } from '../core/validation.ts';
 import { DEFAULT_GROUPS_CLAIM, groupsClaimSchema, replaceGroupIn, withoutBlanks } from './claims.ts';
@@ -295,7 +300,8 @@ export function createClientStore(file: JsonFile<OidcClient[]>, options: ClientS
     find,
     create: (input) => {
       const { clientId = randomUUID(), ...fields } = parseInput(newClientSchema, withoutBlanks(input));
-      const isTaken = find(clientId) !== null || clientId === ADMIN_DEFAULTS.clientId;
+      const isBuiltIn = clientId === ADMIN_DEFAULTS.clientId || clientId === FORWARD_AUTH_DEFAULTS.clientId;
+      const isTaken = find(clientId) !== null || isBuiltIn;
       if (isTaken) {
         throw badInput(`clientId: "${clientId}" is already taken.`);
       }

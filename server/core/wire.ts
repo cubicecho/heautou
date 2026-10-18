@@ -4,6 +4,7 @@ export const HttpStatus = {
   Created: 201,
   NoContent: 204,
   NotModified: 304,
+  Found: 302,
   SeeOther: 303,
   BadRequest: 400,
   Unauthorized: 401,

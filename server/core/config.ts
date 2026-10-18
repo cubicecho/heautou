@@ -90,6 +90,31 @@ export const trustProxy = (): boolean | number | string => {
 };
 
 /**
+ * The parent domain the forward auth session cookie is set on, such as `home.lan`, when the environment sets it.
+ *
+ * @returns `FORWARD_AUTH_COOKIE_DOMAIN` lowercased without a leading dot, or null when unset; then the admin's
+ * choice under Protected sites applies.
+ */
+export const forwardAuthCookieDomain = (): string | null => {
+  const raw = (process.env.FORWARD_AUTH_COOKIE_DOMAIN ?? '').trim().toLowerCase().replace(/^\.+/, '');
+  return raw === '' ? null : raw;
+};
+
+/**
+ * The proxies the forward auth endpoint takes the original request's address from.
+ *
+ * @returns `FORWARD_AUTH_TRUSTED_PROXIES` split on commas (addresses or CIDR ranges), or null when unset; then
+ * `TRUST_PROXY` and loopback decide.
+ */
+export const forwardAuthTrustedProxies = (): string[] | null => {
+  const entries = (process.env.FORWARD_AUTH_TRUSTED_PROXIES ?? '')
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry !== '');
+  return entries.length === 0 ? null : entries;
+};
+
+/**
  * Reads one secret key from its variable, or from the file its `_FILE` variable names (a Docker secret). The file
  * wins.
  *

@@ -34,6 +34,7 @@ or to promote an existing user, it needs the token the boot log prints.
 - `server/oidc/` `provider.ts` (oidc-provider config: scopes, claims, TTLs, each read per token so a client's own `tokenLifetimes` win over `TOKEN_LIFETIME_DEFAULTS`; back-channel logout with oidc-provider's private-address guard dropped so apps on the LAN are reached, within `BACKCHANNEL_LOGOUT_DEFAULTS.timeoutMs`; each read per token so a client's own `tokenLifetimes` win over `TOKEN_LIFETIME_DEFAULTS`; `findAccount` turns away disabled users and those outside a client's `allowedGroups`), `host.ts` (rebuilds the provider when the keys or claim names change; read `services.host.current()` per request), `sessions.ts` (a user's sessions and tokens in the model files; ending them tells the apps they signed in to), `backchannel.ts` (posts logout tokens for sessions ended outside the provider: an admin, `/account`, disabling or deleting a user), `adapter.ts` (oidc-provider models as JSON files under `oidc/`; clients come from the client store), `interactions.ts` (login and automatic consent), `resources.ts` (`features.resourceIndicators` on the API store, read per request: `invalid_target` for a client an API doesn't list, the granted resource used when the token request leaves it out, a machine client's only API by default; an API's `accessTokenSeconds` wins over the client's own in `tokenLifetimesFor`)
 - `server/mail/` optional email: `env.ts` (`SMTP_URL` or `SMTP_HOST` and its parts, `SMTP_FROM`; it wins over Settings and locks it), `mailer.ts` (the transport, nodemailer by default and a fake in tests through `ServiceSettings.mailTransport`; each email sent or failed is a `mail_sent` or `mail_failed` entry, never with the link), `messages.ts` (plain text and escaped HTML under the brand's name, the logo as a CID attachment), `notifications.ts` (follows `audit.onRecord` to email a user about a password or second-factor change, each kind behind its option) and `forgot-password.ts` (`/interaction/:uid/forgot-password`); `server/graphql/mail.ts` is its SDL and resolvers (`mail`, `setMailServer`, `setMailOptions`, `sendTestEmail`, `emailPasswordLink`)
 - `server/graphql/` SDL, schema, `apis.ts` (the API resolvers, merged into the schema), operation limits, logger; `write-schema.ts` prints `schema.graphql`
+- `server/forward-auth/` forward auth for sites behind a reverse proxy: `routes.ts` (`/auth/verify`, which a trusted proxy calls per request and answers 200 with `Remote-*` headers, 401 or with `?redirect=1` a 302 to sign in, 403 or 400; `/auth/sign-in`, `/auth/callback` and `/auth/sign-out`, signing in as the built-in public client `heautou-proxy`), `client.ts` (paths, cookies, the client's metadata), `request.ts` (the original request from `X-Forwarded-*` or `X-Original-URL`, which must agree), `returns.ts` (the `rd` allow list), `trust.ts` (`FORWARD_AUTH_TRUSTED_PROXIES`, else loopback and `TRUST_PROXY`); `server/store/protected-sites.ts` (the sites: host, path prefix, `allowedGroups`, require a second factor; and the cookie domain) and `server/store/proxy-sessions.ts` (hashed tokens, `FORWARD_AUTH_DEFAULTS` lifetime and idle limit); `server/graphql/forward-auth.ts` its SDL and resolvers; `docs/forward-auth.md` the proxy snippets
 - `server/upstream/` signing in through another provider: `client.ts` (openid-client with discovery for OIDC issuers, fixed endpoints plus `/user` and `/user/emails` for GitHub; PKCE, state and nonce on every flow; requests through `fetchUpstream`), `flows.ts` (flows in flight, in memory, single use, bound to one interaction or one user), `accounts.ts` (finds the local user only through a link, never by email; refuses or creates one per provider, limited to listed email domains; maps upstream groups), `routes.ts` (`/upstream/:id/callback`, the URI to register upstream, and `/admin/account/upstreams` to link and unlink); the providers and links are in `upstreams.json` (`server/store/upstreams.ts`, client secrets sealed)
 - `server/http/` `createApp(services)`, health, shutdown, `guards.ts` (same-origin JSON POSTs), `rate-limit.ts`, `headers.ts` (security headers, the web app's CSP), `cookies.ts`; `server/index.ts` only boots
 - `web/src/components/` vendored cubeui and shadcn code: do not edit, reinstall with `npx shadcn@latest add @cubeui/<item>`
@@ -41,8 +42,9 @@ or to promote an existing user, it needs the token the boot log prints.
 - `web/src/passwords/` the strength meter under every new-password field (zxcvbn loaded with `import()`)
 - `web/src/mail/` the Settings section (server, test email, the options) and the sign-in page's forgot-password step; `web/src/core/mail.ts` their hooks
 - `web/src/clients/`, `web/src/apis/`, `web/src/users/`, `web/src/groups/` the dialogs (edit, invite or reset link, sessions, rename, picture)
+- `web/src/sites/`, `web/src/routes/sites.tsx`, `web/src/core/protected-sites.ts` the Protected sites page: the proxy setup, the cookie domain and the sites
 - `web/src/pictures/` the profile picture row `/account` and the users page share; `web/src/core/pictures.ts` its hooks
-- `web/src/routes/` TanStack file routes (`/`, `/clients`, `/apis`, `/users`, `/groups`, `/settings`, `/account`, `/set-password`, `/login/$uid`, `/setup` and the provider's pages); the tree is generated by `npm run codegen`
+- `web/src/routes/` TanStack file routes (`/`, `/clients`, `/apis`, `/users`, `/groups`, `/sites`, `/settings`, `/account`, `/set-password`, `/login/$uid`, `/setup` and the provider's pages); the tree is generated by `npm run codegen`
 - `tests/` mirrors `server/`; `tests/oidc/code-flow.test.ts` runs the whole authorization code flow (secret and PKCE) against a real server
 
 ## How a sign-in goes
@@ -67,6 +69,19 @@ browser to `/admin/login`, which starts a PKCE flow back to `/admin/callback`. T
 non-admin a 403 on `/graphql`, and the web app sends them on to `/account`. An invite or reset link is
 `/set-password#token=…`; setting the password through it signs nobody in, the page then sends the browser to the
 sign-in. Tests sign in with `signInAsAdmin` in `tests/oidc/browser.ts`.
+
+## How forward auth goes
+
+A reverse proxy calls `/auth/verify` with the original request in `X-Forwarded-Proto`/`-Host`/`-Uri`/`-Method` (or
+`X-Original-URL`) and the browser's cookies, only from an address `createProxyTrust` believes. With no live
+`heautou_proxy` session it answers 401 (or 302 with `?redirect=1` for a GET or HEAD) with
+`/auth/sign-in?rd=<original URL>` in `Location`. The sign-in is the usual interaction flow for the built-in client
+`heautou-proxy`, swapped in-process like the admin's; the callback stores a proxy session holding the user, the
+provider grant and the code's `acr`/`amr`, and sets the cookie on the cookie domain. Each verify checks the session,
+that its grant still exists (so `/oidc/session/end`, an admin ending sessions and `revokeAccount` end it), that the
+user is enabled and in the site's `allowedGroups`, and for a site that requires a second factor that `acr` is `mfa`
+(else a step-up sign-in with `prompt=login`, or 403 for a user with none). Sign-ins, sign-outs and refusals are
+audited, refusals once per user and site per `refusalLogSeconds`; allowed requests are not.
 
 ## Security model
 
@@ -93,3 +108,11 @@ can't be revoked before it expires (`API_DEFAULTS.maxAccessTokenSeconds`); oidc-
 opaque one introspects with its `aud`. The provider is not rebuilt when APIs change. `app_signed_in`,
 `app_sign_in_failed`, `app_token_refused` and `machine_token_issued` carry the `resource` asked for, and admin
 changes are `api_created`, `api_updated` and `api_deleted`.
+
+Forward auth's `/auth/verify` believes forwarded headers only from `FORWARD_AUTH_TRUSTED_PROXIES` (else loopback and
+`TRUST_PROXY`), refuses `X-Original-URL` and `X-Forwarded-*` that disagree or hold several values, refuses hosts no
+protected site covers, and is not rate limited (the proxy calls it per request). `rd` must be an http(s) URL without
+credentials on a protected site's host or under the cookie domain, checked when the sign-in starts and ends. The
+`heautou_proxy` cookie is `HttpOnly`, `SameSite=Lax`, `Secure` on an https issuer and set on the cookie domain
+(`FORWARD_AUTH_COOKIE_DOMAIN`, else the admin's), so every app under it receives it; its token is stored hashed in
+`proxy-sessions.json`, which backups skip.
