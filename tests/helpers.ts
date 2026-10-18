@@ -49,7 +49,7 @@ export interface TestApp {
 export async function startTestApp(
   settings: Pick<
     ServiceSettings,
-    'now' | 'secretKeys' | 'fetchRange' | 'fetchUpstream' | 'mailServer' | 'mailTransport'
+    'now' | 'secretKeys' | 'fetchRange' | 'fetchUpstream' | 'mailServer' | 'mailTransport' | 'objectStorage'
   > = {},
 ): Promise<TestApp> {
   const dataDir = tempDir();

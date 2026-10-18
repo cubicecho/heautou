@@ -152,6 +152,16 @@ export const TYPE_DEFS = /* GraphQL */ `
     upstreamLinks: [UpstreamLink!]!
     "When they were added, as an ISO 8601 string."
     createdAt: String!
+    "The URL of their profile picture, which the picture claim holds. Null when they have none or pictures are off."
+    pictureUrl: String
+  }
+
+  "Whether profile pictures can be set, which needs an S3 bucket."
+  type ProfilePictures {
+    "True when the server has a bucket configured."
+    isEnabled: Boolean!
+    "The largest upload, in bytes."
+    maxBytes: Int!
   }
 
   "A user's second factors, without any secret."
@@ -420,6 +430,8 @@ export const TYPE_DEFS = /* GraphQL */ `
     before. userId keeps entries done by that user or to them.
     """
     auditLog(first: Int, after: String, type: AuditType, userId: ID): AuditPage!
+    "Whether profile pictures can be set."
+    profilePictures: ProfilePictures!
     "Every API apps may ask for access tokens to, oldest first."
     apis: [Api!]!
     "One API."

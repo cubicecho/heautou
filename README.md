@@ -121,7 +121,7 @@ a pasted token can use it too. [docs/pairing.md](docs/pairing.md) is the spec fo
 | Scope     | Claims                                                                    |
 | --------- | ------------------------------------------------------------------------- |
 | `openid`  | `sub` (the user's ID)                                                     |
-| `profile` | `name`, `preferred_username` (the username), and the user's custom claims |
+| `profile` | `name`, `preferred_username` (the username), `picture`, and the user's custom claims |
 | `email`   | `email`, `email_verified`                                                 |
 | `groups`  | `groups`, or the client's own groups claim name                           |
 
@@ -158,6 +158,9 @@ An app adds `resource=<identifier>` and the API's scopes to its sign-in request.
 - **Disable and sign out.** Disabling a user turns them away at once: their tokens stop working and they can't
   sign in again until you enable them. The sessions button lists where a user is signed in and ends one or all
   of them. Heautou refuses to disable or delete the last admin.
+- **Profile pictures.** With a bucket configured (see [Profile pictures](#profile-pictures)), users upload a
+  picture on `/account` and admins set one from the user's row: PNG, JPEG or WebP, up to 5 MB, cropped to a
+  256 px square. Apps get it as the `picture` claim. Without a bucket the feature is off and the pages say so.
 - **Groups.** The **Groups** page lists every group with its members and the clients limited to it. Renaming a
   group renames it on every user and client. A group a client is limited to can't be deleted, and nor can
   `heautou-admin`.
@@ -219,6 +222,23 @@ Set these as environment variables, under `environment:` in Compose.
 | `SMTP_URL`    | none                          | Turns email on: `smtp://user:password@host:587` (STARTTLS) or `smtps://…:465`. `_FILE` works too. |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD` | none | The same, one part each. `SMTP_PASSWORD_FILE` works too. |
 | `SMTP_FROM`   | none                          | The sender, such as `Heautou <auth@example.home>`. Required with `SMTP_URL` or `SMTP_HOST`.      |
+| `S3_ENDPOINT` | none                          | The S3-compatible store profile pictures go in, such as `http://rustfs:9000`. Unset, pictures are off. |
+| `S3_BUCKET`   | none                          | The bucket. Keep it private: Heautou serves the pictures itself.                                  |
+| `S3_REGION`   | `us-east-1`                   | The region requests are signed for. Most self-hosted stores take any.                             |
+| `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | none | The key Heautou uses the bucket with. Every `S3_` variable has a `_FILE` form too.     |
+
+### Profile pictures
+
+Pictures are kept in an S3-compatible bucket (RustFS, MinIO, Garage), addressed path-style, never in the data
+folder. Make the bucket and a key that may read, write and delete in it, and set the `S3_` variables. Heautou checks
+the bucket at start-up and logs a `[preflight]` warning when it can't reach it or is refused; sign-ins work either
+way. Setting only some of them stops start-up with the names of the missing ones.
+
+An upload is checked by its bytes (PNG, JPEG or WebP), cropped to a 256 px square and saved again as PNG, which
+drops its metadata, such as where a photo was taken. The `picture` claim is
+`<your-host>/users/<id>/picture?v=<version>`: Heautou streams it from the bucket to anyone who has the URL, so apps
+need no access to the store, and a new picture gets a new `v`, so caches fetch it. Deleting a user deletes their
+picture.
 
 ### Sealing secrets at rest
 
@@ -297,6 +317,10 @@ Everything lives in the data folder, which is the `heautou-data` volume in Docke
 - `audit.jsonl`: the activity log, one entry a line; at 1 MB it moves to `audit.1.jsonl`, and two old files are kept
 - `oidc/`: sessions, codes and tokens. These are not sealed: they are short-lived, and the provider looks
   tokens up by their value, so they sit in the clear until they expire.
+
+Profile pictures are not in the folder but in the S3 bucket, so neither a copy of the folder nor a backup from
+Settings has them: back the bucket up on its own. A restored user whose picture is gone has a broken `picture` URL
+until they upload a new one.
 
 Heautou makes its files readable by its own user only (mode 0600). Back up the folder to back up Heautou. Deleting `keys.json` makes new keys on the next start, and
 every app has to sign in again.

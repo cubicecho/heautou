@@ -393,3 +393,41 @@ export const MAIL_DEFAULTS: Readonly<MailSettings> = Object.freeze({
   maxIdentifierLength: 254,
   maxFieldLength: 254,
 });
+
+/** Profile pictures: what an upload may be, what is kept of it, and how long it is cached. */
+export interface ProfileSettings {
+  /** Largest picture an upload may be, in bytes. */
+  maxPictureBytes: number;
+  /** Largest picture, in pixels (width times height), that is decoded at all, so a small file can't fill the memory. */
+  maxInputPixels: number;
+  /** The side of the square a picture is scaled and cropped to, in pixels. */
+  pictureSidePx: number;
+  /** How long a browser or app keeps a picture fetched at its current `?v=` URL, in seconds. */
+  versionedCacheSeconds: number;
+  /** How long it keeps one fetched at an older or unversioned URL before checking its ETag again, in seconds. */
+  unversionedCacheSeconds: number;
+  /** Where in the bucket the pictures go: this, then the user's id. */
+  keyPrefix: string;
+}
+
+export const PROFILE_DEFAULTS: Readonly<ProfileSettings> = Object.freeze({
+  maxPictureBytes: 5_242_880,
+  maxInputPixels: 40_000_000,
+  pictureSidePx: 256,
+  versionedCacheSeconds: 31_536_000,
+  unversionedCacheSeconds: 300,
+  keyPrefix: 'pictures/',
+});
+
+/** The S3-compatible bucket profile pictures are kept in, such as RustFS, MinIO or Garage. */
+export interface ObjectStorageSettings {
+  /** The region requests are signed for when `S3_REGION` is unset. Most self-hosted stores take any. */
+  region: string;
+  /** How long one request to the bucket may take, in milliseconds. */
+  timeoutMs: number;
+}
+
+export const OBJECT_STORAGE_DEFAULTS: Readonly<ObjectStorageSettings> = Object.freeze({
+  region: 'us-east-1',
+  timeoutMs: 10_000,
+});

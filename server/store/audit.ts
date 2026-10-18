@@ -128,6 +128,10 @@ export const AuditType = {
    * what was typed. A link is only sent when the user is enabled and has an email address.
    */
   PasswordResetRequested: 'password_reset_requested',
+  /** A user's profile picture was set: by them on their account page, or by an admin. */
+  PictureSet: 'picture_set',
+  /** A user's profile picture was removed: by them, or by an admin. */
+  PictureRemoved: 'picture_removed',
 } as const;
 export type AuditType = (typeof AuditType)[keyof typeof AuditType];
 

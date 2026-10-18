@@ -12,11 +12,22 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { KeyRound, Pencil, Plus, Trash2 } from '@/components/ui/icons';
 import { useDeleteUser, useResetSecondFactors, useSetUserDisabled, useUsers } from '@/core/admin';
-import { Ban, Link2, MonitorSmartphone, ShieldCheck, ShieldOff, UserRoundCheck, UsersRound } from '@/core/app-icons';
+import {
+  Ban,
+  ImageUp,
+  Link2,
+  MonitorSmartphone,
+  ShieldCheck,
+  ShieldOff,
+  UserRoundCheck,
+  UsersRound,
+} from '@/core/app-icons';
 import { messageOf } from '@/core/lists';
+import { useProfilePictures } from '@/core/pictures';
 import { LinkedAccountsDialog } from '@/users/linked-accounts-dialog';
 import { PasswordDialog } from '@/users/password-dialog';
 import { PasswordLinkDialog } from '@/users/password-link-dialog';
+import { PictureDialog } from '@/users/picture-dialog';
 import { SessionsDialog } from '@/users/sessions-dialog';
 import { UserFormDialog } from '@/users/user-form-dialog';
 
@@ -30,7 +41,8 @@ type Dialog =
   | { kind: 'password'; user: UserFieldsFragment }
   | { kind: 'link'; user: UserFieldsFragment }
   | { kind: 'sessions'; user: UserFieldsFragment }
-  | { kind: 'linked'; user: UserFieldsFragment };
+  | { kind: 'linked'; user: UserFieldsFragment }
+  | { kind: 'picture'; user: UserFieldsFragment };
 
 /**
  * A line on who a user is: their name, email and groups, whichever they have.
@@ -89,6 +101,7 @@ function UsersPage() {
   const remove = useDeleteUser();
   const setDisabled = useSetUserDisabled();
   const resetTwoFactor = useResetSecondFactors();
+  const pictures = useProfilePictures().data;
   const failure = remove.error ?? setDisabled.error ?? resetTwoFactor.error;
   const users = query.data ?? [];
   const [dialog, setDialog] = useState<Dialog>({ kind: 'closed' });
@@ -144,6 +157,11 @@ function UsersPage() {
                 key={user.id}
                 title={user.username}
                 titleClassName={user.disabled ? 'text-foreground/60' : undefined}
+                leadingSlot={
+                  user.pictureUrl ? (
+                    <img src={user.pictureUrl} alt="" className="size-8 rounded-full object-cover" />
+                  ) : undefined
+                }
                 description={summaryOf(user)}
                 meta={badgesOf(user)}
                 actionSlot={
@@ -173,6 +191,16 @@ function UsersPage() {
                       iconSlot={<Link2 />}
                       onClick={() => setDialog({ kind: 'link', user })}
                     />
+                    {pictures?.isEnabled ? (
+                      <Button
+                        aria-label={`Set ${user.username}'s picture`}
+                        hint="Picture"
+                        variant="outline"
+                        size="icon-sm"
+                        iconSlot={<ImageUp />}
+                        onClick={() => setDialog({ kind: 'picture', user })}
+                      />
+                    ) : null}
                     <Button
                       aria-label={`${user.username}'s sessions`}
                       hint="Sessions"
@@ -257,6 +285,16 @@ function UsersPage() {
           ) : null}
           {dialog.kind === 'linked' ? (
             <LinkedAccountsDialog key={dialog.user.id} user={dialog.user} open onOpenChange={close} />
+          ) : null}
+          {dialog.kind === 'picture' && pictures !== undefined ? (
+            <PictureDialog
+              key={dialog.user.id}
+              user={dialog.user}
+              isEnabled={pictures.isEnabled}
+              maxBytes={pictures.maxBytes}
+              open
+              onOpenChange={close}
+            />
           ) : null}
           {dialog.kind === 'sessions' ? (
             <SessionsDialog key={dialog.user.id} user={dialog.user} open onOpenChange={close} />

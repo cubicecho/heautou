@@ -6,6 +6,7 @@ import { createAccountRouter } from '../admin/account.ts';
 import { adminUrls } from '../admin/admin-client.ts';
 import { createBackupRouter } from '../admin/backup.ts';
 import { createFactorRouter } from '../admin/factors.ts';
+import { createPictureRouter } from '../admin/pictures.ts';
 import { createAdminRouter, requireAdmin } from '../admin/routes.ts';
 import { isProduction, OIDC_MOUNT_PATH, trustProxy } from '../core/config.ts';
 import type { Context } from '../core/context.ts';
@@ -71,6 +72,7 @@ export function createApp(services: Services): Express {
       passwordPolicy: services.passwordPolicy,
       audit: services.audit,
       mail: services.mail,
+      pictures: services.pictures,
       viewer: res.locals.viewer as PublicUser,
       ip: req.ip ?? null,
     }),
@@ -95,6 +97,7 @@ export function createApp(services: Services): Express {
   app.use(createAccountRouter({ ...services, throttle }));
   app.use(createFactorRouter({ ...services, throttle }));
   app.use(createBackupRouter(services));
+  app.use(createPictureRouter(services));
   app.use(createInteractionRouter({ ...services, origin, throttle }));
   app.use(createForgotPasswordRouter({ ...services, mailer: services.mail, origin }));
   app.use(createUpstreamRouter(services));

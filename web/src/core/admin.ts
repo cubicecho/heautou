@@ -66,7 +66,7 @@ import { request, subscribe } from '@/core/gql';
 import { jsonReply, postJson } from '@/core/json-reply';
 
 /** The react-query keys of the admin API's lists. */
-const KEYS = {
+export const KEYS = {
   viewer: ['viewer'],
   provider: ['provider'],
   clients: ['clients'],

@@ -68,6 +68,8 @@ const LABELS: Record<AuditType, string> = {
   MAIL_SERVER_REMOVED: 'Email server removed',
   MAIL_OPTIONS_SET: 'Email options changed',
   PASSWORD_RESET_REQUESTED: 'Password reset asked for',
+  PICTURE_SET: 'Profile picture set',
+  PICTURE_REMOVED: 'Profile picture removed',
 };
 
 /** The labels by the type's GraphQL name and by the value the account route sends. */

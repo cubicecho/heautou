@@ -1,9 +1,10 @@
 // Boot only. Preflight is the first import: it exits with a sentence when the configuration is unusable.
 import './core/preflight.ts';
 import { adminUrls } from './admin/admin-client.ts';
-import { dataDir, issuerUrl, port, secretKeys, trustProxy, version } from './core/config.ts';
+import { dataDir, issuerUrl, port, s3Config, secretKeys, trustProxy, version } from './core/config.ts';
 import { ADMIN_DEFAULTS } from './core/defaults.ts';
 import { errorMessage } from './core/errors.ts';
+import { createObjectStorage } from './core/object-storage.ts';
 import { SecretKeyError } from './core/secret-box.ts';
 import { openServices, type Services } from './core/services.ts';
 import { createApp } from './http/app.ts';
@@ -14,6 +15,7 @@ const LISTEN_HOST = '0.0.0.0';
 const SECONDS_PER_MINUTE = 60;
 
 const sealingKeys = secretKeys();
+const bucket = s3Config();
 
 /**
  * Opens the data, stopping with a sentence when the secret key doesn't fit it.
@@ -28,6 +30,7 @@ function openOrExit(): Services {
       isProxied: trustProxy() !== false,
       secretKeys: sealingKeys,
       mailServer: mailServerFromEnv(),
+      objectStorage: bucket === null ? null : createObjectStorage(bucket),
     });
   } catch (error) {
     if (error instanceof SecretKeyError) {

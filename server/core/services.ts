@@ -1,7 +1,7 @@
 import path from 'node:path';
 import type Provider from 'oidc-provider';
 import type { Client, KoaContextWithOIDC } from 'oidc-provider';
-import { adminClientMetadata } from '../admin/admin-client.ts';
+import { adminClientMetadata, adminUrls } from '../admin/admin-client.ts';
 import { createSetupGate, type SetupGate } from '../admin/setup.ts';
 import { createMailer, type Mailer, type MailTransportFactory, smtpTransport } from '../mail/mailer.ts';
 import { sendNotifications } from '../mail/notifications.ts';
@@ -42,7 +42,9 @@ import {
 import { createUserStore, type User, type UserStore } from '../store/users.ts';
 import { createUpstreamClient } from '../upstream/client.ts';
 import { createUpstreamFlows, type UpstreamFlows } from '../upstream/flows.ts';
+import type { ObjectStorage } from './object-storage.ts';
 import { createPasswordPolicy, type FetchRange, type PasswordPolicy } from './password-policy.ts';
+import { createProfilePictures, type ProfilePictures } from './pictures.ts';
 import { createSecretBox, type SecretKeys } from './secret-box.ts';
 
 /** The files under the data directory. */
@@ -122,6 +124,8 @@ export interface ServiceSettings {
   mailServer?: MailServer | null;
   /** Sends email. Unset, nodemailer over SMTP. */
   mailTransport?: MailTransportFactory;
+  /** The S3 bucket profile pictures are kept in. Unset or null, pictures are off. */
+  objectStorage?: ObjectStorage | null;
 }
 
 /** Everything the HTTP app is built from. */
@@ -157,6 +161,8 @@ export interface Services {
   sessions: SessionTools;
   /** Backups of the data directory. */
   backup: DataBackup;
+  /** Profile pictures, kept in the S3 bucket; off without one. */
+  pictures: ProfilePictures;
   issuer: string;
   /** Sends invite and reset links, the forgot-password link and notifications, once SMTP is set up. */
   mail: Mailer;
@@ -213,6 +219,11 @@ export function openServices(settings: ServiceSettings): Services {
     reservedScopes: SCOPES,
   });
   const users = createUserStore(tracked(openJsonFile<User[]>(at(DATA_FILES.users), [])));
+  const pictures = createProfilePictures({
+    storage: settings.objectStorage ?? null,
+    users,
+    base: adminUrls(settings.issuer).base,
+  });
   const factors = createFactorStore(tracked(openSealedFile(factorFile, box, factorSecretsIn)), settings.now);
   const audit = openAuditLog(at(DATA_FILES.audit), settings.now);
   const now = settings.now ?? Date.now;
@@ -274,6 +285,7 @@ export function openServices(settings: ServiceSettings): Services {
       adapter,
       isProxied: settings.isProxied,
       claimNames: claimNamesIn(users, clients),
+      pictureUrlOf: pictures.urlOf,
     });
     // A paired client may bring a new groups claim, which the provider has to be built again to release.
     const refreshSoon = (): void => {
@@ -343,6 +355,7 @@ export function openServices(settings: ServiceSettings): Services {
     host,
     sessions: createSessionTools(files, createLogoutNotifier(host, { audit, users, clients })),
     backup,
+    pictures,
     issuer: settings.issuer,
     mail,
   };

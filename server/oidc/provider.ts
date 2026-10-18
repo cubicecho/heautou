@@ -41,7 +41,7 @@ export type AuthMethod = (typeof AuthMethod)[keyof typeof AuthMethod];
 const CLAIMS_BY_SCOPE = {
   // How the user signed in goes in every ID token, so an app can ask for a second factor.
   openid: ['sub', 'acr', 'amr'],
-  profile: ['name', 'preferred_username'],
+  profile: ['name', 'preferred_username', 'picture'],
   email: ['email', 'email_verified'],
   groups: [DEFAULT_GROUPS_CLAIM],
 };
@@ -132,6 +132,8 @@ export interface ProviderDeps {
   claimNames: ClaimNames;
   /** Makes the provider's outgoing requests: the logout tokens it posts to apps. */
   fetch?: typeof globalThis.fetch;
+  /** The URL of a user's profile picture, or null for none. Unset, no `picture` claim is released. */
+  pictureUrlOf?: (user: PublicUser) => string | null;
 }
 
 /**
@@ -139,9 +141,14 @@ export interface ProviderDeps {
  *
  * @param user - The user.
  * @param [groupsClaim] - The claim the client reads groups from.
+ * @param [picture] - The URL of their profile picture, or null for none.
  * @returns Their claims.
  */
-export function claimsOf(user: PublicUser, groupsClaim: string = DEFAULT_GROUPS_CLAIM): Record<string, unknown> {
+export function claimsOf(
+  user: PublicUser,
+  groupsClaim: string = DEFAULT_GROUPS_CLAIM,
+  picture: string | null = null,
+): Record<string, unknown> {
   const hasEmail = user.email !== '';
   return {
     ...user.claims,
@@ -151,6 +158,7 @@ export function claimsOf(user: PublicUser, groupsClaim: string = DEFAULT_GROUPS_
     // The operator typed the address in, so it is as verified as this provider can make it.
     email: hasEmail ? user.email : undefined,
     email_verified: hasEmail ? true : undefined,
+    picture: picture ?? undefined,
     [groupsClaim]: user.groups,
   };
 }
@@ -264,7 +272,8 @@ export function createProvider(deps: ProviderDeps): Provider {
         return undefined;
       }
       const groupsClaim = client?.groupsClaim ?? DEFAULT_GROUPS_CLAIM;
-      return { accountId: user.id, claims: async () => ({ ...claimsOf(user, groupsClaim), sub: user.id }) };
+      const picture = deps.pictureUrlOf?.(user) ?? null;
+      return { accountId: user.id, claims: async () => ({ ...claimsOf(user, groupsClaim, picture), sub: user.id }) };
     },
     interactions: {
       policy: interactionPolicyFor(),

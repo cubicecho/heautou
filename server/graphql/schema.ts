@@ -2,7 +2,7 @@ import type { GraphQLSchema } from 'graphql';
 import { createSchema, Repeater } from 'graphql-yoga';
 import { adminUrls, type BrandingView, brandingView, sessionClientName, WEB_APP_PAGE } from '../admin/admin-client.ts';
 import type { Context } from '../core/context.ts';
-import { CLIENT_TOKEN_LIFETIME_DEFAULTS, TOKEN_LIFETIME_DEFAULTS } from '../core/defaults.ts';
+import { CLIENT_TOKEN_LIFETIME_DEFAULTS, PROFILE_DEFAULTS, TOKEN_LIFETIME_DEFAULTS } from '../core/defaults.ts';
 import { notFound } from '../core/errors.ts';
 import { type StartedPairing, startPairing } from '../oidc/pairing.ts';
 import { SCOPES } from '../oidc/provider.ts';
@@ -452,6 +452,15 @@ const resolvers = {
   AuditTargetKind: enumOf(Object.values(AuditTargetKind)),
   User: {
     /**
+     * Resolves `User.pictureUrl`.
+     *
+     * @param user - The user.
+     * @param _args - Unused.
+     * @param ctx - Request context.
+     * @returns The URL the picture claim holds, or null.
+     */
+    pictureUrl: (user: PublicUser, _args: unknown, ctx: Context): string | null => ctx.pictures.urlOf(user),
+    /**
      * Resolves `User.claims`.
      *
      * @param user - The user.
@@ -501,6 +510,18 @@ const resolvers = {
       })),
   },
   Query: {
+    /**
+     * Resolves `Query.profilePictures`.
+     *
+     * @param _parent - Unused.
+     * @param _args - Unused.
+     * @param ctx - Request context.
+     * @returns Whether pictures are on, and the largest upload.
+     */
+    profilePictures: (_parent: unknown, _args: unknown, ctx: Context) => ({
+      isEnabled: ctx.pictures.isEnabled,
+      maxBytes: PROFILE_DEFAULTS.maxPictureBytes,
+    }),
     /**
      * Resolves `Query.tokenLifetimeDefaults`.
      *
@@ -856,6 +877,7 @@ const resolvers = {
       ctx.passwordLinks.cancelFor(user.id);
       ctx.factors.removeAll(user.id);
       ctx.upstreams.removeUser(user.id);
+      await ctx.pictures.discard(user);
       return audited(ctx, AuditType.UserDeleted, userTarget(user), refreshed(ctx, user));
     },
     /**

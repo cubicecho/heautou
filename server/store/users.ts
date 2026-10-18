@@ -26,6 +26,10 @@ export interface User {
   disabled: boolean;
   /** When they were added, as an ISO 8601 string. */
   createdAt: string;
+  /**
+   * Which profile picture they have in the bucket: a hash of its bytes, which versions its URL. Null for none.
+   */
+  pictureVersion: string | null;
 }
 
 /** A user without the password hash: what leaves the store. */
@@ -86,6 +90,14 @@ export interface UserStore {
   setPassword: (id: string, password: string) => PublicUser;
   /** Disables or enables a user. Disabling the last admin who can sign in is refused. */
   setDisabled: (id: string, disabled: boolean) => PublicUser;
+  /**
+   * Records which profile picture a user has. The picture itself is in the bucket.
+   *
+   * @param id - The user.
+   * @param version - The new picture's version, or null when it was removed.
+   * @returns The user.
+   */
+  setPictureVersion: (id: string, version: string | null) => PublicUser;
   remove: (id: string) => PublicUser;
   /**
    * Renames a group in every user, or takes it off them all.
@@ -125,7 +137,12 @@ function toPublic({ passwordHash, ...user }: User): PublicUser {
  * @returns The user with every field.
  */
 function withDefaults(user: User): User {
-  return { ...user, claims: user.claims ?? {}, disabled: user.disabled ?? false };
+  return {
+    ...user,
+    claims: user.claims ?? {},
+    disabled: user.disabled ?? false,
+    pictureVersion: user.pictureVersion ?? null,
+  };
 }
 
 /**
@@ -191,6 +208,7 @@ export function createUserStore(file: JsonFile<User[]>, now: () => Date = () => 
         ...fields,
         claims,
         disabled: false,
+        pictureVersion: null,
         id: randomUUID(),
         passwordHash: password === undefined ? '' : hashPassword(password),
         createdAt: now().toISOString(),
@@ -208,6 +226,7 @@ export function createUserStore(file: JsonFile<User[]>, now: () => Date = () => 
       return replace({ ...load(id), passwordHash: hashPassword(parsed) });
     },
     setDisabled: (id, disabled) => replace({ ...load(id), disabled }),
+    setPictureVersion: (id, version) => replace({ ...load(id), pictureVersion: version }),
     remove: (id) => {
       const user = load(id);
       write((users) => users.filter((other) => other.id !== id));
