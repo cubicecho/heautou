@@ -19,6 +19,7 @@ fragment ClientFields on Client {
   }
   backchannelLogoutUri
   backchannelLogoutSessionRequired
+  preset
 }
 
 fragment PairingFields on Pairing {
