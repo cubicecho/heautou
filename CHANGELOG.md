@@ -1,3 +1,18 @@
+# [1.12.0](https://github.com/cubicecho/heautou/compare/v1.11.0...v1.12.0) (2026-10-19)
+
+
+### Bug Fixes
+
+* cap an API's access tokens at the API maximum when it sets no lifetime ([8d15bd7](https://github.com/cubicecho/heautou/commit/8d15bd740b7093913e4a457e1353c00fd3f3b9a2))
+
+
+### Features
+
+* access tokens for a named API with resource indicators ([80a9cfa](https://github.com/cubicecho/heautou/commit/80a9cfa093ac5edd48f21959389063c379369148)), closes [#12](https://github.com/cubicecho/heautou/issues/12)
+* forward auth for sites behind a reverse proxy ([353172c](https://github.com/cubicecho/heautou/commit/353172ca2dddbe48204ff02d773d947ebd52b868)), closes [#10](https://github.com/cubicecho/heautou/issues/10)
+* profile pictures, stored in S3-compatible storage ([902ee6c](https://github.com/cubicecho/heautou/commit/902ee6ceb50c5f208c7b1be55161c5979b559141)), closes [#14](https://github.com/cubicecho/heautou/issues/14)
+* send invite and reset links, a forgot-password link and notices by email ([8a90cb5](https://github.com/cubicecho/heautou/commit/8a90cb5cce421cced38c37f755c589f7216c0724)), closes [#3](https://github.com/cubicecho/heautou/issues/3)
+
 # [1.11.0](https://github.com/cubicecho/heautou/compare/v1.10.0...v1.11.0) (2026-10-18)
 
 
