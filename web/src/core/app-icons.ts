@@ -3,6 +3,7 @@ export {
   Activity,
   AppWindow,
   Ban,
+  ExternalLink,
   ImageUp,
   LayoutDashboard,
   Link2,

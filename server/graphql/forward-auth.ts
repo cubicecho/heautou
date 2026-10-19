@@ -30,9 +30,9 @@ export const FORWARD_AUTH_TYPE_DEFS = /* GraphQL */ `
     cookieDomain: String
     "Whether FORWARD_AUTH_COOKIE_DOMAIN sets it, which wins over setForwardAuthCookieDomain."
     isCookieDomainFromEnvironment: Boolean!
-    "The verify endpoint at Heautou's public address. Answers 401 when nobody is signed in (nginx, HAProxy)."
+    "The verify endpoint at Heautou's public address. Answers 401 when nobody is signed in (nginx)."
     verifyUrl: String!
-    "The same, answering a browser with a redirect to sign in (Traefik, Caddy)."
+    "The same, answering a browser with a redirect to sign in (HAProxy, Caddy, Traefik)."
     verifyRedirectUrl: String!
     "Where a user signs out of the protected sites."
     signOutUrl: String!

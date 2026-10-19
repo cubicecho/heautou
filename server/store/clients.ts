@@ -80,12 +80,21 @@ export interface OidcClient {
   backchannelLogoutUri: string | null;
   /** Whether the logout token, and its ID tokens, carry the session ID (`sid`) the app can match its session by. */
   backchannelLogoutSessionRequired: boolean;
+  /**
+   * The preset the operator started it from (the web app's `web/src/clients/presets.ts`), so the client can show
+   * how to configure the app again. Null for none.
+   */
+  preset: string | null;
   /** When it was added, as an ISO 8601 string. */
   createdAt: string;
 }
 
 /** Characters a client ID may hold: what fits in a URL and a config file without quoting. */
 const CLIENT_ID_PATTERN = /^[A-Za-z0-9._-]+$/;
+
+/** What a preset's ID may be: the web app's own, so lowercase words joined by dashes. */
+const PRESET_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+const PRESET_MAX_LENGTH = 64;
 
 const uriList = z.array(z.url({ protocol: /^[a-z][a-z0-9+.-]*$/ }).trim());
 
@@ -132,6 +141,18 @@ const clientFields = z.object({
     .nullable()
     .default(null),
   backchannelLogoutSessionRequired: z.boolean().default(true),
+  preset: z
+    .literal('')
+    .transform(() => null)
+    .or(
+      z
+        .string()
+        .trim()
+        .max(PRESET_MAX_LENGTH)
+        .regex(PRESET_PATTERN, 'name a preset with lowercase letters, digits and "-" only'),
+    )
+    .nullable()
+    .default(null),
 });
 
 /**
@@ -214,6 +235,7 @@ function withDefaults(client: OidcClient): OidcClient {
     tokenLifetimes: { ...DEFAULT_CLIENT_TOKEN_LIFETIMES, ...client.tokenLifetimes },
     backchannelLogoutUri: client.backchannelLogoutUri ?? null,
     backchannelLogoutSessionRequired: client.backchannelLogoutSessionRequired ?? true,
+    preset: client.preset ?? null,
   };
 }
 
@@ -314,8 +336,9 @@ export function createClientStore(file: JsonFile<OidcClient[]>, options: ClientS
       const current = load(clientId);
       // What the input leaves out keeps its value, rather than taking the default a new client gets.
       const { allowedGroups, groupsClaim, allowClientCredentials, logoUri, tokenLifetimes } = current;
-      const { backchannelLogoutUri, backchannelLogoutSessionRequired } = current;
+      const { backchannelLogoutUri, backchannelLogoutSessionRequired, preset } = current;
       const kept = {
+        preset,
         allowedGroups,
         groupsClaim,
         allowClientCredentials,

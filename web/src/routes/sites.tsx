@@ -25,6 +25,7 @@ import {
   useSetForwardAuthCookieDomain,
 } from '@/core/protected-sites';
 import { formatDateTime } from '@/lib/format';
+import { ProxySnippet } from '@/sites/proxy-snippet';
 import { SiteFormDialog } from '@/sites/site-form-dialog';
 
 export const Route = createFileRoute('/sites')({ component: SitesPage });
@@ -102,16 +103,19 @@ function CookieDomainForm({ settings }: { settings: ForwardAuthFieldsFragment })
 }
 
 /**
- * What the reverse proxy is pointed at, and the cookie domain.
+ * What the reverse proxy is pointed at, the cookie domain, and a configuration to paste.
+ *
+ * @param props - The sites, for the snippet.
+ * @param props.sites - The protected sites.
  */
-function ProxySetupSection() {
+function ProxySetupSection({ sites }: { sites: readonly ProtectedSiteFieldsFragment[] }) {
   const query = useForwardAuth();
   const settings = query.data;
 
   return (
     <Section
       title="Proxy setup"
-      description="Point the reverse proxy's forward auth at these, from where it reaches Heautou. docs/forward-auth.md has a snippet for HAProxy, nginx, Caddy and Traefik."
+      description="Point the reverse proxy's forward auth at these, from where it reaches Heautou, or paste the snippet below. docs/forward-auth.md explains each one."
       surface="card"
       contentSlot={
         <div className="grid gap-4">
@@ -124,13 +128,13 @@ function ProxySetupSection() {
                     key="verify"
                     label="Verify endpoint"
                     value={settings.verifyUrl}
-                    hint="Answers 401 to send the browser to sign in: nginx and HAProxy."
+                    hint="Answers 401 to send the browser to sign in: nginx."
                   />,
                   <AddressRow
                     key="redirect"
                     label="Verify with redirect"
                     value={settings.verifyRedirectUrl}
-                    hint="Answers a browser with a redirect to sign in: Traefik and Caddy."
+                    hint="Answers a browser with a redirect to sign in: HAProxy, Caddy and Traefik."
                   />,
                   <AddressRow
                     key="sign-out"
@@ -158,6 +162,7 @@ function ProxySetupSection() {
                   description="Only sites on Heautou's own host share the sign-in. Set the domain the sites and Heautou have in common, such as home.lan."
                 />
               ) : null}
+              <ProxySnippet settings={settings} sites={sites} />
             </>
           )}
         </div>
@@ -209,7 +214,7 @@ function SitesPage() {
       contentClassName="gap-4"
       contentSlot={
         <>
-          <ProxySetupSection />
+          <ProxySetupSection sites={sites} />
           {remove.error === null ? null : (
             <Alert variant="destructive" title="Site not deleted" description={messageOf(remove.error)} />
           )}

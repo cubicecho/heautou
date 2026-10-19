@@ -7,6 +7,12 @@ through, and here is who it is", "send the browser to sign in", or "refuse". The
 Heautou follows the shape Authelia and Authentik use, so the usual `auth_request` and `forward_auth` recipes work.
 This page has a snippet for HAProxy, nginx, Caddy and Traefik.
 
+**Protected sites** in the admin UI builds the same snippets for you: pick the proxy and a site (or all of them),
+say where the proxy reaches Heautou and the app, and copy the configuration with your hosts and path prefixes
+filled in. The page and this doc come from the same code (`web/src/sites/proxy-snippets.ts`), and a test holds
+the examples below to it. A site with a path prefix gets lines that guard only that prefix, and strip the
+`Remote-*` headers from the rest of the host; those lines have not been run against a real proxy.
+
 ## How it works
 
 1. The browser asks for `https://sonarr.home.lan/`. The proxy first calls Heautou's verify endpoint, passing the
@@ -34,7 +40,7 @@ This page has a snippet for HAProxy, nginx, Caddy and Traefik.
 4. **Add each site** under **Protected sites**: its host, an optional path prefix (`/admin` covers `/admin` and
    `/admin/users`, not `/administrator`), the groups that may reach it, and whether it needs a second factor.
    The proxy is refused for anything not listed, so add a site for each host the proxy asks about.
-5. **Configure the proxy** with one of the snippets below. Use the address the proxy reaches Heautou at, such as
+5. **Configure the proxy** with the snippet **Protected sites** builds, or one of those below. Use the address the proxy reaches Heautou at, such as
    `http://heautou:3000` on a Docker network.
 
 ## The endpoints
@@ -265,6 +271,11 @@ http:
       rule: Host(`sonarr.home.lan`)
       middlewares: [heautou]
       service: sonarr
+  services:
+    sonarr:
+      loadBalancer:
+        servers:
+          - url: http://sonarr:8989
 ```
 
 Or as Docker labels:

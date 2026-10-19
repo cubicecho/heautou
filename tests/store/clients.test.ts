@@ -134,6 +134,22 @@ describe('client store', () => {
     });
   });
 
+  it('remembers the preset a client was started from, keeps it on update and clears it when blank', () => {
+    const { store } = freshStore();
+    const { clientId } = store.create({ ...FIELDS, preset: 'mealie' });
+    expect(store.find(clientId)?.preset).toBe('mealie');
+    store.update(clientId, FIELDS);
+    expect(store.find(clientId)?.preset).toBe('mealie');
+    store.update(clientId, { ...FIELDS, preset: '' });
+    expect(store.find(clientId)?.preset).toBeNull();
+    expect(store.create({ ...FIELDS }).preset).toBeNull();
+  });
+
+  it('refuses a preset name that is not lowercase words joined by dashes', () => {
+    const { store } = freshStore();
+    expect(() => store.create({ ...FIELDS, preset: 'Mealie!' })).toThrow(/preset/);
+  });
+
   it("takes a native app's own scheme for a public client only", () => {
     const { store } = freshStore();
     const native = { ...FIELDS, redirectUris: ['com.example.app:/callback'] };

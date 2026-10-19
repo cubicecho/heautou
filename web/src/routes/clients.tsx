@@ -5,6 +5,8 @@ import { AUTH_METHODS } from '@/clients/auth-methods';
 import { ClientFormDialog } from '@/clients/client-form-dialog';
 import { durationText } from '@/clients/durations';
 import { PairDialog } from '@/clients/pair-dialog';
+import { PresetPanel } from '@/clients/preset-panel';
+import { presetById } from '@/clients/presets';
 import { ConfirmButton } from '@/components/confirm-button';
 import { DescriptionList, PropertyRow } from '@/components/description-list';
 import { DisclosureRow } from '@/components/disclosure-row';
@@ -75,6 +77,7 @@ function backchannelText(client: ClientFieldsFragment): string {
 function ClientCredentials({ client }: { client: ClientFieldsFragment }) {
   const rotate = useRotateClientSecret();
   const secret = client.clientSecret;
+  const preset = presetById(client.preset);
 
   return (
     <div className="flex flex-col gap-4">
@@ -154,6 +157,7 @@ function ClientCredentials({ client }: { client: ClientFieldsFragment }) {
       {rotate.error === null ? null : (
         <Alert variant="destructive" title="Secret not rotated" description={messageOf(rotate.error)} />
       )}
+      {preset === undefined ? null : <PresetPanel client={client} preset={preset} />}
     </div>
   );
 }
@@ -243,6 +247,9 @@ function ClientsPage() {
                     <Badge variant="outline">{client.authMethod === 'NONE' ? 'Public' : 'Confidential'}</Badge>
                     {client.allowedGroups.length === 0 ? null : <Badge variant="secondary">Limited</Badge>}
                     {client.source === 'PAIRED' ? <Badge variant="secondary">Paired</Badge> : null}
+                    {presetById(client.preset) === undefined ? null : (
+                      <Badge variant="secondary">{presetById(client.preset)?.name}</Badge>
+                    )}
                     {client.refusedRedirectUris.length === 0 ? null : <Badge variant="warning">http redirect</Badge>}
                   </>
                 }
