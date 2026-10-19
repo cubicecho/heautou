@@ -1,3 +1,11 @@
+# [1.13.0](https://github.com/cubicecho/heautou/compare/v1.12.0...v1.13.0) (2026-10-19)
+
+
+### Features
+
+* build forward auth proxy snippets on the Protected sites page ([e27801f](https://github.com/cubicecho/heautou/commit/e27801f42288f661e536f0f4d51f315822f75bd3))
+* client presets for common homelab apps and the cubicecho apps ([87f5cba](https://github.com/cubicecho/heautou/commit/87f5cba9a179283cce4390798106417671297acc)), closes [#4](https://github.com/cubicecho/heautou/issues/4)
+
 # [1.12.0](https://github.com/cubicecho/heautou/compare/v1.11.0...v1.12.0) (2026-10-19)
 
 
