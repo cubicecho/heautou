@@ -44,8 +44,8 @@ import {
 import type { NewUser, PublicUser, UserFields } from '../store/users.ts';
 import { upstreamTarget } from '../upstream/accounts.ts';
 import { apiResolvers } from './apis.ts';
-import { MAIL_TYPE_DEFS, mailResolvers } from './mail.ts';
 import { FORWARD_AUTH_TYPE_DEFS, forwardAuthResolvers } from './forward-auth.ts';
+import { MAIL_TYPE_DEFS, mailResolvers } from './mail.ts';
 import { TYPE_DEFS } from './type-defs.ts';
 
 /** Where discovery lives under the issuer. */
