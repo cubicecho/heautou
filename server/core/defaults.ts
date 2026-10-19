@@ -340,3 +340,125 @@ export const UPSTREAM_DEFAULTS: Readonly<UpstreamSettings> = Object.freeze({
   maxNameLength: 60,
   maxIdLength: 40,
 });
+
+/** The APIs (resource servers) apps ask for access tokens to with a resource indicator (RFC 8707). */
+export interface ApiSettings {
+  /** Shortest access token lifetime an API may set, in seconds. */
+  minAccessTokenSeconds: number;
+  /** Longest access token lifetime an API may set, in seconds. A JWT access token can't be revoked, so it stays short. */
+  maxAccessTokenSeconds: number;
+  /** Longest name an API may have, in characters. */
+  maxNameLength: number;
+  /** Most scopes one API may list. */
+  maxScopes: number;
+}
+
+export const API_DEFAULTS: Readonly<ApiSettings> = Object.freeze({
+  minAccessTokenSeconds: 60,
+  maxAccessTokenSeconds: 86_400,
+  maxNameLength: 60,
+  maxScopes: 50,
+});
+
+/** How email is sent (invite and reset links, the forgot-password link, notifications), when SMTP is set up. */
+export interface MailSettings {
+  /** The SMTP port when `SMTP_PORT`, the URL or Settings name none: submission with STARTTLS. */
+  port: number;
+  /** The port that means TLS from the first byte (SMTPS) when nothing says otherwise. */
+  implicitTlsPort: number;
+  /** How long connecting to the SMTP server may take, in milliseconds. */
+  connectionTimeoutMs: number;
+  /** How long the server may take to greet and to answer each command, in milliseconds. */
+  socketTimeoutMs: number;
+  /** Forgot-password requests from one IP per window. */
+  forgotPerIp: number;
+  /** Forgot-password requests for one username or email address per window. */
+  forgotPerIdentifier: number;
+  /** The window forgot-password requests are counted in, in seconds. */
+  forgotWindowSeconds: number;
+  /** Longest username or email address a forgot-password request may name, in characters. */
+  maxIdentifierLength: number;
+  /** Longest host, user or sender address saved under Settings, in characters. */
+  maxFieldLength: number;
+}
+
+export const MAIL_DEFAULTS: Readonly<MailSettings> = Object.freeze({
+  port: 587,
+  implicitTlsPort: 465,
+  connectionTimeoutMs: 10_000,
+  socketTimeoutMs: 20_000,
+  forgotPerIp: 5,
+  forgotPerIdentifier: 3,
+  forgotWindowSeconds: 3600,
+  maxIdentifierLength: 254,
+  maxFieldLength: 254,
+});
+
+/** Profile pictures: what an upload may be, what is kept of it, and how long it is cached. */
+export interface ProfileSettings {
+  /** Largest picture an upload may be, in bytes. */
+  maxPictureBytes: number;
+  /** Largest picture, in pixels (width times height), that is decoded at all, so a small file can't fill the memory. */
+  maxInputPixels: number;
+  /** The side of the square a picture is scaled and cropped to, in pixels. */
+  pictureSidePx: number;
+  /** How long a browser or app keeps a picture fetched at its current `?v=` URL, in seconds. */
+  versionedCacheSeconds: number;
+  /** How long it keeps one fetched at an older or unversioned URL before checking its ETag again, in seconds. */
+  unversionedCacheSeconds: number;
+  /** Where in the bucket the pictures go: this, then the user's id. */
+  keyPrefix: string;
+}
+
+export const PROFILE_DEFAULTS: Readonly<ProfileSettings> = Object.freeze({
+  maxPictureBytes: 5_242_880,
+  maxInputPixels: 40_000_000,
+  pictureSidePx: 256,
+  versionedCacheSeconds: 31_536_000,
+  unversionedCacheSeconds: 300,
+  keyPrefix: 'pictures/',
+});
+
+/** The S3-compatible bucket profile pictures are kept in, such as RustFS, MinIO or Garage. */
+export interface ObjectStorageSettings {
+  /** The region requests are signed for when `S3_REGION` is unset. Most self-hosted stores take any. */
+  region: string;
+  /** How long one request to the bucket may take, in milliseconds. */
+  timeoutMs: number;
+}
+
+export const OBJECT_STORAGE_DEFAULTS: Readonly<ObjectStorageSettings> = Object.freeze({
+  region: 'us-east-1',
+  timeoutMs: 10_000,
+});
+
+/** How a reverse proxy asks whether a request may reach a protected site (forward auth), and the session it reads. */
+export interface ForwardAuthSettings {
+  /** The built-in client the proxy session signs in as. It is not in the client list and cannot be added there. */
+  clientId: string;
+  /** How long a proxy session lasts from its sign-in, however much it is used, in seconds. */
+  sessionSeconds: number;
+  /** How long a proxy session lasts without a request, in seconds. */
+  idleSeconds: number;
+  /** How often a session's last request is written down at most, in seconds, so not every request writes the file. */
+  touchSeconds: number;
+  /** How long a started proxy sign-in may take to come back, in seconds. */
+  loginSeconds: number;
+  /** Random bytes in a proxy session token, before base64url. */
+  tokenBytes: number;
+  /** How long one user's refusals at one site are logged once, in seconds, so a page and its assets are one entry. */
+  refusalLogSeconds: number;
+  /** Longest name a protected site may have, in characters. */
+  maxNameLength: number;
+}
+
+export const FORWARD_AUTH_DEFAULTS: Readonly<ForwardAuthSettings> = Object.freeze({
+  clientId: 'heautou-proxy',
+  sessionSeconds: 43_200,
+  idleSeconds: 7200,
+  touchSeconds: 60,
+  loginSeconds: 600,
+  tokenBytes: 32,
+  refusalLogSeconds: 300,
+  maxNameLength: 60,
+});

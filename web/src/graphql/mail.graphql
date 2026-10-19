@@ -1,0 +1,65 @@
+fragment MailSettingsFields on MailSettings {
+  source
+  isConfigured
+  server {
+    host
+    port
+    secure
+    user
+    hasPassword
+    from
+  }
+  forgotPassword
+  notifyPasswordChanged
+  notifyFactorAdded
+  notifyFactorRemoved
+}
+
+query Mail {
+  mail {
+    ...MailSettingsFields
+  }
+}
+
+mutation SetMailServer($input: MailServerInput!) {
+  setMailServer(input: $input) {
+    ...MailSettingsFields
+  }
+}
+
+mutation RemoveMailServer {
+  removeMailServer {
+    ...MailSettingsFields
+  }
+}
+
+mutation SetMailOptions(
+  $forgotPassword: Boolean
+  $notifyPasswordChanged: Boolean
+  $notifyFactorAdded: Boolean
+  $notifyFactorRemoved: Boolean
+) {
+  setMailOptions(
+    forgotPassword: $forgotPassword
+    notifyPasswordChanged: $notifyPasswordChanged
+    notifyFactorAdded: $notifyFactorAdded
+    notifyFactorRemoved: $notifyFactorRemoved
+  ) {
+    ...MailSettingsFields
+  }
+}
+
+mutation SendTestEmail($to: String) {
+  sendTestEmail(to: $to)
+}
+
+mutation EmailPasswordLink($id: ID!) {
+  emailPasswordLink(id: $id) {
+    link {
+      url
+      expiresAt
+    }
+    sentTo
+    error
+  }
+}

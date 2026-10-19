@@ -3,6 +3,7 @@ import { ADMIN_DEFAULTS } from '../core/defaults.ts';
 import { badInput, notFound } from '../core/errors.ts';
 import { parseInput } from '../core/validation.ts';
 import type { ClientStore } from './clients.ts';
+import type { ProtectedSiteStore } from './protected-sites.ts';
 import type { UpstreamStore } from './upstreams.ts';
 import type { UserStore } from './users.ts';
 
@@ -26,6 +27,8 @@ export interface GroupStores {
   clients: ClientStore;
   /** Upstream providers name groups too, for the users they create and map. Renames and removals follow there. */
   upstreams?: UpstreamStore;
+  /** Protected sites are limited to groups as clients are. Renames follow there, and removals are refused. */
+  protectedSites?: ProtectedSiteStore;
 }
 
 const groupNameSchema = z.string().trim().min(1, 'give the group a name');
@@ -36,7 +39,7 @@ const groupNameSchema = z.string().trim().min(1, 'give the group a name');
  * @param stores - The users and clients.
  * @returns The groups, by name.
  */
-export function listGroups({ users, clients }: GroupStores): Group[] {
+export function listGroups({ users, clients, protectedSites }: GroupStores): Group[] {
   const names = new Set<string>([ADMIN_DEFAULTS.group]);
   for (const user of users.list()) {
     for (const group of user.groups) {
@@ -45,6 +48,11 @@ export function listGroups({ users, clients }: GroupStores): Group[] {
   }
   for (const client of clients.list()) {
     for (const group of client.allowedGroups) {
+      names.add(group);
+    }
+  }
+  for (const site of protectedSites?.list() ?? []) {
+    for (const group of site.allowedGroups) {
       names.add(group);
     }
   }
@@ -100,6 +108,7 @@ export function renameGroup(stores: GroupStores, name: string, newName: string):
   stores.users.replaceGroup(name, to);
   stores.clients.replaceGroup(name, to);
   stores.upstreams?.replaceGroup(name, to);
+  stores.protectedSites?.replaceGroup(name, to);
   const renamed = listGroups(stores).find((group) => group.name === to);
   if (renamed === undefined) {
     throw notFound(`No user or client has the group "${to}".`);
@@ -120,6 +129,11 @@ export function deleteGroup(stores: GroupStores, name: string): number {
   if (group.clientIds.length > 0) {
     const names = group.clientIds.map((clientId) => `"${stores.clients.find(clientId)?.name ?? clientId}"`);
     throw badInput(`${names.join(', ')} only let "${name}" sign in. Change their allowed groups first.`);
+  }
+  const sites = (stores.protectedSites?.list() ?? []).filter((site) => site.allowedGroups.includes(name));
+  if (sites.length > 0) {
+    const names = sites.map((site) => `"${site.name}"`);
+    throw badInput(`${names.join(', ')} only let "${name}" in. Change their allowed groups first.`);
   }
   stores.upstreams?.replaceGroup(name, null);
   return stores.users.replaceGroup(name, null);

@@ -7,7 +7,7 @@ import { Settings, UserRound } from '@/components/ui/icons';
 import { ThemePicker } from '@/components/ui/theme-picker';
 import { useThemePreference } from '@/components/ui/theme-preference';
 import { signOut, useViewer } from '@/core/admin';
-import { Activity, AppWindow, LayoutDashboard, LogOut, Tags, UsersRound } from '@/core/app-icons';
+import { Activity, AppWindow, LayoutDashboard, LogOut, Server, ShieldCheck, Tags, UsersRound } from '@/core/app-icons';
 import { BrandIcon, useBrandName } from '@/core/brand';
 
 const SidebarLink = createLink(SidebarNavItem);
@@ -23,8 +23,10 @@ const PROVIDER_PAGES = ['/login/', '/logout', '/logged-out', '/error', '/setup',
 const PLACES = [
   { to: '/', label: 'Overview', Icon: LayoutDashboard },
   { to: '/clients', label: 'Clients', Icon: AppWindow },
+  { to: '/apis', label: 'APIs', Icon: Server },
   { to: '/users', label: 'Users', Icon: UsersRound },
   { to: '/groups', label: 'Groups', Icon: Tags },
+  { to: '/sites', label: 'Protected sites', Icon: ShieldCheck },
   { to: '/activity', label: 'Activity', Icon: Activity },
   { to: '/settings', label: 'Settings', Icon: Settings },
 ] as const;

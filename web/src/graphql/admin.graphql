@@ -57,6 +57,7 @@ fragment UserFields on User {
     linkedAt
     lastUsedAt
   }
+  pictureUrl
 }
 
 query Provider {
@@ -394,5 +395,12 @@ mutation DeleteUpstream($id: ID!) {
 mutation UnlinkUserUpstream($id: ID!, $providerId: ID!) {
   unlinkUserUpstream(id: $id, providerId: $providerId) {
     id
+  }
+}
+
+query ProfilePictures {
+  profilePictures {
+    isEnabled
+    maxBytes
   }
 }

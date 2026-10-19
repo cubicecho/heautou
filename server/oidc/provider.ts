@@ -1,5 +1,6 @@
 import Provider, { type Account, type AdapterFactory, interactionPolicy } from 'oidc-provider';
 import { BACKCHANNEL_LOGOUT_DEFAULTS, TOKEN_LIFETIME_DEFAULTS } from '../core/defaults.ts';
+import type { ApiStore } from '../store/apis.ts';
 import { DEFAULT_GROUPS_CLAIM } from '../store/claims.ts';
 import { ClientAuthMethod, type ClientStore, type ClientTokenLifetimes, type OidcClient } from '../store/clients.ts';
 import type { ProviderKeys } from '../store/keys.ts';
@@ -8,6 +9,7 @@ import type { SettingsStore } from '../store/settings.ts';
 import type { PublicUser, UserStore } from '../store/users.ts';
 import { createPageSources } from './pages.ts';
 import { createPairingPolicy, PAIRING_POLICY } from './pairing.ts';
+import { accessTokenLifetimeOf, resourceIndicatorsFor, type TokenAudience } from './resources.ts';
 
 /** The scopes clients may ask for. */
 export const SCOPES = ['openid', 'offline_access', 'profile', 'email', 'groups'] as const;
@@ -39,7 +41,7 @@ export type AuthMethod = (typeof AuthMethod)[keyof typeof AuthMethod];
 const CLAIMS_BY_SCOPE = {
   // How the user signed in goes in every ID token, so an app can ask for a second factor.
   openid: ['sub', 'acr', 'amr'],
-  profile: ['name', 'preferred_username'],
+  profile: ['name', 'preferred_username', 'picture'],
   email: ['email', 'email_verified'],
   groups: [DEFAULT_GROUPS_CLAIM],
 };
@@ -115,6 +117,8 @@ export interface ProviderDeps {
   issuer: string;
   clients: ClientStore;
   users: UserStore;
+  /** The APIs apps ask for access tokens to with a resource indicator. */
+  apis: ApiStore;
   /** The setup URLs apps register with. */
   pairings: PairingStore;
   /** The operator's settings, for whether a paired app may register plain http redirect URIs. */
@@ -128,6 +132,8 @@ export interface ProviderDeps {
   claimNames: ClaimNames;
   /** Makes the provider's outgoing requests: the logout tokens it posts to apps. */
   fetch?: typeof globalThis.fetch;
+  /** The URL of a user's profile picture, or null for none. Unset, no `picture` claim is released. */
+  pictureUrlOf?: (user: PublicUser) => string | null;
 }
 
 /**
@@ -135,9 +141,14 @@ export interface ProviderDeps {
  *
  * @param user - The user.
  * @param [groupsClaim] - The claim the client reads groups from.
+ * @param [picture] - The URL of their profile picture, or null for none.
  * @returns Their claims.
  */
-export function claimsOf(user: PublicUser, groupsClaim: string = DEFAULT_GROUPS_CLAIM): Record<string, unknown> {
+export function claimsOf(
+  user: PublicUser,
+  groupsClaim: string = DEFAULT_GROUPS_CLAIM,
+  picture: string | null = null,
+): Record<string, unknown> {
   const hasEmail = user.email !== '';
   return {
     ...user.claims,
@@ -147,6 +158,7 @@ export function claimsOf(user: PublicUser, groupsClaim: string = DEFAULT_GROUPS_
     // The operator typed the address in, so it is as verified as this provider can make it.
     email: hasEmail ? user.email : undefined,
     email_verified: hasEmail ? true : undefined,
+    picture: picture ?? undefined,
     [groupsClaim]: user.groups,
   };
 }
@@ -167,8 +179,8 @@ interface TokenOwner {
 }
 
 /**
- * Builds the provider's token lifetimes: each client's own where the operator set one, the server's default
- * otherwise.
+ * Builds the provider's token lifetimes: an access token's API's own first, then its client's own where the
+ * operator set one, the server's default otherwise.
  *
  * @param clients - The client store, read when each token is made so a change applies to the next one.
  * @returns The `ttl` configuration.
@@ -190,10 +202,10 @@ export function tokenLifetimesFor(clients: ClientStore) {
   };
 
   return {
-    AccessToken: (_ctx: unknown, _token: unknown, client?: TokenOwner) =>
-      lifetimeOf(client, 'accessTokenSeconds', accessTokenSeconds),
-    ClientCredentials: (_ctx: unknown, _token: unknown, client?: TokenOwner) =>
-      lifetimeOf(client, 'accessTokenSeconds', clientCredentialsSeconds),
+    AccessToken: (_ctx: unknown, token?: TokenAudience, client?: TokenOwner) =>
+      accessTokenLifetimeOf(token, lifetimeOf(client, 'accessTokenSeconds', accessTokenSeconds)),
+    ClientCredentials: (_ctx: unknown, token?: TokenAudience, client?: TokenOwner) =>
+      accessTokenLifetimeOf(token, lifetimeOf(client, 'accessTokenSeconds', clientCredentialsSeconds)),
     IdToken: (_ctx: unknown, _token: unknown, client?: TokenOwner) =>
       lifetimeOf(client, 'idTokenSeconds', idTokenSeconds),
     RefreshToken: (_ctx: unknown, _token: unknown, client?: TokenOwner) =>
@@ -260,7 +272,8 @@ export function createProvider(deps: ProviderDeps): Provider {
         return undefined;
       }
       const groupsClaim = client?.groupsClaim ?? DEFAULT_GROUPS_CLAIM;
-      return { accountId: user.id, claims: async () => ({ ...claimsOf(user, groupsClaim), sub: user.id }) };
+      const picture = deps.pictureUrlOf?.(user) ?? null;
+      return { accountId: user.id, claims: async () => ({ ...claimsOf(user, groupsClaim, picture), sub: user.id }) };
     },
     interactions: {
       policy: interactionPolicyFor(),
@@ -293,6 +306,8 @@ export function createProvider(deps: ProviderDeps): Provider {
       // A sign-out at the provider posts a logout token to each app the session signed in to that has a
       // `backchannel_logout_uri`. Sessions an admin ends are told by `backchannel.ts`.
       backchannelLogout: { enabled: true },
+      // An app asks for a token to one of the operator's APIs with `resource` (RFC 8707); see `resources.ts`.
+      resourceIndicators: resourceIndicatorsFor(deps.apis),
     },
     fetch: outgoingFetch(deps.fetch ?? globalThis.fetch),
     // A browser app may call the token endpoint from the origins it was registered to return to.

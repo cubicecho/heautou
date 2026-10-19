@@ -2,8 +2,8 @@ import type { AuthenticationResponseJSON } from '@simplewebauthn/server';
 import express, { type Request, type Response, Router } from 'express';
 import type Provider from 'oidc-provider';
 import { z } from 'zod';
-import { ADMIN_CLIENT_NAME } from '../admin/admin-client.ts';
-import { ADMIN_DEFAULTS, HTTP_DEFAULTS, TWO_FACTOR_DEFAULTS } from '../core/defaults.ts';
+import { builtInClientName } from '../admin/admin-client.ts';
+import { HTTP_DEFAULTS, TWO_FACTOR_DEFAULTS } from '../core/defaults.ts';
 import { errorMessage } from '../core/errors.ts';
 import { createExpiringMap } from '../core/expiring-map.ts';
 import { authenticationOptions, relyingPartyOf, verifyAuthentication } from '../core/webauthn.ts';
@@ -218,8 +218,7 @@ async function clientIdOf(provider: Provider, req: Request, res: Response): Prom
  */
 export function createInteractionRouter(deps: InteractionDeps): Router {
   const { host, clients, users, throttle, audit, factors, upstreams, upstreamFlows, now = Date.now } = deps;
-  const nameOf = (clientId: string): string =>
-    clientId === ADMIN_DEFAULTS.clientId ? ADMIN_CLIENT_NAME : (clients.find(clientId)?.name ?? clientId);
+  const nameOf = (clientId: string): string => builtInClientName(clientId) ?? clients.find(clientId)?.name ?? clientId;
   const rp = relyingPartyOf(deps.issuer);
   const pending = createExpiringMap<PendingSignIn>(TWO_FACTOR_DEFAULTS.pendingSeconds, now);
   const challenges = createExpiringMap<string>(TWO_FACTOR_DEFAULTS.passkeyTimeoutSeconds, now);

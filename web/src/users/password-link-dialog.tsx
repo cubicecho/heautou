@@ -7,7 +7,9 @@ import { Button } from '@/components/ui/button';
 import { CopyButton } from '@/components/ui/copy-button';
 import { Spinner } from '@/components/ui/spinner';
 import { useCreatePasswordLink } from '@/core/admin';
+import { Mail } from '@/core/app-icons';
 import { messageOf } from '@/core/lists';
+import { useEmailPasswordLink, useMail } from '@/core/mail';
 import { formatDateTime } from '@/lib/format';
 
 interface PasswordLinkDialogProps {
@@ -17,14 +19,20 @@ interface PasswordLinkDialogProps {
 }
 
 /**
- * Makes a link that sets a user's password, for the admin to send them however they like. It invites a user who
- * has no password yet and resets one who forgot theirs. Opening it again makes a new link and ends the old one.
+ * Makes a link that sets a user's password, for the admin to copy or, once email is set up and the user has an
+ * address, to send by email. It invites a user who has no password yet and resets one who forgot theirs. Opening
+ * it again, or sending it, makes a new link and ends the old one; the link shown is always the one that works.
  *
  * @param props - The user and the dialog's open state.
  */
 export function PasswordLinkDialog({ user, open, onOpenChange }: PasswordLinkDialogProps) {
-  const { mutate, data: link, error, isPending } = useCreatePasswordLink();
+  const { mutate, data: made, error, isPending } = useCreatePasswordLink();
+  const email = useEmailPasswordLink();
+  const mail = useMail();
   const isInvite = user.hasPassword === false;
+  const canEmail = mail.data?.isConfigured === true && user.email !== '';
+  const link = email.data?.link ?? made;
+  const sendFailure = email.data?.error ?? null;
 
   useEffect(() => {
     mutate(user.id);
@@ -51,13 +59,45 @@ export function PasswordLinkDialog({ user, open, onOpenChange }: PasswordLinkDia
                   label="Link"
                   value={link.url}
                   valueClassName="font-mono break-all"
-                  actionSlot={<CopyButton value={link.url} label="Copy link" />}
+                  actionSlot={
+                    <>
+                      <CopyButton value={link.url} label="Copy link" />
+                      {canEmail ? (
+                        <Button
+                          aria-label={`Send by email to ${user.email}`}
+                          hint={`Send by email to ${user.email}`}
+                          variant="ghost"
+                          size="icon-sm"
+                          iconSlot={<Mail />}
+                          loading={email.isPending}
+                          onClick={() => email.mutate(user.id)}
+                        />
+                      ) : null}
+                    </>
+                  }
                 />,
                 <PropertyRow key="expires" label="Works until" value={formatDateTime(link.expiresAt)} />,
               ]}
             />
           )}
           {error === null ? null : <Alert variant="destructive" title="No link made" description={messageOf(error)} />}
+          {email.data === undefined || sendFailure !== null ? null : (
+            <Alert
+              variant="info"
+              title="Sent"
+              description={`The link above went to ${email.data.sentTo}. The one shown before stopped working.`}
+            />
+          )}
+          {sendFailure === null ? null : (
+            <Alert
+              variant="destructive"
+              title="Email not sent"
+              description={`${sendFailure} The link above still works: copy it instead.`}
+            />
+          )}
+          {email.error === null ? null : (
+            <Alert variant="destructive" title="Email not sent" description={messageOf(email.error)} />
+          )}
           <Alert
             variant="info"
             description="Anyone with the link can set the password, so send it to them directly. Making another link ends this one."

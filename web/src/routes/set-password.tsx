@@ -9,6 +9,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { usePasswordLink, useSetPasswordWithLink } from '@/core/account';
 import { BrandIcon, useBrandName } from '@/core/brand';
 import { messageOf } from '@/core/lists';
+import { signInAfterReset } from '@/core/mail';
 import { PasswordStrengthMeter } from '@/passwords/strength-meter';
 import { passwordProblem } from '@/users/user-form-dialog';
 
@@ -24,7 +25,6 @@ const FORM_ID = 'set-password-form';
 function tokenFromLink(): string | null {
   return new URLSearchParams(window.location.hash.slice(1)).get('token');
 }
-
 /**
  * Where an invite or a reset link opens: the user chooses a password, then signs in with it.
  */
@@ -41,7 +41,7 @@ function SetPasswordPage() {
         return;
       }
       const { redirectTo } = await setPassword.mutateAsync({ token, password: value.password });
-      window.location.assign(redirectTo);
+      window.location.assign(await signInAfterReset(redirectTo));
     },
   });
 

@@ -1,7 +1,6 @@
 import type Provider from 'oidc-provider';
 import type { KoaContextWithOIDC } from 'oidc-provider';
-import { ADMIN_CLIENT_NAME } from '../admin/admin-client.ts';
-import { ADMIN_DEFAULTS } from '../core/defaults.ts';
+import { builtInClientName } from '../admin/admin-client.ts';
 import { errorMessage } from '../core/errors.ts';
 import {
   AppSignInVia,
@@ -51,6 +50,20 @@ function paramOf(ctx: KoaContextWithOIDC, name: string): string | undefined {
 }
 
 /**
+ * Reads the API a request asked for a token to (RFC 8707), after any default the provider filled in.
+ *
+ * @param ctx - The provider's context.
+ * @returns The resource indicator, several joined with spaces, or undefined when none was asked for.
+ */
+function resourceOf(ctx: KoaContextWithOIDC): string | undefined {
+  const value: unknown = ctx.oidc.params?.resource;
+  if (Array.isArray(value)) {
+    return value.length === 0 ? undefined : value.join(' ');
+  }
+  return typeof value === 'string' && value !== '' ? value : undefined;
+}
+
+/**
  * Keeps the strings of a detail that are set.
  *
  * @param detail - The detail, some of it unset.
@@ -90,8 +103,7 @@ function clientTargetIn(clients: ClientStore, clientId: string, fallback?: strin
   return {
     kind: AuditTargetKind.Client,
     id: clientId,
-    name:
-      clientId === ADMIN_DEFAULTS.clientId ? ADMIN_CLIENT_NAME : (clients.find(clientId)?.name ?? fallback ?? clientId),
+    name: builtInClientName(clientId) ?? clients.find(clientId)?.name ?? fallback ?? clientId,
   };
 }
 
@@ -134,8 +146,8 @@ export function recordAppLogoutFailed({ audit, users, clients }: ProviderAuditDe
  * @param deps - The log and the stores that name users and clients.
  *
  * @remarks
- * The admin UI's own sign-ins and sign-outs are left out: its routes record them as `WebSignedIn` and
- * `WebSignedOut`. Its refused requests are kept, since they are as worth knowing about as any app's.
+ * The admin UI's and the protected sites' own sign-ins and sign-outs are left out: their routes record them as
+ * `WebSignedIn` or `ProxySignedIn` and so on. Their refused requests are kept, as worth knowing as any app's.
  */
 export function recordProviderEvents(provider: Provider, { audit, users, clients }: ProviderAuditDeps): void {
   /**
@@ -172,10 +184,12 @@ export function recordProviderEvents(provider: Provider, { audit, users, clients
     const user = accountId === undefined ? null : users.find(accountId);
     return user === null ? null : actorOf(user);
   };
-  const isAdminClient = (ctx: KoaContextWithOIDC): boolean => ctx.oidc.client?.clientId === ADMIN_DEFAULTS.clientId;
+  // The admin UI and the protected sites record their own sign-ins and sign-outs.
+  const isBuiltInClient = (ctx: KoaContextWithOIDC): boolean =>
+    ctx.oidc.client !== undefined && builtInClientName(ctx.oidc.client.clientId) !== null;
 
   provider.on('authorization.success', (ctx) => {
-    if (ctx.oidc.client === undefined || isAdminClient(ctx)) {
+    if (ctx.oidc.client === undefined || isBuiltInClient(ctx)) {
       return;
     }
     audit.record({
@@ -186,6 +200,7 @@ export function recordProviderEvents(provider: Provider, { audit, users, clients
       detail: definedDetail({
         via: viaOf(ctx.oidc.result?.login),
         redirectUri: paramOf(ctx, 'redirect_uri'),
+        resource: resourceOf(ctx),
       }),
     });
   });
@@ -203,6 +218,7 @@ export function recordProviderEvents(provider: Provider, { audit, users, clients
         error: error.error,
         description: error.error_description,
         redirectUri: paramOf(ctx, 'redirect_uri'),
+        resource: resourceOf(ctx),
       }),
     });
   });
@@ -217,6 +233,7 @@ export function recordProviderEvents(provider: Provider, { audit, users, clients
         error: error.error,
         description: error.error_description,
         grantType: paramOf(ctx, 'grant_type'),
+        resource: resourceOf(ctx),
       }),
     });
   });
@@ -230,12 +247,12 @@ export function recordProviderEvents(provider: Provider, { audit, users, clients
       actor: null,
       ip: ctx.ip,
       target: targetOf(ctx),
-      detail: definedDetail({ scope: paramOf(ctx, 'scope') }),
+      detail: definedDetail({ scope: paramOf(ctx, 'scope'), resource: resourceOf(ctx) }),
     });
   });
 
   provider.on('end_session.success', (ctx) => {
-    if (isAdminClient(ctx)) {
+    if (isBuiltInClient(ctx)) {
       return;
     }
     audit.record({ type: AuditType.AppSignedOut, actor: actorIn(ctx), ip: ctx.ip, target: targetOf(ctx) });

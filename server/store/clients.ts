@@ -1,6 +1,11 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { ADMIN_DEFAULTS, CLIENT_TOKEN_LIFETIME_DEFAULTS, CREDENTIAL_DEFAULTS } from '../core/defaults.ts';
+import {
+  ADMIN_DEFAULTS,
+  CLIENT_TOKEN_LIFETIME_DEFAULTS,
+  CREDENTIAL_DEFAULTS,
+  FORWARD_AUTH_DEFAULTS,
+} from '../core/defaults.ts';
 import { badInput, notFound } from '../core/errors.ts';
 import { parseInput } from '../core/validation.ts';
 import { DEFAULT_GROUPS_CLAIM, groupsClaimSchema, replaceGroupIn, withoutBlanks } from './claims.ts';
@@ -188,6 +193,8 @@ export interface ClientStoreOptions {
   now?: () => Date;
   /** Whether plain http redirect URIs are allowed on any host. Asked on every save; refused when left out. */
   allowsHttpRedirects?: () => boolean;
+  /** Told after a client is removed, so what names it (an API's allowed clients) can let it go. */
+  onRemove?: (clientId: string) => void;
 }
 
 /**
@@ -249,11 +256,11 @@ export const clientSecretsIn: SecretMapper<OidcClient[]> = (clients, change) =>
  * rule (`redirect-uris.ts`) when a client is saved; clients already in the file are read as they are.
  *
  * @param file - The file holding every client.
- * @param [options] - The clock and whether plain http redirect URIs are allowed.
+ * @param [options] - The clock, whether plain http redirect URIs are allowed, and who is told of a removal.
  * @returns The store.
  */
 export function createClientStore(file: JsonFile<OidcClient[]>, options: ClientStoreOptions = {}): ClientStore {
-  const { now = () => new Date(), allowsHttpRedirects = () => false } = options;
+  const { now = () => new Date(), allowsHttpRedirects = () => false, onRemove = () => {} } = options;
   type CheckedUris = Pick<
     OidcClient,
     'authMethod' | 'redirectUris' | 'postLogoutRedirectUris' | 'backchannelLogoutUri'
@@ -293,7 +300,8 @@ export function createClientStore(file: JsonFile<OidcClient[]>, options: ClientS
     find,
     create: (input) => {
       const { clientId = randomUUID(), ...fields } = parseInput(newClientSchema, withoutBlanks(input));
-      const isTaken = find(clientId) !== null || clientId === ADMIN_DEFAULTS.clientId;
+      const isBuiltIn = clientId === ADMIN_DEFAULTS.clientId || clientId === FORWARD_AUTH_DEFAULTS.clientId;
+      const isTaken = find(clientId) !== null || isBuiltIn;
       if (isTaken) {
         throw badInput(`clientId: "${clientId}" is already taken.`);
       }
@@ -331,6 +339,7 @@ export function createClientStore(file: JsonFile<OidcClient[]>, options: ClientS
     remove: (clientId) => {
       const client = load(clientId);
       file.update(() => stored().filter((other) => other.clientId !== clientId));
+      onRemove(clientId);
       return client;
     },
     replaceGroup: (from, to) => {

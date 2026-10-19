@@ -16,6 +16,8 @@ import { FormElement } from '@/components/ui/form-element';
 import { KeyRound } from '@/components/ui/icons';
 import { BrandIcon, useBrandName } from '@/core/brand';
 import { messageOf } from '@/core/lists';
+import { useForgotPasswordAvailable } from '@/core/mail';
+import { ForgotPassword } from '@/mail/forgot-password';
 
 export const Route = createFileRoute('/login/$uid')({ component: LoginPage });
 
@@ -114,6 +116,8 @@ function LoginPage() {
   );
   const [secondFactor, setSecondFactor] = useState<SecondFactorChoice | null>(null);
   const [isUsingPasskey, setUsingPasskey] = useState(false);
+  const [isForgotten, setForgotten] = useState(false);
+  const canReset = useForgotPasswordAvailable(uid).data === true;
 
   const details = useQuery({
     queryKey: ['interaction', uid],
@@ -233,6 +237,15 @@ function LoginPage() {
         validators={{ onChange: ({ value }) => (value.trim() ? undefined : 'Enter your username.') }}
       />
       <PasswordField form={passwordForm} name="password" label="Password" required autoComplete="current-password" />
+      {canReset ? (
+        <Button
+          variant="link"
+          size="sm"
+          className="justify-self-start px-0"
+          content="Forgot password?"
+          onClick={() => setForgotten(true)}
+        />
+      ) : null}
       {failureAlert}
       {upstreams.length === 0 ? null : (
         <div className="grid gap-2 border-t pt-4">
@@ -270,6 +283,10 @@ function LoginPage() {
       {failureAlert}
     </FormElement>
   );
+
+  if (isForgotten && secondFactor === null) {
+    return <ForgotPassword uid={uid} onBack={() => setForgotten(false)} />;
+  }
 
   return (
     <CenteredLayout

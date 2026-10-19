@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
-import { HTTP_DEFAULTS } from './defaults.ts';
+import { HTTP_DEFAULTS, OBJECT_STORAGE_DEFAULTS } from './defaults.ts';
 import { parseSecretKey, SecretKeyError, SecretKeyErrorCode, type SecretKeys } from './secret-box.ts';
 
 const NODE_ENV_PRODUCTION = 'production';
@@ -90,6 +90,31 @@ export const trustProxy = (): boolean | number | string => {
 };
 
 /**
+ * The parent domain the forward auth session cookie is set on, such as `home.lan`, when the environment sets it.
+ *
+ * @returns `FORWARD_AUTH_COOKIE_DOMAIN` lowercased without a leading dot, or null when unset; then the admin's
+ * choice under Protected sites applies.
+ */
+export const forwardAuthCookieDomain = (): string | null => {
+  const raw = (process.env.FORWARD_AUTH_COOKIE_DOMAIN ?? '').trim().toLowerCase().replace(/^\.+/, '');
+  return raw === '' ? null : raw;
+};
+
+/**
+ * The proxies the forward auth endpoint takes the original request's address from.
+ *
+ * @returns `FORWARD_AUTH_TRUSTED_PROXIES` split on commas (addresses or CIDR ranges), or null when unset; then
+ * `TRUST_PROXY` and loopback decide.
+ */
+export const forwardAuthTrustedProxies = (): string[] | null => {
+  const entries = (process.env.FORWARD_AUTH_TRUSTED_PROXIES ?? '')
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry !== '');
+  return entries.length === 0 ? null : entries;
+};
+
+/**
  * Reads one secret key from its variable, or from the file its `_FILE` variable names (a Docker secret). The file
  * wins.
  *
@@ -127,6 +152,77 @@ export const secretKeys = (): SecretKeys | null => {
     return null;
   }
   return { current, previous };
+};
+
+/** Where profile pictures are kept: an S3-compatible bucket, addressed path-style. */
+export interface S3Config {
+  /** The store's URL, such as `http://rustfs:9000`. The bucket follows it in the path. */
+  endpoint: string;
+  bucket: string;
+  region: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+}
+
+/** The S3 variables, each also readable from the file its `_FILE` form names. */
+const S3_VARIABLE = {
+  endpoint: 'S3_ENDPOINT',
+  bucket: 'S3_BUCKET',
+  region: 'S3_REGION',
+  accessKeyId: 'S3_ACCESS_KEY_ID',
+  secretAccessKey: 'S3_SECRET_ACCESS_KEY',
+} as const;
+
+/**
+ * Reads a variable, or the file its `_FILE` form names (a Docker secret). The file wins.
+ *
+ * @param name - The variable, such as `S3_SECRET_ACCESS_KEY`.
+ * @returns The value, trimmed, or an empty string when neither is set.
+ */
+function envOrFile(name: string): string {
+  const filePath = (process.env[`${name}_FILE`] ?? '').trim();
+  if (filePath !== '') {
+    return readFileSync(filePath, 'utf8').trim();
+  }
+  return (process.env[name] ?? '').trim();
+}
+
+/**
+ * The bucket profile pictures are kept in.
+ *
+ * @returns The bucket's settings, or null when no `S3_` variable is set and pictures are off.
+ * @throws When only some are set, or `S3_ENDPOINT` is not an http(s) URL.
+ */
+export const s3Config = (): S3Config | null => {
+  const read: S3Config = {
+    endpoint: envOrFile(S3_VARIABLE.endpoint),
+    bucket: envOrFile(S3_VARIABLE.bucket),
+    region: envOrFile(S3_VARIABLE.region),
+    accessKeyId: envOrFile(S3_VARIABLE.accessKeyId),
+    secretAccessKey: envOrFile(S3_VARIABLE.secretAccessKey),
+  };
+  const isOff = Object.values(read).every((value) => value === '');
+  if (isOff) {
+    return null;
+  }
+  const required = [
+    [S3_VARIABLE.endpoint, read.endpoint],
+    [S3_VARIABLE.bucket, read.bucket],
+    [S3_VARIABLE.accessKeyId, read.accessKeyId],
+    [S3_VARIABLE.secretAccessKey, read.secretAccessKey],
+  ];
+  const missing = required.filter(([, value]) => value === '').map(([name]) => name);
+  if (missing.length > 0) {
+    throw new Error(
+      `Profile pictures need ${missing.join(', ')} as well (or their _FILE forms). Set them, or unset every S3_ variable to turn pictures off.`,
+    );
+  }
+  const endpoint = read.endpoint.replace(/\/+$/, '');
+  const isHttpUrl = URL.canParse(endpoint) && /^https?:$/.test(new URL(endpoint).protocol);
+  if (isHttpUrl === false) {
+    throw new Error(`S3_ENDPOINT is "${endpoint}". Expected the store's http(s) URL, such as http://rustfs:9000.`);
+  }
+  return { ...read, endpoint, region: read.region || OBJECT_STORAGE_DEFAULTS.region };
 };
 
 /**

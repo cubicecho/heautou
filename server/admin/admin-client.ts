@@ -1,11 +1,29 @@
 import type { AdapterPayload } from 'oidc-provider';
 import { OIDC_MOUNT_PATH } from '../core/config.ts';
-import { ADMIN_DEFAULTS } from '../core/defaults.ts';
+import { ADMIN_DEFAULTS, FORWARD_AUTH_DEFAULTS } from '../core/defaults.ts';
 import type { Branding } from '../store/branding.ts';
 import type { ClientStore } from '../store/clients.ts';
 
 /** What the sign-in page calls the admin UI. */
 export const ADMIN_CLIENT_NAME = 'Heautou admin';
+/** What the sign-in page and the session lists call the sites behind the reverse proxy (forward auth). */
+export const PROXY_CLIENT_NAME = 'Protected sites';
+
+/** The clients the server itself is, by client ID, and what they are called. */
+const BUILT_IN_CLIENT_NAMES: ReadonlyMap<string, string> = new Map([
+  [ADMIN_DEFAULTS.clientId, ADMIN_CLIENT_NAME],
+  [FORWARD_AUTH_DEFAULTS.clientId, PROXY_CLIENT_NAME],
+]);
+
+/**
+ * Names a client the server itself is.
+ *
+ * @param clientId - Any client ID.
+ * @returns Its name, or null for a client the operator added or an app paired.
+ */
+export function builtInClientName(clientId: string): string | null {
+  return BUILT_IN_CLIENT_NAMES.get(clientId) ?? null;
+}
 
 /** The admin UI's server routes. */
 export const ADMIN_PATH = {
@@ -114,5 +132,8 @@ export function brandingView(branding: Branding): BrandingView {
  * @returns The client's name, or its ID when it was removed.
  */
 export function sessionClientName(clientId: string, clients: ClientStore, branding: Branding): string {
-  return clientId === ADMIN_DEFAULTS.clientId ? branding.name : (clients.find(clientId)?.name ?? clientId);
+  if (clientId === ADMIN_DEFAULTS.clientId) {
+    return branding.name;
+  }
+  return builtInClientName(clientId) ?? clients.find(clientId)?.name ?? clientId;
 }

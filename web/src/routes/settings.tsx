@@ -37,6 +37,7 @@ import {
 import { ImageUp } from '@/core/app-icons';
 import { messageOf } from '@/core/lists';
 import { formatAgo, formatBytes, formatDateTime, joinStats } from '@/lib/format';
+import { MailSection } from '@/mail/mail-section';
 import { UpstreamFormDialog } from '@/upstreams/upstream-form-dialog';
 
 export const Route = createFileRoute('/settings')({ component: SettingsPage });
@@ -425,7 +426,7 @@ function SettingsPage() {
   return (
     <PageLayout
       title="Settings"
-      description="How the provider presents itself, where it sends applications back to, what passwords it takes, where else users may sign in, the keys it signs with, and backups of its data."
+      description="How the provider presents itself, where it sends applications back to, what passwords it takes, how it sends email, where else users may sign in, the keys it signs with, and backups of its data."
       width="prose"
       contentClassName="gap-6"
       contentSlot={
@@ -434,6 +435,7 @@ function SettingsPage() {
           {branding.isPending ? null : <BrandingSection />}
           <RedirectUrisSection />
           <PasswordRulesSection />
+          <MailSection />
           <UpstreamsSection />
           <KeysSection />
           <BackupSection />

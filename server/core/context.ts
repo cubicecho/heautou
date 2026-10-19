@@ -6,6 +6,7 @@ export interface Context
   extends Pick<
     Services,
     | 'clients'
+    | 'apis'
     | 'users'
     | 'factors'
     | 'upstreams'
@@ -21,6 +22,10 @@ export interface Context
     | 'settings'
     | 'passwordPolicy'
     | 'audit'
+    | 'mail'
+    | 'pictures'
+    | 'protectedSites'
+    | 'forwardAuth'
   > {
   /** The signed-in admin making the request. */
   viewer: PublicUser;

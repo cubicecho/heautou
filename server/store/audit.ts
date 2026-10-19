@@ -109,6 +109,43 @@ export const AuditType = {
   UpstreamUnlinked: 'upstream_unlinked',
   /** A sign-in through an upstream provider changed the user's mapped groups. The detail lists them. */
   UpstreamGroupsApplied: 'upstream_groups_applied',
+  /** An admin added an API apps may ask for access tokens to. */
+  ApiCreated: 'api_created',
+  ApiUpdated: 'api_updated',
+  ApiDeleted: 'api_deleted',
+  /** An email went out. The detail has its kind and the address, never the link it carried. */
+  MailSent: 'mail_sent',
+  /** An email could not be sent. The detail has its kind, the address and the SMTP server's error. */
+  MailFailed: 'mail_failed',
+  /** An admin saved the SMTP server under Settings. The detail says whether the password was replaced. */
+  MailServerSet: 'mail_server_set',
+  /** An admin removed the SMTP server saved under Settings. */
+  MailServerRemoved: 'mail_server_removed',
+  /** An admin turned the forgot-password link or a notification on or off. */
+  MailOptionsSet: 'mail_options_set',
+  /**
+   * Someone asked for a reset link on the sign-in page. The actor is the user it matched; with none, the detail has
+   * what was typed. A link is only sent when the user is enabled and has an email address.
+   */
+  PasswordResetRequested: 'password_reset_requested',
+  /** A user's profile picture was set: by them on their account page, or by an admin. */
+  PictureSet: 'picture_set',
+  /** A user's profile picture was removed: by them, or by an admin. */
+  PictureRemoved: 'picture_removed',
+  /** A user signed in to the protected sites (forward auth). The detail names the host they were going to. */
+  ProxySignedIn: 'proxy_signed_in',
+  /** A user signed out of the protected sites. */
+  ProxySignedOut: 'proxy_signed_out',
+  /**
+   * A signed-in user was turned away from a protected site: not in its groups, or without the second factor it asks
+   * for. Logged once per user and site every `FORWARD_AUTH_DEFAULTS.refusalLogSeconds`.
+   */
+  ProxyRefused: 'proxy_refused',
+  ProtectedSiteCreated: 'protected_site_created',
+  ProtectedSiteUpdated: 'protected_site_updated',
+  ProtectedSiteDeleted: 'protected_site_deleted',
+  /** The parent domain the forward auth session cookie is set on changed. */
+  ProxyCookieDomainSet: 'proxy_cookie_domain_set',
 } as const;
 export type AuditType = (typeof AuditType)[keyof typeof AuditType];
 
@@ -127,6 +164,7 @@ export const SIGN_IN_TYPES: readonly AuditType[] = [
   AuditType.AppSignedIn,
   AuditType.AppSignedOut,
   AuditType.WebSignedIn,
+  AuditType.ProxySignedIn,
 ];
 
 /** How an app sign-in was made, in its `via` detail. */
@@ -153,6 +191,10 @@ export const AuditTargetKind = {
   Settings: 'settings',
   /** A provider users sign in through, such as Google or GitHub. */
   Upstream: 'upstream',
+  /** An API (resource server) apps ask for access tokens to. */
+  Api: 'api',
+  /** A site behind the reverse proxy that forward auth protects. */
+  ProtectedSite: 'protected_site',
 } as const;
 export type AuditTargetKind = (typeof AuditTargetKind)[keyof typeof AuditTargetKind];
 

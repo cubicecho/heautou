@@ -116,28 +116,60 @@ The setup URL works once, for 10 minutes. Closing the dialog before the app regi
 is standard OAuth 2.0 Dynamic Client Registration with an initial access token, so any app that supports that with
 a pasted token can use it too. [docs/pairing.md](docs/pairing.md) is the spec for adding pairing to an app.
 
+### Apps with no sign-in of their own (forward auth)
+
+For an app that can't use OIDC, such as Sonarr or a dashboard, your reverse proxy can ask Heautou about every request
+and send the browser here to sign in. Under **Protected sites**, set the cookie domain (the parent domain Heautou and
+the apps share, such as `home.lan`) and add each app's host, with the groups that may reach it and whether it needs a
+second factor. Then point the proxy's forward auth at `/auth/verify`. The app receives the user in `Remote-User`,
+`Remote-Name`, `Remote-Email` and `Remote-Groups`. [docs/forward-auth.md](docs/forward-auth.md) has a tested HAProxy
+configuration and snippets for nginx, Caddy and Traefik.
+
 ### Claims
 
 | Scope     | Claims                                                                    |
 | --------- | ------------------------------------------------------------------------- |
 | `openid`  | `sub` (the user's ID)                                                     |
-| `profile` | `name`, `preferred_username` (the username), and the user's custom claims |
+| `profile` | `name`, `preferred_username` (the username), `picture`, and the user's custom claims |
 | `email`   | `email`, `email_verified`                                                 |
 | `groups`  | `groups`, or the client's own groups claim name                           |
 
 Add `offline_access` to the scopes for a refresh token. Custom claims are set per user, one `name=value` per
 line, and are sent as strings; the names the provider sets itself, such as `sub` or `email`, are refused.
 
+### Access tokens for your own APIs
+
+By default an app's access token is for Heautou's userinfo endpoint, and an API it is sent to has to ask the
+introspection endpoint about it. To give an API tokens of its own (RFC 8707 resource indicators), add it under
+**APIs**:
+
+- **Identifier:** an absolute URI with no fragment, such as `https://photos-api.home.lan`. Apps send it as
+  `resource`, and the token's `aud` is set to it, so a token for one API can't be replayed against another.
+- **Scopes:** the scopes it understands, such as `photos:read`. A token carries only those the app asked for.
+- **Token format:** **JWT** (the default), which the API checks itself against `<ISSUER_URL>/jwks` (check `iss`,
+  `aud` and `exp`), or **Opaque**, which it checks with the introspection endpoint. A JWT can't be revoked: it is
+  good until it expires.
+- **Access token lifetime:** up to a day. It wins over the app's own access token lifetime, which wins over the
+  server's.
+- **Allowed clients:** only these clients may ask for it; any other gets `invalid_target`.
+
+An app adds `resource=<identifier>` and the API's scopes to its sign-in request. The token request may leave
+`resource` out and gets the API granted at sign-in. A machine client uses `grant_type=client_credentials` with
+`resource`, or without it when it is allowed exactly one API.
+
 ## Managing users
 
-- **Invites and password resets.** A user's link button makes a link to send them by chat or however you like:
-  Heautou sends no email. The link sets their password and works once, for 24 hours. A new link replaces the
-  old one.
+- **Invites and password resets.** A user's link button makes a link to send them by chat or however you like.
+  With email set up (see [Email](#email)) and an address on the user, the dialog can also **send it by email**.
+  The link sets their password and works once, for 24 hours. A new link replaces the old one.
 - **Their own account.** Every user can open `/account` to see their details, change their password, and see
   or end where they are signed in. Signing in to the admin UI without being an admin lands there too.
 - **Disable and sign out.** Disabling a user turns them away at once: their tokens stop working and they can't
   sign in again until you enable them. The sessions button lists where a user is signed in and ends one or all
   of them. Heautou refuses to disable or delete the last admin.
+- **Profile pictures.** With a bucket configured (see [Profile pictures](#profile-pictures)), users upload a
+  picture on `/account` and admins set one from the user's row: PNG, JPEG or WebP, up to 5 MB, cropped to a
+  256 px square. Apps get it as the `picture` claim. Without a bucket the feature is off and the pages say so.
 - **Groups.** The **Groups** page lists every group with its members and the clients limited to it. Renaming a
   group renames it on every user and client. A group a client is limited to can't be deleted, and nor can
   `heautou-admin`.
@@ -164,6 +196,25 @@ line, and are sent as strings; the names the provider sets itself, such as `sub`
     mapped from theirs, and takes away mapped groups they no longer hold. `heautou-admin` can never come from a
     provider.
 
+### Email
+
+Optional. Without it, everything works as before and links are copied by hand. Set the SMTP server under
+**Settings → Email**, or with `SMTP_URL` (or `SMTP_HOST` and the rest) and `SMTP_FROM` in the environment, which
+wins and locks the section. **Send test email** checks it. A password saved under Settings is sealed under
+`SECRET_KEY` like the other secrets. Emails carry the branding's name and logo.
+
+Each of these is off until you turn it on:
+
+- **Forgot password link.** The sign-in page gets **Forgot password?**: a user types their username or email
+  address and a reset link goes to the address on file. The page answers the same whether or not an account
+  matched, and disabled users get nothing. It is limited to 5 requests an hour per IP and 3 per username or
+  address. After the new password is set, the link takes the browser back to the same sign-in when it is still
+  open in that browser, and to the account page's sign-in otherwise.
+- **Notifications.** Email a user when their password changes, when an authenticator app or passkey is added, or
+  when a second factor is removed (by them, or by an admin's reset).
+
+Every email sent or failed is in the activity log, with the error but never the link.
+
 ## Configuration
 
 Set these as environment variables, under `environment:` in Compose.
@@ -177,6 +228,28 @@ Set these as environment variables, under `environment:` in Compose.
 | `SECRET_KEY`  | none                          | Seals client secrets and signing keys on disk. 32 bytes of base64: `openssl rand -base64 32`.     |
 | `SECRET_KEY_FILE` | none                      | A file holding the key, such as a Docker secret. It wins over `SECRET_KEY`.                       |
 | `SECRET_KEY_PREVIOUS` | none                  | The old key while changing keys (`_FILE` works too). Remove it after one start.                   |
+| `SMTP_URL`    | none                          | Turns email on: `smtp://user:password@host:587` (STARTTLS) or `smtps://…:465`. `_FILE` works too. |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD` | none | The same, one part each. `SMTP_PASSWORD_FILE` works too. |
+| `SMTP_FROM`   | none                          | The sender, such as `Heautou <auth@example.home>`. Required with `SMTP_URL` or `SMTP_HOST`.      |
+| `S3_ENDPOINT` | none                          | The S3-compatible store profile pictures go in, such as `http://rustfs:9000`. Unset, pictures are off. |
+| `S3_BUCKET`   | none                          | The bucket. Keep it private: Heautou serves the pictures itself.                                  |
+| `S3_REGION`   | `us-east-1`                   | The region requests are signed for. Most self-hosted stores take any.                             |
+| `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | none | The key Heautou uses the bucket with. Every `S3_` variable has a `_FILE` form too.     |
+| `FORWARD_AUTH_COOKIE_DOMAIN` | none           | The parent domain of the protected sites, such as `home.lan`. Wins over the one set in the UI.    |
+| `FORWARD_AUTH_TRUSTED_PROXIES` | loopback, `TRUST_PROXY` | The proxies that may call `/auth/verify`: addresses or CIDR ranges, comma-separated.  |
+
+### Profile pictures
+
+Pictures are kept in an S3-compatible bucket (RustFS, MinIO, Garage), addressed path-style, never in the data
+folder. Make the bucket and a key that may read, write and delete in it, and set the `S3_` variables. Heautou checks
+the bucket at start-up and logs a `[preflight]` warning when it can't reach it or is refused; sign-ins work either
+way. Setting only some of them stops start-up with the names of the missing ones.
+
+An upload is checked by its bytes (PNG, JPEG or WebP), cropped to a 256 px square and saved again as PNG, which
+drops its metadata, such as where a photo was taken. The `picture` claim is
+`<your-host>/users/<id>/picture?v=<version>`: Heautou streams it from the bucket to anyone who has the URL, so apps
+need no access to the store, and a new picture gets a new `v`, so caches fetch it. Deleting a user deletes their
+picture.
 
 ### Sealing secrets at rest
 
@@ -251,9 +324,16 @@ Everything lives in the data folder, which is the `heautou-data` volume in Docke
 - `password-links.json`: open invite and reset links (hashed tokens)
 - `branding.json`: the name and logo
 - `upstreams.json`: sign-in providers (client secrets sealed with `SECRET_KEY`) and the accounts linked to users
+- `apis.json`: your APIs, their scopes and the clients allowed to ask for them
+- `protected-sites.json`: the sites forward auth protects, and the cookie domain
+- `proxy-sessions.json`: browsers signed in to the protected sites (hashed tokens)
 - `audit.jsonl`: the activity log, one entry a line; at 1 MB it moves to `audit.1.jsonl`, and two old files are kept
 - `oidc/`: sessions, codes and tokens. These are not sealed: they are short-lived, and the provider looks
   tokens up by their value, so they sit in the clear until they expire.
+
+Profile pictures are not in the folder but in the S3 bucket, so neither a copy of the folder nor a backup from
+Settings has them: back the bucket up on its own. A restored user whose picture is gone has a broken `picture` URL
+until they upload a new one.
 
 Heautou makes its files readable by its own user only (mode 0600). Back up the folder to back up Heautou. Deleting `keys.json` makes new keys on the next start, and
 every app has to sign in again.
@@ -288,6 +368,8 @@ What Heautou does:
   "Signed in to an app" with the app, the redirect URI, and whether a password was typed or the session they
   already had let them straight through. Refused sign-in and token requests from apps, sign-outs, machine
   (client credentials) tokens and scheduled key rotations are logged too. Passwords, tokens, client secrets and setup URLs are never written to it.
+- **Tokens for an API name it.** An access token asked for with `resource` has that API as its `aud`, and only
+  the clients an API lists can get one. The audit log names the API each sign-in and machine token was for.
 - **The pages can't be framed**, send no referrer, and the web app runs only its own scripts.
 
 What it does not do: seal anything without `SECRET_KEY` (then anyone who can read the data folder has the
