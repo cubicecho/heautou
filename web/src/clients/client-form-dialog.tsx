@@ -94,6 +94,7 @@ export function ClientFormDialog({ client, open, onOpenChange, onSaved }: Client
       allowedGroups: client?.allowedGroups ?? [],
       groupsClaim: client?.groupsClaim ?? DEFAULT_GROUPS_CLAIM,
       allowClientCredentials: client?.allowClientCredentials ?? false,
+      allowDeviceFlow: client?.allowDeviceFlow ?? false,
       accessToken: lifetimeText(ownLifetimes?.accessTokenSeconds),
       idToken: lifetimeText(ownLifetimes?.idTokenSeconds),
       refreshToken: lifetimeText(ownLifetimes?.refreshTokenSeconds),
@@ -109,6 +110,7 @@ export function ClientFormDialog({ client, open, onOpenChange, onSaved }: Client
         allowedGroups: value.allowedGroups,
         groupsClaim: value.groupsClaim.trim() || DEFAULT_GROUPS_CLAIM,
         allowClientCredentials: value.allowClientCredentials,
+        allowDeviceFlow: value.allowDeviceFlow,
         tokenLifetimes: {
           accessTokenSeconds: secondsIn(value.accessToken) ?? null,
           idTokenSeconds: secondsIn(value.idToken) ?? null,
@@ -234,11 +236,13 @@ export function ClientFormDialog({ client, open, onOpenChange, onSaved }: Client
                     name="redirectUris"
                     label="Redirect URIs"
                     rows={URI_ROWS}
-                    description="One per line. The application's callback, matched exactly. Not needed for a client that only uses client credentials."
+                    description="One per line. The application's callback, matched exactly. Not needed for a client that only uses client credentials or the device flow."
                     placeholder="https://grafana.example.com/login/generic_oauth"
                     validators={{
                       onChange: ({ value, fieldApi }) =>
-                        linesOf(value).length > 0 || fieldApi.form.getFieldValue('allowClientCredentials')
+                        linesOf(value).length > 0 ||
+                        fieldApi.form.getFieldValue('allowClientCredentials') ||
+                        fieldApi.form.getFieldValue('allowDeviceFlow')
                           ? undefined
                           : 'Add at least one redirect URI.',
                     }}
@@ -286,6 +290,13 @@ export function ClientFormDialog({ client, open, onOpenChange, onSaved }: Client
                     label="Allow client credentials"
                     description="Lets the application get tokens for itself, with no user, for a backup job or a service calling an API."
                     // Whether redirect URIs are needed turns on this switch, so they are checked again when it moves.
+                    listeners={{ onChange: ({ fieldApi }) => fieldApi.form.validateField('redirectUris', 'change') }}
+                  />
+                  <SwitchField
+                    form={form}
+                    name="allowDeviceFlow"
+                    label="Allow the device flow"
+                    description="Lets a device with no browser of its own, such as Home Assistant or a TV, show a code that a user confirms at /device after signing in. It is given refresh tokens."
                     listeners={{ onChange: ({ fieldApi }) => fieldApi.form.validateField('redirectUris', 'change') }}
                   />
                   <Section

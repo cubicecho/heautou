@@ -360,6 +360,34 @@ export const API_DEFAULTS: Readonly<ApiSettings> = Object.freeze({
   maxScopes: 50,
 });
 
+/**
+ * The device flow (RFC 8628): a device with no browser of its own, such as a home-automation hub, shows a code, and
+ * the user signs in on another device and confirms it.
+ */
+export interface DeviceFlowSettings {
+  /** How long a device code and its user code work, from the device asking until it is approved, in seconds. */
+  codeSeconds: number;
+  /** How long a device waits between polls of the token endpoint, in seconds. A sooner poll is told `slow_down`. */
+  pollSeconds: number;
+  /** How long an expired device code is kept, so a device still polling is told `expired_token`, in seconds. */
+  expiredKeptSeconds: number;
+  /**
+   * What a user code is made of: `base-20` (consonants only, so no word is spelled by accident and none is mistaken
+   * for another) or `digits`.
+   */
+  charset: 'base-20' | 'digits';
+  /** How a user code is laid out, a `*` for each character: `****-****` is eight characters in two groups. */
+  mask: string;
+}
+
+export const DEVICE_FLOW_DEFAULTS: Readonly<DeviceFlowSettings> = Object.freeze({
+  codeSeconds: 600,
+  pollSeconds: 5,
+  expiredKeptSeconds: 3600,
+  charset: 'base-20',
+  mask: '****-****',
+});
+
 /** How email is sent (invite and reset links, the forgot-password link, notifications), when SMTP is set up. */
 export interface MailSettings {
   /** The SMTP port when `SMTP_PORT`, the URL or Settings name none: submission with STARTTLS. */

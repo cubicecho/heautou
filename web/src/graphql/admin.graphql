@@ -8,6 +8,7 @@ fragment ClientFields on Client {
   allowedGroups
   groupsClaim
   allowClientCredentials
+  allowDeviceFlow
   source
   logoUri
   createdAt

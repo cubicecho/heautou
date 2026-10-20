@@ -1,5 +1,6 @@
 import Provider, { type Account, type AdapterFactory, interactionPolicy } from 'oidc-provider';
-import { BACKCHANNEL_LOGOUT_DEFAULTS, TOKEN_LIFETIME_DEFAULTS } from '../core/defaults.ts';
+import { adminUrls } from '../admin/admin-client.ts';
+import { BACKCHANNEL_LOGOUT_DEFAULTS, DEVICE_FLOW_DEFAULTS, TOKEN_LIFETIME_DEFAULTS } from '../core/defaults.ts';
 import type { ApiStore } from '../store/apis.ts';
 import { DEFAULT_GROUPS_CLAIM } from '../store/claims.ts';
 import { ClientAuthMethod, type ClientStore, type ClientTokenLifetimes, type OidcClient } from '../store/clients.ts';
@@ -7,6 +8,7 @@ import type { ProviderKeys } from '../store/keys.ts';
 import type { PairingStore } from '../store/pairings.ts';
 import type { SettingsStore } from '../store/settings.ts';
 import type { PublicUser, UserStore } from '../store/users.ts';
+import { deviceFlowFor, deviceFlowMiddleware } from './device-flow.ts';
 import { createPageSources } from './pages.ts';
 import { createPairingPolicy, PAIRING_POLICY } from './pairing.ts';
 import { accessTokenLifetimeOf, resourceIndicatorsFor, type TokenAudience } from './resources.ts';
@@ -214,6 +216,7 @@ export function tokenLifetimesFor(clients: ClientStore) {
     // as long.
     Grant: (_ctx: unknown, grant: TokenOwner) =>
       Math.max(grantSeconds, lifetimeOf(grant, 'refreshTokenSeconds', grantSeconds)),
+    DeviceCode: DEVICE_FLOW_DEFAULTS.codeSeconds,
     Interaction: interactionSeconds,
     Session: sessionSeconds,
   };
@@ -308,6 +311,9 @@ export function createProvider(deps: ProviderDeps): Provider {
       backchannelLogout: { enabled: true },
       // An app asks for a token to one of the operator's APIs with `resource` (RFC 8707); see `resources.ts`.
       resourceIndicators: resourceIndicatorsFor(deps.apis),
+      // A device with no browser of its own shows a code and the user signs in elsewhere (RFC 8628); only clients
+      // the operator allowed list the grant. See `device-flow.ts`.
+      deviceFlow: deviceFlowFor(deps.clients),
     },
     fetch: outgoingFetch(deps.fetch ?? globalThis.fetch),
     // A browser app may call the token endpoint from the origins it was registered to return to.
@@ -315,6 +321,7 @@ export function createProvider(deps: ProviderDeps): Provider {
     ttl: tokenLifetimesFor(deps.clients),
   });
   provider.proxy = deps.isProxied;
+  provider.use(deviceFlowMiddleware(adminUrls(deps.issuer).base));
   // The browser only sees "server_error"; this is the one trace of what went wrong.
   provider.on('server_error', (_ctx, error) => console.error('[oidc]', error));
   return provider;

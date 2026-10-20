@@ -1,5 +1,6 @@
 import path from 'node:path';
 import type { Adapter, AdapterFactory, AdapterPayload, ResponseType } from 'oidc-provider';
+import { DEVICE_FLOW_DEFAULTS } from '../core/defaults.ts';
 import { MS_PER_SECOND } from '../core/wire.ts';
 import { ClientAuthMethod, type ClientStore, type OidcClient } from '../store/clients.ts';
 import { type JsonFile, openJsonFile } from '../store/json-file.ts';
@@ -73,9 +74,13 @@ export function isLive(entry: StoredEntry, now: number): boolean {
 
 /** The model whose records are the operator's clients rather than the provider's own artefacts. */
 const CLIENT_MODEL = 'Client';
-/** The flows every client may use. */
-const SIGN_IN_GRANT_TYPES = ['authorization_code', 'refresh_token'];
+/** The device flow's codes, one per device waiting for its user to approve. */
+const DEVICE_CODE_MODEL = 'DeviceCode';
+const AUTHORIZATION_CODE = 'authorization_code';
+const REFRESH_TOKEN = 'refresh_token';
 const CLIENT_CREDENTIALS = 'client_credentials';
+/** The device flow's grant (RFC 8628). */
+export const DEVICE_CODE_GRANT = 'urn:ietf:params:oauth:grant-type:device_code';
 const RESPONSE_TYPES: ResponseType[] = ['code'];
 
 /**
@@ -86,10 +91,13 @@ const RESPONSE_TYPES: ResponseType[] = ['code'];
  */
 export function clientMetadata(client: OidcClient): AdapterPayload {
   const isPublic = client.authMethod === ClientAuthMethod.None;
-  // A client with no redirect URIs is a service that only gets tokens for itself.
+  // A client with no redirect URIs signs users in only with the device flow, or is a service that only gets tokens
+  // for itself.
   const signsUsersIn = client.redirectUris.length > 0;
   const grantTypes = [
-    ...(signsUsersIn ? SIGN_IN_GRANT_TYPES : []),
+    ...(signsUsersIn ? [AUTHORIZATION_CODE] : []),
+    ...(client.allowDeviceFlow ? [DEVICE_CODE_GRANT] : []),
+    ...(signsUsersIn || client.allowDeviceFlow ? [REFRESH_TOKEN] : []),
     ...(client.allowClientCredentials && isPublic === false ? [CLIENT_CREDENTIALS] : []),
   ];
   return {
@@ -155,12 +163,13 @@ function createClientAdapter(clients: ClientStore, builtIns: AdapterPayload[]): 
  *
  * @param document - The model's file.
  * @param now - The clock, in epoch milliseconds.
+ * @param [keptSeconds] - How long an entry is kept past its expiry, for a model whose expired entries still answer.
  * @returns The adapter.
  *
  * @remarks
  * Expired entries are dropped whenever the file is written, so it only grows with live sessions and tokens.
  */
-function createFileAdapter(document: JsonFile<ModelDocument>, now: () => number): Adapter {
+function createFileAdapter(document: JsonFile<ModelDocument>, now: () => number, keptSeconds = 0): Adapter {
   const live = (): [string, StoredEntry][] =>
     Object.entries(document.read()).filter(([, entry]) => isLive(entry, now()));
 
@@ -173,7 +182,7 @@ function createFileAdapter(document: JsonFile<ModelDocument>, now: () => number)
 
   return {
     upsert: async (id, payload, expiresIn) => {
-      const expiresAt = expiresIn === undefined ? null : now() + expiresIn * MS_PER_SECOND;
+      const expiresAt = expiresIn === undefined ? null : now() + (expiresIn + keptSeconds) * MS_PER_SECOND;
       write((entries) => [...entries.filter(([key]) => key !== id), [id, { payload, expiresAt }]]);
     },
     find: async (id) => {
@@ -222,6 +231,8 @@ export function createAdapterFactory(settings: AdapterSettings): AdapterFactory 
     if (model === CLIENT_MODEL) {
       return createClientAdapter(clients, builtInClients);
     }
-    return createFileAdapter(files.open(model), files.now);
+    // A device still polling after its code expired is told `expired_token` (RFC 8628), which needs the code found.
+    const keptSeconds = model === DEVICE_CODE_MODEL ? DEVICE_FLOW_DEFAULTS.expiredKeptSeconds : 0;
+    return createFileAdapter(files.open(model), files.now, keptSeconds);
   };
 }

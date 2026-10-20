@@ -151,6 +151,7 @@ function ClientCredentials({ client }: { client: ClientFieldsFragment }) {
             label="Client credentials"
             value={client.allowClientCredentials ? 'Allowed' : 'Not allowed'}
           />,
+          <PropertyRow key="device" label="Device flow" value={client.allowDeviceFlow ? 'Allowed' : 'Not allowed'} />,
           <PropertyRow key="lifetimes" label="Token lifetimes" value={lifetimesText(client.tokenLifetimes)} />,
         ]}
       />

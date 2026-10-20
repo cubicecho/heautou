@@ -88,6 +88,9 @@ docker run -d --name heautou --restart unless-stopped \
      such as `roles`.
    - **Client credentials:** turn on for a service with no users, such as a backup job, that gets its own
      token with `grant_type=client_credentials`. Such a client needs no redirect URI.
+   - **Allow the device flow:** turn on for a device with no browser of its own, such as Home Assistant or a TV,
+     that shows a code for the user to confirm on another device (see [Devices](#devices-with-no-browser-device-flow)).
+     Such a client needs no redirect URI.
 3. **Copy the settings into the app.** Open the client's row on the Clients page:
 
    | The app asks for            | Use                                                           |
@@ -156,6 +159,23 @@ introspection endpoint about it. To give an API tokens of its own (RFC 8707 reso
 An app adds `resource=<identifier>` and the API's scopes to its sign-in request. The token request may leave
 `resource` out and gets the API granted at sign-in. A machine client uses `grant_type=client_credentials` with
 `resource`, or without it when it is allowed exactly one API.
+
+### Devices with no browser (device flow)
+
+A device such as Home Assistant can sign a user in with the OAuth 2.0 device flow (RFC 8628). Add a client with
+**Client authentication** set to **Public (PKCE)**, no redirect URIs and **Allow the device flow** on; to give it
+tokens for one of your APIs, add the client to that API's **Allowed clients**. The device then:
+
+1. POSTs `client_id`, `scope` (add `offline_access` for a refresh token) and optionally `resource` to
+   `<ISSUER_URL>/device/auth`, and shows the user the `user_code` and `verification_uri`
+   (`https://<heautou>/device`, or `verification_uri_complete` with the code filled in, for a QR code).
+2. Polls `<ISSUER_URL>/token` with `grant_type=urn:ietf:params:oauth:grant-type:device_code` and the
+   `device_code` every `interval` seconds (5). Until the user approves it is told `authorization_pending`, sooner
+   than that `slow_down`, and then `access_denied` if they cancel or `expired_token` after 10 minutes.
+
+The user opens `/device`, types the code, checks it against the device, signs in as usual (password, second factor,
+passkey or another provider) and the device gets its tokens. The client's **Allowed groups** apply. Ending the
+user's sessions from **Account** or **Users** revokes the device's refresh token.
 
 ## Managing users
 

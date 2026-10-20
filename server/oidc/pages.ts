@@ -17,6 +17,11 @@ export const WEB_PAGE = {
   loggedOut: '/logged-out',
   /** Any error the provider would otherwise draw itself. */
   error: '/error',
+  /**
+   * The device flow's page: type the code a device shows, confirm it, and hear it worked. It posts plain forms to
+   * the provider's `/device`; see `device-flow.ts`.
+   */
+  device: '/device',
 } as const;
 
 /** The query parameters the web pages read. */
@@ -31,6 +36,10 @@ export const PAGE_PARAM = {
   description: 'description',
   /** The redirect URI the client sent, so a mismatch can be fixed. */
   redirectUri: 'redirect_uri',
+  /** The device flow's user code, as the device shows it. */
+  userCode: 'user_code',
+  /** Which step of the device page to show. */
+  step: 'step',
 } as const;
 
 /** The part of the session state the logout form needs. */
@@ -63,9 +72,21 @@ export function pageUrl(page: string, params: Record<string, string | undefined>
  * @param ctx - The provider's request.
  * @param url - Where to go.
  */
-function sendTo(ctx: KoaContextWithOIDC, url: string): void {
+export function sendTo(ctx: KoaContextWithOIDC, url: string): void {
   ctx.status = HttpStatus.SeeOther;
   ctx.redirect(url);
+}
+
+/**
+ * Names the request's client the way the user knows it.
+ *
+ * @param clients - The client store.
+ * @param ctx - The provider's request.
+ * @returns The client's name, or undefined when the request names no client.
+ */
+export function clientNameIn(clients: ClientStore, ctx: KoaContextWithOIDC): string | undefined {
+  const clientId = ctx.oidc.client?.clientId;
+  return clientId === undefined ? undefined : (builtInClientName(clientId) ?? clients.find(clientId)?.name ?? clientId);
 }
 
 /**
@@ -75,12 +96,7 @@ function sendTo(ctx: KoaContextWithOIDC, url: string): void {
  * @returns The `logoutSource`, `postLogoutSuccessSource` and `renderError` hooks.
  */
 export function createPageSources(clients: ClientStore) {
-  const clientName = (ctx: KoaContextWithOIDC): string | undefined => {
-    const clientId = ctx.oidc.client?.clientId;
-    return clientId === undefined
-      ? undefined
-      : (builtInClientName(clientId) ?? clients.find(clientId)?.name ?? clientId);
-  };
+  const clientName = (ctx: KoaContextWithOIDC): string | undefined => clientNameIn(clients, ctx);
 
   return {
     /**
