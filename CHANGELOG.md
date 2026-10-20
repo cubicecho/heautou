@@ -1,3 +1,10 @@
+# [1.14.0](https://github.com/cubicecho/heautou/compare/v1.13.0...v1.14.0) (2026-10-20)
+
+
+### Features
+
+* sign devices in with the OAuth 2.0 device flow (RFC 8628) ([c7fba79](https://github.com/cubicecho/heautou/commit/c7fba79ff5f5babffd95e4268407e4d36ae86879))
+
 # [1.13.0](https://github.com/cubicecho/heautou/compare/v1.12.0...v1.13.0) (2026-10-19)
 
 
