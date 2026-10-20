@@ -1,3 +1,10 @@
+## [1.16.1](https://github.com/cubicecho/heautou/compare/v1.16.0...v1.16.1) (2026-10-20)
+
+
+### Bug Fixes
+
+* **pairing:** look again for a paired app's API ([972956b](https://github.com/cubicecho/heautou/commit/972956b38177bc0087d72b38d291860248fe7259))
+
 # [1.16.0](https://github.com/cubicecho/heautou/compare/v1.15.0...v1.16.0) (2026-10-20)
 
 
