@@ -392,6 +392,7 @@ export function openServices(settings: ServiceSettings): Services {
       issuer: settings.issuer,
       reservedScopes: SCOPES,
       fetch: settings.fetchPairing ?? globalThis.fetch,
+      now,
     }),
     branding,
     settings: providerSettings,

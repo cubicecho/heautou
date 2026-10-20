@@ -347,6 +347,11 @@ export function useStartPairing() {
   });
 }
 
+/** How often the pair dialog asks again for a paired app's API, in milliseconds. */
+const OFFER_POLL_MS = 3000;
+/** How many times it asks before it stops. */
+const OFFER_POLLS = 10;
+
 /**
  * Watches a pairing, asking again every couple of seconds while no app has registered with it. When one has, the
  * client list is fetched again so the new client shows.
@@ -375,6 +380,17 @@ export function usePairing(id: string) {
   return useQuery({
     queryKey: [...KEYS.pairings, id],
     queryFn: async () => (await request(PairingDocument, { id })).pairing,
+    // An app is often still finishing its pairing when it first shows as paired, and describes its API only after,
+    // so ask again for a while until it does.
+    refetchInterval: (query) => {
+      const pairing = query.state.data;
+      const isLooking =
+        pairing?.status === 'PAIRED' &&
+        pairing.finished === false &&
+        (pairing.offers?.api ?? null) === null &&
+        query.state.dataUpdateCount <= OFFER_POLLS;
+      return isLooking ? OFFER_POLL_MS : false;
+    },
   });
 }
 

@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { HttpStatus } from '../../server/core/wire.ts';
+import { PAIRING_DEFAULTS } from '../../server/core/defaults.ts';
+import { HttpStatus, MS_PER_SECOND } from '../../server/core/wire.ts';
 import { DEVICE_CODE_GRANT } from '../../server/oidc/adapter.ts';
 import { SETUP_URL_TOKEN } from '../../server/oidc/pairing.ts';
 import { metadataUrlFor } from '../../server/oidc/pairing-offers.ts';
@@ -61,9 +62,11 @@ describe('what a paired app offers', () => {
   let metadata: Record<string, unknown> | null;
   /** The addresses heautou fetched. */
   let fetched: string[];
+  let time = Date.now();
 
   beforeAll(async () => {
     app = await startTestApp({
+      now: () => time,
       fetchPairing: async (input) => {
         const url = String(input);
         fetched.push(url);
@@ -221,6 +224,25 @@ describe('what a paired app offers', () => {
     expect(await offeredFor()).toBeNull();
     metadata = null;
     expect(await offeredFor()).toBeNull();
+  });
+
+  it('looks again for an API the app describes only once it has finished pairing', async () => {
+    // The app answers before it has started using this provider, so its metadata names none yet.
+    metadata = { resource: API, authorization_servers: [] };
+    const { id } = await pairBoth();
+    expect((await adminGql(admin, OFFERS, { id })).data.pairing.offers.api).toBeNull();
+
+    metadata = { resource: API, resource_name: 'Telos API', authorization_servers: [app.services.issuer] };
+    // An empty answer is believed for a few seconds, so reading again straight away does not fetch.
+    const fetches = fetched.length;
+    expect((await adminGql(admin, OFFERS, { id })).data.pairing.offers.api).toBeNull();
+    expect(fetched).toHaveLength(fetches);
+
+    time += PAIRING_DEFAULTS.discoveryRetrySeconds * MS_PER_SECOND + 1;
+    expect((await adminGql(admin, OFFERS, { id })).data.pairing.offers.api).toMatchObject({ identifier: API });
+    // Found, it is kept.
+    expect((await adminGql(admin, OFFERS, { id })).data.pairing.offers.api).toMatchObject({ identifier: API });
+    expect(fetched).toHaveLength(fetches + 1);
   });
 
   it('never fetches a client_uri off the redirect URIs host', async () => {
