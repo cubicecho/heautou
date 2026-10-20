@@ -1,3 +1,10 @@
+# [1.16.0](https://github.com/cubicecho/heautou/compare/v1.15.0...v1.16.0) (2026-10-20)
+
+
+### Features
+
+* **pairing:** let a paired app offer a device client and its API ([42c5a19](https://github.com/cubicecho/heautou/commit/42c5a19dee02e8b52cdf79ee6d5ba48e5e60913b))
+
 # [1.15.0](https://github.com/cubicecho/heautou/compare/v1.14.0...v1.15.0) (2026-10-20)
 
 
