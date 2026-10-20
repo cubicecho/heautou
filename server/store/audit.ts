@@ -38,6 +38,18 @@ export const AuditType = {
   AppLogoutFailed: 'app_logout_failed',
   /** A client got a token for itself with the client credentials grant, with no user. */
   MachineTokenIssued: 'machine_token_issued',
+  /**
+   * A device asked for a code to show its user (RFC 8628). There is no actor yet; the detail has the scope and the
+   * API asked for, never the code.
+   */
+  DeviceCodeIssued: 'device_code_issued',
+  /** A user signed a device in by entering its code. It takes the place of `app_signed_in` for a device. */
+  DeviceApproved: 'device_approved',
+  /**
+   * A device's code was turned down: its user cancelled, or the sign-in for it failed. The device is told
+   * `access_denied` or the error when it next polls. The detail has the error.
+   */
+  DeviceRefused: 'device_refused',
   /** A user signed in to the admin UI or their account page. */
   WebSignedIn: 'web_signed_in',
   /** A user signed out of the admin UI or their account page. */
@@ -162,6 +174,7 @@ export const SIGN_IN_TYPES: readonly AuditType[] = [
   AuditType.SignInRefused,
   AuditType.SecondFactorFailed,
   AuditType.AppSignedIn,
+  AuditType.DeviceApproved,
   AuditType.AppSignedOut,
   AuditType.WebSignedIn,
   AuditType.ProxySignedIn,

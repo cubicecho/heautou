@@ -1,6 +1,6 @@
 import Provider, { type Account, type AdapterFactory, interactionPolicy } from 'oidc-provider';
 import { adminUrls } from '../admin/admin-client.ts';
-import { BACKCHANNEL_LOGOUT_DEFAULTS, DEVICE_FLOW_DEFAULTS, TOKEN_LIFETIME_DEFAULTS } from '../core/defaults.ts';
+import { BACKCHANNEL_LOGOUT_DEFAULTS, TOKEN_LIFETIME_DEFAULTS } from '../core/defaults.ts';
 import type { ApiStore } from '../store/apis.ts';
 import { DEFAULT_GROUPS_CLAIM } from '../store/claims.ts';
 import { ClientAuthMethod, type ClientStore, type ClientTokenLifetimes, type OidcClient } from '../store/clients.ts';
@@ -196,6 +196,7 @@ export function tokenLifetimesFor(clients: ClientStore) {
     sessionSeconds,
     grantSeconds,
     clientCredentialsSeconds,
+    deviceCodeSeconds,
   } = TOKEN_LIFETIME_DEFAULTS;
 
   const lifetimeOf = (owner: TokenOwner | undefined, pick: keyof ClientTokenLifetimes, fallback: number): number => {
@@ -216,7 +217,7 @@ export function tokenLifetimesFor(clients: ClientStore) {
     // as long.
     Grant: (_ctx: unknown, grant: TokenOwner) =>
       Math.max(grantSeconds, lifetimeOf(grant, 'refreshTokenSeconds', grantSeconds)),
-    DeviceCode: DEVICE_FLOW_DEFAULTS.codeSeconds,
+    DeviceCode: deviceCodeSeconds,
     Interaction: interactionSeconds,
     Session: sessionSeconds,
   };
