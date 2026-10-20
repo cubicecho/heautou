@@ -237,6 +237,11 @@ export interface PairingSettings {
   discoveryTimeoutMs: number;
   /** Largest protected resource metadata document heautou reads, in bytes. */
   maxDiscoveryBytes: number;
+  /**
+   * How long "the app describes no API heautou can add" is believed before looking again, in seconds. An app is
+   * often still finishing its pairing when heautou first looks, and names this provider only once it has.
+   */
+  discoveryRetrySeconds: number;
 }
 
 export const PAIRING_DEFAULTS: Readonly<PairingSettings> = Object.freeze({
@@ -244,6 +249,7 @@ export const PAIRING_DEFAULTS: Readonly<PairingSettings> = Object.freeze({
   reviewSeconds: 1800,
   discoveryTimeoutMs: 5000,
   maxDiscoveryBytes: 65_536,
+  discoveryRetrySeconds: 3,
 });
 
 /** How the audit log is kept and read. */

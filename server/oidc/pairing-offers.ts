@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { API_DEFAULTS, PAIRING_DEFAULTS } from '../core/defaults.ts';
+import { MS_PER_SECOND } from '../core/wire.ts';
 import { identifierProblem, SCOPE_TOKEN } from '../store/apis.ts';
 
 // What a paired app offers to set up besides its sign-in, for the operator to turn on or leave off when they finish
@@ -166,39 +167,59 @@ export interface PairingOffers {
 /** The most lookups kept; pairings last half an hour, so this is only a bound. */
 const MAX_REMEMBERED = 100;
 
+/** One pairing's lookup: under way or answered, and until when an empty answer is believed. */
+interface Remembered {
+  found: Promise<OfferedApi | null>;
+  /** In epoch milliseconds. Null while under way, and for an API found, which is kept. */
+  retryAfter: number | null;
+}
+
 /**
- * Builds the lookup, remembering each pairing's answer so the admin UI reading it again does not fetch again.
+ * Builds the lookup. An API found is remembered for the pairing, so the admin UI reading it again does not fetch
+ * again. Finding none is believed only for `PAIRING_DEFAULTS.discoveryRetrySeconds`: the app is often still pairing
+ * when heautou first looks (it registers, then starts using this provider), and its metadata names this provider
+ * only after that.
  *
- * @param options - This provider, its own scopes, and how to fetch.
+ * @param options - This provider, its own scopes, how to fetch, and the clock.
  * @param options.issuer - The issuer the metadata must name.
  * @param options.reservedScopes - The provider's own scopes.
  * @param options.fetch - Makes the requests.
+ * @param [options.now] - The clock, in epoch milliseconds.
  * @returns The lookup.
  */
 export function createPairingOffers(options: {
   issuer: string;
   reservedScopes: readonly string[];
   fetch: typeof globalThis.fetch;
+  now?: () => number;
 }): PairingOffers {
-  const remembered = new Map<string, Promise<OfferedApi | null>>();
+  const { now = Date.now, ...lookup } = options;
+  const remembered = new Map<string, Remembered>();
   return {
     apiFor: (pairingId, clientUri, redirectUris) => {
       if (clientUri === null) {
         return Promise.resolve(null);
       }
       const known = remembered.get(pairingId);
-      if (known !== undefined) {
-        return known;
+      const isStale = known?.retryAfter !== null && known?.retryAfter !== undefined && known.retryAfter <= now();
+      if (known !== undefined && isStale === false) {
+        return known.found;
       }
+      remembered.delete(pairingId);
       if (remembered.size >= MAX_REMEMBERED) {
         const oldest = remembered.keys().next().value;
         if (oldest !== undefined) {
           remembered.delete(oldest);
         }
       }
-      const found = findOfferedApi({ ...options, clientUri, redirectUris });
-      remembered.set(pairingId, found);
-      return found;
+      const entry: Remembered = { found: findOfferedApi({ ...lookup, clientUri, redirectUris }), retryAfter: null };
+      remembered.set(pairingId, entry);
+      void entry.found.then((api) => {
+        if (api === null) {
+          entry.retryAfter = now() + PAIRING_DEFAULTS.discoveryRetrySeconds * MS_PER_SECOND;
+        }
+      });
+      return entry.found;
     },
   };
 }
