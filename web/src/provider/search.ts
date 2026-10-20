@@ -33,3 +33,16 @@ export function goBack(): void {
     window.location.assign('/');
   }
 }
+
+/** What the provider puts on the device page's query string; see the server's `device-flow.ts`. */
+export const deviceSearchSchema = z.object({
+  /** `confirm` or `done`; none asks for the code. */
+  step: searchText,
+  xsrf: searchText,
+  user_code: searchText,
+  client: searchText,
+  error: searchText,
+});
+
+/** Where the device page's forms post, and where it fetches its anti-CSRF secret: the provider's `/device`. */
+export const DEVICE_ACTION = '/oidc/device';

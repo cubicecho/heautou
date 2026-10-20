@@ -41,6 +41,8 @@ export const TYPE_DEFS = /* GraphQL */ `
     groupsClaim: String!
     "Whether it may get tokens for itself with the client credentials grant."
     allowClientCredentials: Boolean!
+    "Whether it may sign users in with the device flow (RFC 8628): a device with no browser of its own shows a code, and the user signs in on another device. It also gets refresh tokens."
+    allowDeviceFlow: Boolean!
     "Whether the operator added it or an app paired itself."
     source: ClientSource!
     "The logo the app gave when it paired. Null for none."
@@ -498,12 +500,13 @@ export const TYPE_DEFS = /* GraphQL */ `
     clientId: String
     name: String!
     authMethod: ClientAuthMethod!
-    "May be empty for a client that only uses client credentials."
+    "May be empty for a client that only uses client credentials or the device flow."
     redirectUris: [String!]!
     postLogoutRedirectUris: [String!]!
     allowedGroups: [String!]
     groupsClaim: String
     allowClientCredentials: Boolean
+    allowDeviceFlow: Boolean
     tokenLifetimes: ClientTokenLifetimesInput
     "Where the provider posts a logout token when one of its users signs out. An empty string removes it."
     backchannelLogoutUri: String
@@ -534,6 +537,7 @@ export const TYPE_DEFS = /* GraphQL */ `
     allowedGroups: [String!]
     groupsClaim: String
     allowClientCredentials: Boolean
+    allowDeviceFlow: Boolean
     tokenLifetimes: ClientTokenLifetimesInput
     "Where the provider posts a logout token when one of its users signs out. An empty string removes it."
     backchannelLogoutUri: String

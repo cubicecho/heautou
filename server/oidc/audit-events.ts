@@ -28,6 +28,9 @@ export interface ProviderAuditDeps {
  */
 const SILENT_CHECK_ERRORS = new Set(['login_required', 'consent_required', 'interaction_required']);
 
+/** What the token endpoint tells a device polling before its user has approved (RFC 8628). */
+const AUTHORIZATION_PENDING = 'authorization_pending';
+
 /** The grant whose tokens are for the client itself, with no user. */
 const CLIENT_CREDENTIALS_GRANT = 'client_credentials';
 
@@ -224,6 +227,10 @@ export function recordProviderEvents(provider: Provider, { audit, users, clients
   });
 
   provider.on('grant.error', (ctx, error: ProviderError) => {
+    // A device polls every few seconds until its user approves; each poll until then is the answer it expected.
+    if (error.error === AUTHORIZATION_PENDING) {
+      return;
+    }
     audit.record({
       type: AuditType.AppTokenRefused,
       actor: null,

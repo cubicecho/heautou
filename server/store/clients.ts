@@ -70,6 +70,11 @@ export interface OidcClient {
   groupsClaim: string;
   /** Whether it may get tokens for itself with the client credentials grant. Confidential clients only. */
   allowClientCredentials: boolean;
+  /**
+   * Whether it may sign users in with the device flow (RFC 8628): a device with no browser of its own shows a code,
+   * and the user signs in on another device. Such a client also gets refresh tokens, and needs no redirect URI.
+   */
+  allowDeviceFlow: boolean;
   /** Whether the operator added it or an app paired itself. */
   source: ClientSource;
   /** The app's logo, as the app gave it when it paired. Null for none. */
@@ -123,6 +128,7 @@ const clientFields = z.object({
     .default([]),
   groupsClaim: groupsClaimSchema.default(DEFAULT_GROUPS_CLAIM),
   allowClientCredentials: z.boolean().default(false),
+  allowDeviceFlow: z.boolean().default(false),
   logoUri: z
     .url({ protocol: /^https?$/ })
     .trim()
@@ -156,14 +162,15 @@ const clientFields = z.object({
 });
 
 /**
- * Checks the rules between fields: a client that signs users in needs somewhere to send them back, and the
- * client credentials grant needs a secret.
+ * Checks the rules between fields: a client that signs users in with a redirect needs somewhere to send them back
+ * (the device flow needs none), and the client credentials grant needs a secret.
  *
  * @param client - The parsed fields.
  * @param ctx - Where problems are reported.
  */
 function checkFlows(client: z.infer<typeof clientFields>, ctx: z.RefinementCtx): void {
-  if (client.redirectUris.length === 0 && client.allowClientCredentials === false) {
+  const hasOtherFlow = client.allowClientCredentials || client.allowDeviceFlow;
+  if (client.redirectUris.length === 0 && hasOtherFlow === false) {
     ctx.addIssue({ code: 'custom', path: ['redirectUris'], message: 'add at least one redirect URI' });
   }
   if (client.allowClientCredentials && client.authMethod === ClientAuthMethod.None) {
@@ -230,6 +237,7 @@ function withDefaults(client: OidcClient): OidcClient {
     allowedGroups: client.allowedGroups ?? [],
     groupsClaim: client.groupsClaim ?? DEFAULT_GROUPS_CLAIM,
     allowClientCredentials: client.allowClientCredentials ?? false,
+    allowDeviceFlow: client.allowDeviceFlow ?? false,
     source: client.source ?? CLIENT_SOURCE_ADMIN,
     logoUri: client.logoUri ?? null,
     tokenLifetimes: { ...DEFAULT_CLIENT_TOKEN_LIFETIMES, ...client.tokenLifetimes },
@@ -335,13 +343,14 @@ export function createClientStore(file: JsonFile<OidcClient[]>, options: ClientS
     update: (clientId, input) => {
       const current = load(clientId);
       // What the input leaves out keeps its value, rather than taking the default a new client gets.
-      const { allowedGroups, groupsClaim, allowClientCredentials, logoUri, tokenLifetimes } = current;
+      const { allowedGroups, groupsClaim, allowClientCredentials, allowDeviceFlow, logoUri, tokenLifetimes } = current;
       const { backchannelLogoutUri, backchannelLogoutSessionRequired, preset } = current;
       const kept = {
         preset,
         allowedGroups,
         groupsClaim,
         allowClientCredentials,
+        allowDeviceFlow,
         logoUri,
         tokenLifetimes,
         backchannelLogoutUri,

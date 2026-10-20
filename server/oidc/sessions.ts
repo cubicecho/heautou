@@ -4,9 +4,9 @@ import { isLive, type ModelDocument, type ModelFiles } from './adapter.ts';
 import type { AppLogout, LogoutNotifier } from './backchannel.ts';
 
 /** The provider's models that belong to one signed-in user. */
-const ACCOUNT_MODELS = ['Session', 'Grant', 'AccessToken', 'RefreshToken', 'AuthorizationCode'] as const;
-/** The models that hang off a grant and end with it. */
-const GRANT_MODELS = ['AccessToken', 'RefreshToken', 'AuthorizationCode'] as const;
+const ACCOUNT_MODELS = ['Session', 'Grant', 'AccessToken', 'RefreshToken', 'AuthorizationCode', 'DeviceCode'] as const;
+/** The models that hang off a grant and end with it. A device code approved but not yet swapped is one. */
+const GRANT_MODELS = ['AccessToken', 'RefreshToken', 'AuthorizationCode', 'DeviceCode'] as const;
 const SESSION_MODEL = 'Session';
 const GRANT_MODEL = 'Grant';
 

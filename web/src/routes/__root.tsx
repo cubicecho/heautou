@@ -13,11 +13,20 @@ import { BrandIcon, useBrandName } from '@/core/brand';
 const SidebarLink = createLink(SidebarNavItem);
 const BarLink = createLink(BarNavItem);
 /**
- * The pages the provider sends a browser to: sign in, sign out, signed out and errors, the first-admin setup, and
+ * The pages the provider sends a browser to: sign in, sign out, signed out, errors and the device flow, the first-admin setup, and
  * a user's own account and password link. They are for whoever is signing in to an app, not only admins, so they
  * are drawn without the admin shell.
  */
-const PROVIDER_PAGES = ['/login/', '/logout', '/logged-out', '/error', '/setup', '/account', '/set-password'];
+const PROVIDER_PAGES = [
+  '/login/',
+  '/logout',
+  '/logged-out',
+  '/error',
+  '/device',
+  '/setup',
+  '/account',
+  '/set-password',
+];
 
 /** The admin pages, in the order the sidebar lists them. */
 const PLACES = [

@@ -35,6 +35,8 @@ const WEB_ROUTES = /^(?!\/(graphql|healthz)$|\/(oidc|interaction|admin|upstream|
 const LIMITED_ROUTES = [
   `${OIDC_MOUNT_PATH}/auth`,
   `${OIDC_MOUNT_PATH}/reg`,
+  // The device flow's code entry, where user codes could be guessed, and the device authorization endpoint.
+  `${OIDC_MOUNT_PATH}/device`,
   '/interaction',
   '/admin',
   '/upstream',
