@@ -32,6 +32,21 @@ fragment PairingFields on Pairing {
   client {
     ...ClientFields
   }
+  finished
+  offers {
+    deviceClient {
+      ...ClientFields
+    }
+    api {
+      identifier
+      name
+      scopes
+      existing {
+        identifier
+        name
+      }
+    }
+  }
 }
 
 fragment UserFields on User {
@@ -129,6 +144,12 @@ subscription PairingChanged($id: ID!) {
 
 mutation CancelPairing($id: ID!) {
   cancelPairing(id: $id)
+}
+
+mutation FinishPairing($id: ID!, $input: FinishPairingInput!) {
+  finishPairing(id: $id, input: $input) {
+    ...PairingFields
+  }
 }
 
 query Users {

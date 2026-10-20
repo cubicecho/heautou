@@ -19,6 +19,7 @@ export interface Context
     | 'passwordLinks'
     | 'adminSessions'
     | 'pairings'
+    | 'pairingOffers'
     | 'settings'
     | 'passwordPolicy'
     | 'audit'

@@ -228,10 +228,22 @@ export const BRANDING_DEFAULTS: Readonly<BrandingSettings> = Object.freeze({
 export interface PairingSettings {
   /** How long a setup URL works before the app has to register with it, in seconds. */
   linkSeconds: number;
+  /**
+   * How long the operator has, once an app has paired, to choose what else to set up for it (its device client, its
+   * API), in seconds. The pairing is forgotten after it.
+   */
+  reviewSeconds: number;
+  /** How long heautou waits for an app's protected resource metadata (RFC 9728), in milliseconds. */
+  discoveryTimeoutMs: number;
+  /** Largest protected resource metadata document heautou reads, in bytes. */
+  maxDiscoveryBytes: number;
 }
 
 export const PAIRING_DEFAULTS: Readonly<PairingSettings> = Object.freeze({
   linkSeconds: 600,
+  reviewSeconds: 1800,
+  discoveryTimeoutMs: 5000,
+  maxDiscoveryBytes: 65_536,
 });
 
 /** How the audit log is kept and read. */

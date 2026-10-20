@@ -11,6 +11,7 @@ import { createAdapterFactory, createModelFiles } from '../oidc/adapter.ts';
 import { recordProviderEvents } from '../oidc/audit-events.ts';
 import { createLogoutNotifier } from '../oidc/backchannel.ts';
 import { createProviderHost, type ProviderHost } from '../oidc/host.ts';
+import { createPairingOffers, type PairingOffers } from '../oidc/pairing-offers.ts';
 import { claimNamesIn, createProvider, SCOPES } from '../oidc/provider.ts';
 import { createSessionTools, type SessionTools } from '../oidc/sessions.ts';
 import { type AdminSessionDocument, type AdminSessionStore, createAdminSessionStore } from '../store/admin-sessions.ts';
@@ -133,6 +134,8 @@ export interface ServiceSettings {
   fetchRange?: FetchRange;
   /** Makes the requests to upstream sign-in providers. Unset, the global `fetch`. */
   fetchUpstream?: typeof globalThis.fetch;
+  /** Fetches paired apps' protected resource metadata. Unset, the global `fetch`. */
+  fetchPairing?: typeof globalThis.fetch;
   /** The SMTP server `SMTP_URL` or `SMTP_HOST` sets, which wins over Settings. Unset or null, Settings decides. */
   mailServer?: MailServer | null;
   /** Sends email. Unset, nodemailer over SMTP. */
@@ -162,6 +165,8 @@ export interface Services {
   passwordLinks: PasswordLinkStore;
   /** Setup URLs handed out for apps to pair with. */
   pairings: PairingStore;
+  /** What paired apps offer to set up besides their sign-in. */
+  pairingOffers: PairingOffers;
   branding: BrandingStore;
   /** The operator's settings, such as whether plain http redirect URIs are allowed. */
   settings: SettingsStore;
@@ -383,6 +388,11 @@ export function openServices(settings: ServiceSettings): Services {
     adminSessions,
     passwordLinks,
     pairings,
+    pairingOffers: createPairingOffers({
+      issuer: settings.issuer,
+      reservedScopes: SCOPES,
+      fetch: settings.fetchPairing ?? globalThis.fetch,
+    }),
     branding,
     settings: providerSettings,
     passwordPolicy: createPasswordPolicy(providerSettings.passwordRules, {}, settings.fetchRange),

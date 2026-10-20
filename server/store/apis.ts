@@ -30,7 +30,7 @@ export interface Api {
 }
 
 /** A scope token (RFC 6749, section 3.3): printable ASCII but space, `"` and `\`. */
-const SCOPE_TOKEN = /^[\x21\x23-\x5B\x5D-\x7E]+$/;
+export const SCOPE_TOKEN = /^[\x21\x23-\x5B\x5D-\x7E]+$/;
 
 const { minAccessTokenSeconds, maxAccessTokenSeconds, maxNameLength, maxScopes } = API_DEFAULTS;
 

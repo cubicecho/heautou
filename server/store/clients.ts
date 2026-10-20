@@ -169,8 +169,20 @@ const clientFields = z.object({
  * @param ctx - Where problems are reported.
  */
 function checkFlows(client: z.infer<typeof clientFields>, ctx: z.RefinementCtx): void {
+  checkClientFlows(client, ctx, false);
+}
+
+/**
+ * Checks the rules between fields as `checkFlows` does, except that a client that may wait may have no flow at all:
+ * a paired app's device client, which does nothing until the operator turns its device flow on.
+ *
+ * @param client - The parsed fields.
+ * @param ctx - Where problems are reported.
+ * @param mayWait - True for a paired client.
+ */
+function checkClientFlows(client: z.infer<typeof clientFields>, ctx: z.RefinementCtx, mayWait: boolean): void {
   const hasOtherFlow = client.allowClientCredentials || client.allowDeviceFlow;
-  if (client.redirectUris.length === 0 && hasOtherFlow === false) {
+  if (client.redirectUris.length === 0 && hasOtherFlow === false && mayWait === false) {
     ctx.addIssue({ code: 'custom', path: ['redirectUris'], message: 'add at least one redirect URI' });
   }
   if (client.allowClientCredentials && client.authMethod === ClientAuthMethod.None) {
@@ -183,6 +195,8 @@ function checkFlows(client: z.infer<typeof clientFields>, ctx: z.RefinementCtx):
 }
 
 const clientFieldsSchema = clientFields.superRefine(checkFlows);
+/** A paired client's fields, which may switch every flow off. */
+const pairedClientFieldsSchema = clientFields.superRefine((client, ctx) => checkClientFlows(client, ctx, true));
 export type ClientFields = z.input<typeof clientFieldsSchema>;
 
 const newClientSchema = clientFields
@@ -195,7 +209,7 @@ const newClientSchema = clientFields
       .or(z.literal('').transform(() => undefined)),
     source: z.enum([CLIENT_SOURCE_ADMIN, CLIENT_SOURCE_PAIRED]).default(CLIENT_SOURCE_ADMIN),
   })
-  .superRefine(checkFlows);
+  .superRefine((client, ctx) => checkClientFlows(client, ctx, client.source === CLIENT_SOURCE_PAIRED));
 export type NewClient = z.input<typeof newClientSchema>;
 
 /** The clients, kept in one JSON file. */
@@ -357,7 +371,10 @@ export function createClientStore(file: JsonFile<OidcClient[]>, options: ClientS
         backchannelLogoutSessionRequired,
       };
       const merged = { ...kept, ...withoutBlanks(input) };
-      const fields = parseInput(clientFieldsSchema, merged);
+      // A paired device client may stay waiting; any other client keeps the usual rule.
+      const mayWait = current.source === CLIENT_SOURCE_PAIRED && current.redirectUris.length === 0;
+      const schema = mayWait ? pairedClientFieldsSchema : clientFieldsSchema;
+      const fields = parseInput(schema, merged);
       checkRedirects(fields);
       return replace(withSecretFor({ ...current, ...fields }));
     },

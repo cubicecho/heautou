@@ -26,6 +26,8 @@ import {
   DeleteUpstreamDocument,
   DeleteUserDocument,
   EndUserSessionDocument,
+  FinishPairingDocument,
+  type FinishPairingInput,
   GroupsDocument,
   HttpRedirectsDocument,
   KeysDocument,
@@ -386,6 +388,26 @@ export function useCancelPairing() {
   return useMutation({
     mutationFn: async (id: string) => (await request(CancelPairingDocument, { id })).cancelPairing,
     onSuccess: refetching(queryClient, KEYS.pairings),
+  });
+}
+
+/**
+ * Sets up what a paired app offers besides its sign-in: its device client's device flow, its API.
+ *
+ * @returns The mutation; it resolves to the pairing, finished.
+ */
+export function useFinishPairing() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, input }: { id: string; input: FinishPairingInput }) =>
+      (await request(FinishPairingDocument, { id, input })).finishPairing,
+    onSuccess: (pairing) => {
+      queryClient.setQueryData([...KEYS.pairings, pairing.id], pairing);
+      return Promise.all([
+        queryClient.invalidateQueries({ queryKey: KEYS.clients }),
+        queryClient.invalidateQueries({ queryKey: APIS_KEY }),
+      ]);
+    },
   });
 }
 

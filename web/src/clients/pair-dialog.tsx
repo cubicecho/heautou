@@ -1,5 +1,5 @@
-import type { ClientFieldsFragment } from '@/__generated__/graphql';
-import { ComboboxField, InputField, useAppForm } from '@/components/app-form';
+import type { ClientFieldsFragment, PairingFieldsFragment } from '@/__generated__/graphql';
+import { ComboboxField, InputField, SwitchField, useAppForm } from '@/components/app-form';
 import { DescriptionList, PropertyRow } from '@/components/description-list';
 import { DialogLayout } from '@/components/dialog-layout';
 import { Alert } from '@/components/ui/alert';
@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { CopyButton } from '@/components/ui/copy-button';
 import { FormElement } from '@/components/ui/form-element';
 import { Spinner } from '@/components/ui/spinner';
-import { useCancelPairing, useGroupOptions, usePairing, useStartPairing } from '@/core/admin';
+import { useCancelPairing, useFinishPairing, useGroupOptions, usePairing, useStartPairing } from '@/core/admin';
 import { messageOf } from '@/core/lists';
 import { formatDateTime } from '@/lib/format';
 
@@ -34,6 +34,76 @@ interface SetupUrlProps {
   onRestart: () => void;
 }
 
+type Offers = NonNullable<PairingFieldsFragment['offers']>;
+
+interface OffersFormProps {
+  /** The pairing's id. */
+  id: string;
+  /** The client the app registered as. */
+  client: ClientFieldsFragment;
+  /** What the app offers. */
+  offers: Offers;
+}
+
+/**
+ * The second step of pairing: what the app offers besides its sign-in, each one on unless the operator turns it off.
+ * Nothing is set up until they choose.
+ *
+ * @param props - The pairing, its client and what its app offers.
+ */
+function OffersForm({ id, client, offers }: OffersFormProps) {
+  const finish = useFinishPairing();
+  const { deviceClient, api } = offers;
+  const form = useAppForm({
+    defaultValues: { deviceFlow: deviceClient !== null, api: api !== null },
+    onSubmit: async ({ value }) => {
+      await finish.mutateAsync({ id, input: { deviceFlow: value.deviceFlow, api: value.api } });
+    },
+  });
+  const apiDescription =
+    api === null
+      ? ''
+      : api.existing === null
+        ? `Adds the API ${api.identifier}${api.scopes.length === 0 ? '' : ` (scopes: ${api.scopes.join(', ')})`}, and lets ${client.name}'s clients ask for tokens to it. Its tokens are JWTs.`
+        : `Lets ${client.name}'s clients ask for tokens to ${api.existing.name} (${api.identifier}), which is already added.`;
+  return (
+    <FormElement onSubmit={() => form.handleSubmit()} className="grid gap-4">
+      <Alert
+        variant="info"
+        title={`Paired with ${client.name}`}
+        description="It can sign its users in now. It also offers the following. Turn off what you don't want, then finish."
+      />
+      {deviceClient === null ? null : (
+        <SwitchField
+          form={form}
+          name="deviceFlow"
+          label="Device sign-in"
+          description={`Turns the device flow on for "${deviceClient.name}", so devices without a browser of their own, such as Home Assistant, can sign in with a code. Off removes that client.`}
+        />
+      )}
+      {api === null ? null : (
+        <SwitchField form={form} name="api" label={`API: ${api.name}`} description={apiDescription} />
+      )}
+      {finish.error === null ? null : (
+        <Alert variant="destructive" title="Not set up" description={messageOf(finish.error)} />
+      )}
+      <form.AppForm>
+        <form.SubmitButton content="Finish" className="justify-self-start" />
+      </form.AppForm>
+    </FormElement>
+  );
+}
+
+/**
+ * Says whether a paired app offers anything for the operator to choose.
+ *
+ * @param offers - What it offers, or null.
+ * @returns True when there is a device client or an API.
+ */
+function hasOffers(offers: PairingFieldsFragment['offers']): offers is Offers {
+  return offers !== null && offers !== undefined && (offers.deviceClient !== null || offers.api !== null);
+}
+
 /**
  * The setup URL, watched until an app registers with it, expires or is cancelled.
  *
@@ -57,6 +127,9 @@ function SetupUrl({ id, setupUrl, onPaired, onRestart }: SetupUrlProps) {
         <Button variant="info" content="Make another" onClick={onRestart} className="justify-self-start" />
       </div>
     );
+  }
+  if (client !== null && pairing.finished === false && hasOffers(pairing.offers)) {
+    return <OffersForm id={id} client={client} offers={pairing.offers} />;
   }
   if (client !== null) {
     return (
