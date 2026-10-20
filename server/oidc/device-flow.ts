@@ -1,6 +1,6 @@
 import type { Client, ErrorOut, KoaContextWithOIDC, Provider } from 'oidc-provider';
 import { z } from 'zod';
-import { DEVICE_FLOW_DEFAULTS } from '../core/defaults.ts';
+import { DEVICE_FLOW_DEFAULTS, TOKEN_LIFETIME_DEFAULTS } from '../core/defaults.ts';
 import { createExpiringMap } from '../core/expiring-map.ts';
 import { MS_PER_SECOND } from '../core/wire.ts';
 import type { ClientStore } from '../store/clients.ts';
@@ -170,8 +170,8 @@ export function deviceFlowFor(clients: ClientStore) {
  * as refusing it before. Polls are remembered in memory, per device code, for as long as a code can be polled.
  */
 export function deviceFlowMiddleware(webBase: string, now: () => number = Date.now): ProviderMiddleware {
-  const { pollSeconds, codeSeconds, expiredKeptSeconds } = DEVICE_FLOW_DEFAULTS;
-  const lastPolls = createExpiringMap<number>(codeSeconds + expiredKeptSeconds, now);
+  const { pollSeconds, expiredKeptSeconds } = DEVICE_FLOW_DEFAULTS;
+  const lastPolls = createExpiringMap<number>(TOKEN_LIFETIME_DEFAULTS.deviceCodeSeconds + expiredKeptSeconds, now);
   const verificationUri = `${webBase}${WEB_PAGE.device}`;
 
   return async (koaCtx, next) => {

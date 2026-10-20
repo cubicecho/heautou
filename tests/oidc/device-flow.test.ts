@@ -1,6 +1,7 @@
-import { DEVICE_FLOW_DEFAULTS } from '../../server/core/defaults.ts';
+import { DEVICE_FLOW_DEFAULTS, TOKEN_LIFETIME_DEFAULTS } from '../../server/core/defaults.ts';
 import { HttpStatus } from '../../server/core/wire.ts';
 import { DEVICE_CODE_GRANT } from '../../server/oidc/adapter.ts';
+import { AuditType, SIGN_IN_TYPES } from '../../server/store/audit.ts';
 import { ClientAuthMethod, type OidcClient } from '../../server/store/clients.ts';
 import type { PublicUser } from '../../server/store/users.ts';
 import { startTestApp, type TestApp } from '../helpers.ts';
@@ -217,7 +218,7 @@ describe('device flow', () => {
       user_code: expect.stringMatching(/^[A-Z]{4}-[A-Z]{4}$/),
       verification_uri: `${app.base}/device`,
       verification_uri_complete: `${app.base}/device?user_code=${encodeURIComponent(device.user_code)}`,
-      expires_in: DEVICE_FLOW_DEFAULTS.codeSeconds,
+      expires_in: TOKEN_LIFETIME_DEFAULTS.deviceCodeSeconds,
       interval: DEVICE_FLOW_DEFAULTS.pollSeconds,
     });
 
@@ -327,6 +328,48 @@ describe('device flow', () => {
     expect(cancelled.pathname).toBe('/device');
     expect(cancelled.searchParams.get('error')).toBe('aborted');
     expect((await poll(app, hub, device.device_code)).body.error).toBe('access_denied');
+  });
+
+  it('audits the code shown and the approval, never with the code', async () => {
+    const device = (await startDevice(app, hub)).body as unknown as DeviceAuthorization;
+    const [issued] = app.services.audit.list({ types: [AuditType.DeviceCodeIssued] }).entries;
+    expect(issued).toMatchObject({
+      actor: null,
+      target: { kind: 'client', id: hub.clientId, name: 'Home Assistant' },
+      detail: { scope: SCOPE, resource: TELOS_API },
+    });
+
+    const browser = createBrowser(app.base);
+    await approve(app, browser, await enterCode(app, browser, device.user_code), 'ada');
+    const { entries } = app.services.audit.list({});
+    expect(entries[0]).toMatchObject({
+      type: AuditType.DeviceApproved,
+      actor: { userId: ada.id, username: 'ada' },
+      target: { kind: 'client', id: hub.clientId },
+      detail: { via: 'password', scope: SCOPE, resource: TELOS_API },
+    });
+    // A device's sign-in is not also an app sign-in, and a user sees it among their own.
+    expect(entries.some((entry) => entry.type === AuditType.AppSignedIn)).toBe(false);
+    expect(SIGN_IN_TYPES).toContain(AuditType.DeviceApproved);
+    expect(entries.some((entry) => entry.type === AuditType.DeviceRefused)).toBe(false);
+    const text = JSON.stringify(entries);
+    expect(text).not.toContain(device.user_code);
+    expect(text).not.toContain(device.device_code);
+  });
+
+  it('audits a cancelled code as refused, once', async () => {
+    const device = (await startDevice(app, hub)).body as unknown as DeviceAuthorization;
+    const browser = createBrowser(app.base);
+    const cancelled = await press(app, browser, await enterCode(app, browser, device.user_code), 'abort');
+    // Entering the code again only says it was used; that is not a second refusal.
+    await enterCode(app, browser, device.user_code);
+    const refused = app.services.audit.list({ types: [AuditType.DeviceRefused] }).entries;
+    expect(cancelled.searchParams.get('error')).toBe('aborted');
+    expect(refused).toHaveLength(1);
+    expect(refused[0]).toMatchObject({
+      target: { kind: 'client', id: hub.clientId, name: 'Home Assistant' },
+      detail: { error: 'access_denied' },
+    });
   });
 
   it('asks for a code again when it is wrong', async () => {

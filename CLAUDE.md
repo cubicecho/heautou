@@ -122,7 +122,9 @@ entry (from `authorization.success`, with the redirect URI and `via` password or
 reused a session is logged too; the admin UI's own are `web_signed_in`. `server/oidc/audit-events.ts` also turns
 `authorization.error` into `app_sign_in_failed` (not the silent `prompt=none` checks), `grant.error` into
 `app_token_refused`, a client credentials `grant.success` into `machine_token_issued` and `end_session.success` into
-`app_signed_out`; a logout token an app did not take (`backchannel.error`, or `backchannel.ts`) is an
+`app_signed_out`; the device flow's `device_authorization.success` is a `device_code_issued`, its approval a
+`device_approved` (in place of `app_signed_in`) and a cancel or failed sign-in on its pages a `device_refused`, never
+with the code; a logout token an app did not take (`backchannel.error`, or `backchannel.ts`) is an
 `app_logout_failed` with the error, never the token; a key rotation due at boot is a `keys_rotated` with no actor.
 
 Email is optional and off until an SMTP server is set (env or Settings). The SMTP password saved under Settings is sealed in `mail.json` like the other secrets, and boot's key check and the backup's sealed-value check cover it. A password link's token goes in the URL's fragment and the email only; logs and the audit log never hold it. **Forgot password?** (off by default) takes a username or an email address, ignoring case. It answers `{ ok: true }` for anyone once the sign-in is known and the limits pass (`MAIL_DEFAULTS.forgotPerIp` and `forgotPerIdentifier` an hour, counted whether or not anyone matches), then looks the user up and sends after the answer, so neither the reply nor its timing says who exists. Disabled users and users without an address get nothing. The link's fragment carries the interaction's uid, and `/set-password` goes back to `/login/:uid` when it is still open in that browser, and to the account page's sign-in otherwise.

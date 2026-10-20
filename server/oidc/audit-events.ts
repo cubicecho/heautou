@@ -31,6 +31,9 @@ const SILENT_CHECK_ERRORS = new Set(['login_required', 'consent_required', 'inte
 /** What the token endpoint tells a device polling before its user has approved (RFC 8628). */
 const AUTHORIZATION_PENDING = 'authorization_pending';
 
+/** The provider's routes for the device flow's pages: where its user enters, confirms or cancels a code. */
+const DEVICE_PAGE_ROUTES = new Set(['code_verification', 'device_resume']);
+
 /** The grant whose tokens are for the client itself, with no user. */
 const CLIENT_CREDENTIALS_GRANT = 'client_credentials';
 
@@ -143,7 +146,8 @@ export function recordAppLogoutFailed({ audit, users, clients }: ProviderAuditDe
 
 /**
  * Records what the provider does that the operator wants to see: each code handed back to an app, sign-in
- * requests and token requests it refused, sign-outs from apps, logout tokens apps did not take, and machine tokens.
+ * requests and token requests it refused, sign-outs from apps, logout tokens apps did not take, machine tokens, and
+ * the device flow's codes shown, approved and refused.
  *
  * @param provider - The provider, freshly built.
  * @param deps - The log and the stores that name users and clients.
@@ -193,6 +197,20 @@ export function recordProviderEvents(provider: Provider, { audit, users, clients
 
   provider.on('authorization.success', (ctx) => {
     if (ctx.oidc.client === undefined || isBuiltInClient(ctx)) {
+      return;
+    }
+    if (ctx.oidc.entities.DeviceCode !== undefined) {
+      audit.record({
+        type: AuditType.DeviceApproved,
+        actor: actorIn(ctx),
+        ip: ctx.ip,
+        target: targetOf(ctx),
+        detail: definedDetail({
+          via: viaOf(ctx.oidc.result?.login),
+          scope: paramOf(ctx, 'scope'),
+          resource: resourceOf(ctx),
+        }),
+      });
       return;
     }
     audit.record({
@@ -255,6 +273,37 @@ export function recordProviderEvents(provider: Provider, { audit, users, clients
       ip: ctx.ip,
       target: targetOf(ctx),
       detail: definedDetail({ scope: paramOf(ctx, 'scope'), resource: resourceOf(ctx) }),
+    });
+  });
+
+  // The code itself is never logged: until it expires, whoever has it can sign the device in as themselves.
+  provider.on('device_authorization.success', (ctx) => {
+    audit.record({
+      type: AuditType.DeviceCodeIssued,
+      actor: null,
+      ip: ctx.ip,
+      target: targetOf(ctx),
+      detail: definedDetail({ scope: paramOf(ctx, 'scope'), resource: resourceOf(ctx) }),
+    });
+  });
+
+  // A cancel on the device page raises no provider event: the provider marks the code and draws the page again.
+  // So this looks after each request to those pages for a code it left with an error, which a failed sign-in for
+  // the device leaves too.
+  provider.use(async (koaCtx, next) => {
+    await next();
+    const ctx = koaCtx as KoaContextWithOIDC;
+    const route: string | undefined = ctx.oidc?.route;
+    const code = route !== undefined && DEVICE_PAGE_ROUTES.has(route) ? ctx.oidc.entities.DeviceCode : undefined;
+    if (code?.error === undefined) {
+      return;
+    }
+    audit.record({
+      type: AuditType.DeviceRefused,
+      actor: actorIn(ctx),
+      ip: ctx.ip,
+      target: code.clientId === undefined ? undefined : clientTarget(code.clientId),
+      detail: definedDetail({ error: code.error, description: code.errorDescription }),
     });
   });
 

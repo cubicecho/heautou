@@ -55,6 +55,11 @@ export interface TokenLifetimeSettings {
   grantSeconds: number;
   /** An access token a client gets for itself with the client credentials grant, in seconds. */
   clientCredentialsSeconds: number;
+  /**
+   * A device code and its user code (RFC 8628): from the device asking until its user approves, in seconds. See
+   * `DEVICE_FLOW_DEFAULTS` for the rest of the device flow.
+   */
+  deviceCodeSeconds: number;
 }
 
 export const TOKEN_LIFETIME_DEFAULTS: Readonly<TokenLifetimeSettings> = Object.freeze({
@@ -65,6 +70,7 @@ export const TOKEN_LIFETIME_DEFAULTS: Readonly<TokenLifetimeSettings> = Object.f
   sessionSeconds: 1_209_600,
   grantSeconds: 1_209_600,
   clientCredentialsSeconds: 600,
+  deviceCodeSeconds: 600,
 });
 
 /** The bounds on the token lifetimes an operator may give one client. */
@@ -362,11 +368,10 @@ export const API_DEFAULTS: Readonly<ApiSettings> = Object.freeze({
 
 /**
  * The device flow (RFC 8628): a device with no browser of its own, such as a home-automation hub, shows a code, and
- * the user signs in on another device and confirms it.
+ * the user signs in on another device and confirms it. How long a code works is
+ * `TOKEN_LIFETIME_DEFAULTS.deviceCodeSeconds`.
  */
 export interface DeviceFlowSettings {
-  /** How long a device code and its user code work, from the device asking until it is approved, in seconds. */
-  codeSeconds: number;
   /** How long a device waits between polls of the token endpoint, in seconds. A sooner poll is told `slow_down`. */
   pollSeconds: number;
   /** How long an expired device code is kept, so a device still polling is told `expired_token`, in seconds. */
@@ -381,7 +386,6 @@ export interface DeviceFlowSettings {
 }
 
 export const DEVICE_FLOW_DEFAULTS: Readonly<DeviceFlowSettings> = Object.freeze({
-  codeSeconds: 600,
   pollSeconds: 5,
   expiredKeptSeconds: 3600,
   charset: 'base-20',
