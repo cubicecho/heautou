@@ -11,6 +11,7 @@ import {
 import type { Pairing, PairingInput, PairingStore } from '../store/pairings.ts';
 import { redirectProblem } from '../store/redirect-uris.ts';
 import type { SettingsStore } from '../store/settings.ts';
+import { clientMetadata, DEVICE_CODE_GRANT } from './adapter.ts';
 
 /** The registration policy every setup URL's initial access token carries. */
 export const PAIRING_POLICY = 'heautou-pairing';
@@ -19,9 +20,18 @@ export const SETUP_URL_TOKEN = 'setup';
 /** The fragment key the setup URL carries the provider's name under, for the app's sign-in button. */
 export const SETUP_URL_NAME = 'name';
 
-/** The grant types a paired client may register. */
-const PAIRED_GRANT_TYPES: ReadonlySet<string> = new Set(['authorization_code', 'refresh_token', 'client_credentials']);
+const AUTHORIZATION_CODE = 'authorization_code';
+const REFRESH_TOKEN = 'refresh_token';
 const CLIENT_CREDENTIALS = 'client_credentials';
+/** The grant types a paired client may register. The device flow waits for the operator to turn it on. */
+const PAIRED_GRANT_TYPES: ReadonlySet<string> = new Set([
+  AUTHORIZATION_CODE,
+  REFRESH_TOKEN,
+  CLIENT_CREDENTIALS,
+  DEVICE_CODE_GRANT,
+]);
+/** The grant types a device client registers: the device flow, and a refresh token to stay signed in with. */
+const DEVICE_CLIENT_GRANT_TYPES: ReadonlySet<string> = new Set([DEVICE_CODE_GRANT, REFRESH_TOKEN]);
 /** What a client registers when it names no grant types, as RFC 7591 says. */
 const DEFAULT_GRANT_TYPES = ['authorization_code'];
 /** The one response type the provider serves. */
@@ -164,10 +174,120 @@ export interface PairingPolicyDeps {
 }
 
 /**
+ * Says whether a registration asks for the device flow.
+ *
+ * @param metadata - What the app registered.
+ * @returns True when its grant types include the device code grant.
+ */
+function asksForDeviceFlow(metadata: ClientMetadata): boolean {
+  return (metadata.grant_types ?? DEFAULT_GRANT_TYPES).includes(DEVICE_CODE_GRANT);
+}
+
+/**
+ * Says whether a registration is a device client: public, with no redirect URI, asking for the device flow and
+ * nothing besides a refresh token.
+ *
+ * @param metadata - What the app registered.
+ * @param fields - The store's fields read from it.
+ * @returns True for a device client.
+ */
+function isDeviceClient(metadata: ClientMetadata, fields: ClientFields): boolean {
+  const grantTypes = metadata.grant_types ?? DEFAULT_GRANT_TYPES;
+  return (
+    fields.authMethod === ClientAuthMethod.None &&
+    fields.redirectUris.length === 0 &&
+    asksForDeviceFlow(metadata) &&
+    grantTypes.every((type) => DEVICE_CLIENT_GRANT_TYPES.has(type))
+  );
+}
+
+/**
+ * Reads the `client_uri` an app registered with, when it is a web address.
+ *
+ * @param metadata - What the app registered.
+ * @returns The URI, or null.
+ */
+function clientUriOf(metadata: ClientMetadata): string | null {
+  const uri = metadata.client_uri;
+  if (typeof uri !== 'string' || URL.canParse(uri) === false) {
+    return null;
+  }
+  const { protocol } = new URL(uri);
+  return protocol === 'https:' || protocol === 'http:' ? uri : null;
+}
+
+/**
+ * Registers a client with a setup URL's token. The first registration is the app's client: it gets the pairing's
+ * groups and pairs it, and the token keeps working for one more registration, a device client (public, no redirect
+ * URI, the device flow). That one gets the same groups, and the token is spent. Any other registration is refused as
+ * a used setup URL. A client that asks for the device flow does not get it until the operator turns it on when they
+ * finish the pairing.
+ *
+ * @param deps - The client and pairing stores.
+ * @param initialToken - The token the app sent.
+ * @param metadata - What the app registered.
+ * @param fields - The store's fields read from it.
+ * @returns The client as stored.
+ * @throws InvalidToken when the setup URL has no registration left.
+ */
+async function registerWith(
+  deps: PairingPolicyDeps,
+  initialToken: { jti: string; destroy: () => Promise<void> },
+  metadata: ClientMetadata,
+  fields: ClientFields,
+): Promise<OidcClient> {
+  const first = deps.pairings.waitingFor(initialToken.jti);
+  const second =
+    first === null && isDeviceClient(metadata, fields) ? deps.pairings.waitingForDevice(initialToken.jti) : null;
+  const pairing = first ?? second;
+  if (pairing === null) {
+    throw new errors.InvalidToken('the setup URL has expired, been used or been cancelled');
+  }
+  const { allowedGroups, groupsClaim } = pairing;
+  const client = stored(() =>
+    deps.clients.create({
+      ...fields,
+      clientId: metadata.client_id,
+      allowedGroups,
+      groupsClaim,
+      allowDeviceFlow: false,
+      source: CLIENT_SOURCE_PAIRED,
+    }),
+  );
+  if (first !== null) {
+    deps.pairings.complete(pairing.id, client.clientId, clientUriOf(metadata));
+  }
+  if (asksForDeviceFlow(metadata)) {
+    deps.pairings.addDeviceClient(pairing.id, client.clientId);
+  }
+  if (second !== null) {
+    await initialToken.destroy();
+  }
+  return client;
+}
+
+/**
+ * Makes the registration response say only what the client was given: of the grant types asked for, those the store
+ * grants. A device client waiting for the operator is answered with none, and sees the device flow in an RFC 7592
+ * read once it is turned on.
+ *
+ * @param metadata - What the app registered, which the provider answers with.
+ * @param client - The client as stored.
+ */
+function answerGranted(metadata: ClientMetadata, client: OidcClient): void {
+  const granted = new Set(clientMetadata(client).grant_types);
+  const grantTypes = (metadata.grant_types ?? DEFAULT_GRANT_TYPES).filter((type) => granted.has(type));
+  metadata.grant_types = grantTypes;
+  if (grantTypes.includes(AUTHORIZATION_CODE) === false) {
+    metadata.response_types = [];
+  }
+}
+
+/**
  * Builds the registration policy for setup URLs. On a registration it finds the pairing the initial access token
- * belongs to, writes the client to the store with the pairing's groups, marks the pairing done and spends the
- * token. On an RFC 7592 update it writes the new metadata over the client. Either way the secret in the response is
- * the store's.
+ * belongs to and writes the client to the store with the pairing's groups (`registerWith`). On an RFC 7592 update it
+ * writes the new metadata over the client. Either way the response names only the grant types the client has, and
+ * the secret in it is the store's.
  *
  * @param deps - The client, pairing and settings stores.
  * @returns The policy, for `features.registration.policies`.
@@ -191,27 +311,11 @@ export function createPairingPolicy(
     // The provider checks the metadata again once the policy returns, but by then the token would be spent.
     await ctx.oidc.provider.Client.validate(metadata);
     const initialToken = ctx.oidc.entities.InitialAccessToken;
-    let client: OidcClient;
-    if (initialToken === undefined) {
-      client = stored(() => deps.clients.update(metadata.client_id, fields));
-    } else {
-      const pairing = deps.pairings.waitingFor(initialToken.jti);
-      if (pairing === null) {
-        throw new errors.InvalidToken('the setup URL has expired, been used or been cancelled');
-      }
-      const { allowedGroups, groupsClaim } = pairing;
-      client = stored(() =>
-        deps.clients.create({
-          ...fields,
-          clientId: metadata.client_id,
-          allowedGroups,
-          groupsClaim,
-          source: CLIENT_SOURCE_PAIRED,
-        }),
-      );
-      deps.pairings.complete(pairing.id, client.clientId);
-      await initialToken.destroy();
-    }
+    const client =
+      initialToken === undefined
+        ? stored(() => deps.clients.update(metadata.client_id, fields))
+        : await registerWith(deps, initialToken, metadata, fields);
+    answerGranted(metadata, client);
     if (client.clientSecret === null) {
       delete metadata.client_secret;
     } else {

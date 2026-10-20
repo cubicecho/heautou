@@ -24,6 +24,7 @@ const LABELS: Record<AuditType, string> = {
   PAIRING_STARTED: 'Setup URL made',
   PAIRING_CANCELLED: 'Setup URL cancelled',
   PAIRING_COMPLETED: 'App paired',
+  PAIRING_FINISHED: 'Paired app set up',
   REGISTRATION_UPDATED: 'App changed its registration',
   REGISTRATION_DELETED: 'App removed its registration',
   USER_CREATED: 'User added',

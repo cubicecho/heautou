@@ -104,6 +104,30 @@ export const TYPE_DEFS = /* GraphQL */ `
     groupsClaim: String!
     "The client the app registered as. Null while WAITING."
     client: Client
+    "Whether the operator has chosen what else to set up for the app."
+    finished: Boolean!
+    "What the app offers to set up besides its sign-in. Null while WAITING, and once finished."
+    offers: PairingOffers
+  }
+
+  "What a paired app offers to set up besides its sign-in, for the operator to turn on or leave off."
+  type PairingOffers {
+    "The client the app registered for its devices (the device flow), waiting for the flow to be turned on. Null when it asked for none."
+    deviceClient: Client
+    "The API the app describes in its protected resource metadata (RFC 9728), found under its client_uri. Null when it describes none heautou can add."
+    api: OfferedApi
+  }
+
+  "An API a paired app describes, for the operator to add."
+  type OfferedApi {
+    "The resource indicator apps send, and the aud of its access tokens."
+    identifier: String!
+    "What the app calls it."
+    name: String!
+    "The scopes it lists."
+    scopes: [String!]!
+    "The API already added with this identifier, which the app's clients would join. Null when it is new."
+    existing: Api
   }
 
   "A pairing just started, with the URL to paste into the app. The URL is shown only this once."
@@ -528,6 +552,14 @@ export const TYPE_DEFS = /* GraphQL */ `
     groupsClaim: String
   }
 
+  "What the operator sets up for a paired app, from what it offers."
+  input FinishPairingInput {
+    "Turn its device client's device flow on. False removes the device client."
+    deviceFlow: Boolean!
+    "Add its API with its clients allowed, or allow them on the API when it is there already."
+    api: Boolean!
+  }
+
   "A client's new settings. A field left out keeps its value."
   input ClientInput {
     name: String!
@@ -574,10 +606,12 @@ export const TYPE_DEFS = /* GraphQL */ `
     rotateClientSecret(clientId: ID!): Client!
     "Removes a client. Its users are signed out of it at their next token refresh."
     deleteClient(clientId: ID!): Client!
-    "Makes a setup URL an app registers itself with (OAuth 2.0 Dynamic Client Registration). It works once, for a few minutes."
+    "Makes a setup URL an app registers itself with (OAuth 2.0 Dynamic Client Registration): its client, and optionally a device client. It works for a few minutes."
     startPairing(input: PairingInput!): StartedPairing!
     "Stops a setup URL working. False when it had already expired or been used."
     cancelPairing(id: ID!): Boolean!
+    "Sets up what a paired app offers besides its sign-in, as the operator chose. Once per pairing."
+    finishPairing(id: ID!, input: FinishPairingInput!): Pairing!
     "Adds a user."
     createUser(input: NewUserInput!): User!
     "Changes a user's details."

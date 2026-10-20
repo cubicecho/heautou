@@ -80,6 +80,7 @@ export function createApp(services: Services): Express {
       passwordLinks: services.passwordLinks,
       adminSessions: services.adminSessions,
       pairings: services.pairings,
+      pairingOffers: services.pairingOffers,
       settings: services.settings,
       passwordPolicy: services.passwordPolicy,
       audit: services.audit,

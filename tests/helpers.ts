@@ -53,6 +53,7 @@ export async function startTestApp(
     | 'secretKeys'
     | 'fetchRange'
     | 'fetchUpstream'
+    | 'fetchPairing'
     | 'mailServer'
     | 'mailTransport'
     | 'objectStorage'

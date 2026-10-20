@@ -62,6 +62,8 @@ export const AuditType = {
   PairingCancelled: 'pairing_cancelled',
   /** An app registered itself with a setup URL. */
   PairingCompleted: 'pairing_completed',
+  /** The operator chose what else to set up for a paired app: its device client, its API. */
+  PairingFinished: 'pairing_finished',
   /** A paired app changed its own registration (RFC 7592). */
   RegistrationUpdated: 'registration_updated',
   /** A paired app removed its own registration (RFC 7592). */

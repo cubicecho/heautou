@@ -3,10 +3,12 @@ import { createSchema, Repeater } from 'graphql-yoga';
 import { adminUrls, type BrandingView, brandingView, sessionClientName, WEB_APP_PAGE } from '../admin/admin-client.ts';
 import type { Context } from '../core/context.ts';
 import { CLIENT_TOKEN_LIFETIME_DEFAULTS, PROFILE_DEFAULTS, TOKEN_LIFETIME_DEFAULTS } from '../core/defaults.ts';
-import { notFound } from '../core/errors.ts';
+import { badInput, notFound } from '../core/errors.ts';
 import { type StartedPairing, startPairing } from '../oidc/pairing.ts';
+import type { OfferedApi } from '../oidc/pairing-offers.ts';
 import { SCOPES } from '../oidc/provider.ts';
 import type { SessionInfo } from '../oidc/sessions.ts';
+import { type Api, TOKEN_FORMAT_JWT } from '../store/apis.ts';
 import {
   AUDIT_TYPES,
   type AuditEntry,
@@ -95,6 +97,26 @@ interface PairingView {
   allowedGroups: string[];
   groupsClaim: string;
   client: OidcClient | null;
+  finished: boolean;
+  /** The stored pairing, for `offers`. */
+  pairing: Pairing;
+}
+
+/** What `PairingOffers` resolves from. */
+interface PairingOffersView {
+  deviceClient: OidcClient | null;
+  api: OfferedApi | null;
+}
+
+/** What `OfferedApi` resolves from. */
+interface OfferedApiView extends OfferedApi {
+  existing: Api | null;
+}
+
+/** What the operator chose to set up for a paired app. */
+interface FinishPairingInput {
+  deviceFlow: boolean;
+  api: boolean;
 }
 
 /**
@@ -113,7 +135,81 @@ function pairingView(ctx: Context, pairing: Pairing): PairingView {
     allowedGroups,
     groupsClaim,
     client: clientId === null ? null : ctx.clients.find(clientId),
+    finished: pairing.isFinished,
+    pairing,
   };
+}
+
+/**
+ * Reads the device client a pairing's app registered, while it waits for its device flow.
+ *
+ * @param ctx - Request context.
+ * @param pairing - The pairing.
+ * @returns The client, or null when there is none or it is gone.
+ */
+function waitingDeviceClientOf(ctx: Context, pairing: Pairing): OidcClient | null {
+  const client = pairing.deviceClientId === null ? null : ctx.clients.find(pairing.deviceClientId);
+  return client === null || client.allowDeviceFlow ? null : client;
+}
+
+/**
+ * Looks up the API a pairing's app describes.
+ *
+ * @param ctx - Request context.
+ * @param pairing - The pairing.
+ * @returns The API, or null.
+ */
+async function offeredApiOf(ctx: Context, pairing: Pairing): Promise<OfferedApi | null> {
+  const client = pairing.clientId === null ? null : ctx.clients.find(pairing.clientId);
+  return client === null ? null : ctx.pairingOffers.apiFor(pairing.id, pairing.clientUri, client.redirectUris);
+}
+
+/**
+ * Sets up what a paired app offers, as the operator chose: turns its device client's device flow on or removes the
+ * device client, and adds its API or allows its clients on the one there already.
+ *
+ * @param ctx - Request context.
+ * @param pairing - The pairing, paired and not finished.
+ * @param input - What the operator chose.
+ * @returns What was done, for the audit entry.
+ */
+async function setUpOffers(ctx: Context, pairing: Pairing, input: FinishPairingInput): Promise<Record<string, string>> {
+  const done: Record<string, string> = {};
+  const appClientIds = pairing.clientId === null ? [] : [pairing.clientId];
+  const deviceClient = waitingDeviceClientOf(ctx, pairing);
+  if (deviceClient !== null && input.deviceFlow) {
+    const { name, authMethod, redirectUris, postLogoutRedirectUris } = deviceClient;
+    ctx.clients.update(deviceClient.clientId, {
+      name,
+      authMethod,
+      redirectUris,
+      postLogoutRedirectUris,
+      allowDeviceFlow: true,
+    });
+    appClientIds.push(deviceClient.clientId);
+    done.deviceFlow = 'on';
+  } else if (deviceClient !== null && deviceClient.clientId !== pairing.clientId) {
+    ctx.clients.remove(deviceClient.clientId);
+    done.deviceFlow = 'removed';
+  }
+  const offered = input.api ? await offeredApiOf(ctx, pairing) : null;
+  if (offered !== null) {
+    const existing = ctx.apis.find(offered.identifier);
+    const allowedClientIds = [...new Set([...(existing?.allowedClientIds ?? []), ...appClientIds])];
+    const api =
+      existing === null
+        ? ctx.apis.create({ ...offered, tokenFormat: TOKEN_FORMAT_JWT, allowedClientIds })
+        : ctx.apis.update(offered.identifier, { allowedClientIds });
+    const type = existing === null ? AuditType.ApiCreated : AuditType.ApiUpdated;
+    ctx.audit.record({
+      type,
+      actor: actorOf(ctx.viewer),
+      ip: ctx.ip,
+      target: { kind: AuditTargetKind.Api, id: api.identifier, name: api.name },
+    });
+    done.api = api.identifier;
+  }
+  return done;
 }
 
 /**
@@ -223,7 +319,11 @@ function auditEntryView(entry: AuditEntry): AuditEntryView {
 }
 
 /** The entries after which a pairing may read differently. */
-const PAIRING_CHANGES: readonly AuditType[] = [AuditType.PairingCompleted, AuditType.PairingCancelled];
+const PAIRING_CHANGES: readonly AuditType[] = [
+  AuditType.PairingCompleted,
+  AuditType.PairingCancelled,
+  AuditType.PairingFinished,
+];
 
 /**
  * Streams the entries recorded while a subscription is open.
@@ -417,6 +517,33 @@ const resolvers = {
         allowsHttp: ctx.settings.httpRedirects().isAllowed,
         isPublic: client.authMethod === ClientAuthMethod.None,
       }),
+  },
+  Pairing: {
+    /**
+     * Resolves `Pairing.offers`.
+     *
+     * @param view - The pairing.
+     * @param _args - Unused.
+     * @param ctx - Request context.
+     * @returns What its app offers, or null while it waits or once it is finished.
+     */
+    offers: async (view: PairingView, _args: unknown, ctx: Context): Promise<PairingOffersView | null> => {
+      if (view.status === PAIRING_WAITING || view.finished) {
+        return null;
+      }
+      return { deviceClient: waitingDeviceClientOf(ctx, view.pairing), api: await offeredApiOf(ctx, view.pairing) };
+    },
+  },
+  OfferedApi: {
+    /**
+     * Resolves `OfferedApi.existing`.
+     *
+     * @param api - The offered API.
+     * @param _args - Unused.
+     * @param ctx - Request context.
+     * @returns The API with its identifier, or null.
+     */
+    existing: (api: OfferedApiView, _args: unknown, ctx: Context): Api | null => ctx.apis.find(api.identifier),
   },
   AuditType: enumOf(AUDIT_TYPES),
   UpstreamKind: enumOf(Object.values(UpstreamKind)),
@@ -797,6 +924,40 @@ const resolvers = {
         allowedGroups: started.allowedGroups.join(', '),
         groupsClaim: started.groupsClaim,
       });
+    },
+    /**
+     * Resolves `Mutation.finishPairing`.
+     *
+     * @param _parent - Unused.
+     * @param args - The pairing's id, and what the operator chose to set up.
+     * @param ctx - Request context.
+     * @returns The pairing, finished.
+     */
+    finishPairing: async (
+      _parent: unknown,
+      args: { id: string; input: FinishPairingInput },
+      ctx: Context,
+    ): Promise<PairingView> => {
+      const pairing = ctx.pairings.find(args.id);
+      if (pairing === null) {
+        throw notFound('That setup URL has expired or been cancelled.');
+      }
+      if (pairing.clientId === null) {
+        throw badInput('No app has paired with that setup URL yet.');
+      }
+      if (pairing.isFinished) {
+        throw badInput('That pairing is finished already.');
+      }
+      const done = await setUpOffers(ctx, pairing, args.input);
+      ctx.pairings.finish(pairing.id);
+      const finished = ctx.pairings.find(pairing.id) ?? { ...pairing, isFinished: true };
+      return audited(
+        ctx,
+        AuditType.PairingFinished,
+        pairingTarget(pairing),
+        refreshed(ctx, pairingView(ctx, finished)),
+        done,
+      );
     },
     /**
      * Resolves `Mutation.cancelPairing`.
