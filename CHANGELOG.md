@@ -1,3 +1,10 @@
+# [1.15.0](https://github.com/cubicecho/heautou/compare/v1.14.0...v1.15.0) (2026-10-20)
+
+
+### Features
+
+* audit device flow codes shown, approved and refused ([0ca7542](https://github.com/cubicecho/heautou/commit/0ca754264679b99f0b6290668849dc71b66e2aca)), closes [#11](https://github.com/cubicecho/heautou/issues/11)
+
 # [1.14.0](https://github.com/cubicecho/heautou/compare/v1.13.0...v1.14.0) (2026-10-20)
 
 
