@@ -1,3 +1,11 @@
+# [1.18.0](https://github.com/cubicecho/heautou/compare/v1.17.0...v1.18.0) (2026-10-21)
+
+
+### Features
+
+* **clients:** group a paired app's clients together ([7fc3a50](https://github.com/cubicecho/heautou/commit/7fc3a50dd6777b4c43d232d21ba129a8309e1962))
+* **clients:** show the APIs a client may get tokens to ([d4c4a2f](https://github.com/cubicecho/heautou/commit/d4c4a2fa2f70da4b553c5d54db63cdcedd62a771))
+
 # [1.17.0](https://github.com/cubicecho/heautou/compare/v1.16.1...v1.17.0) (2026-10-21)
 
 
