@@ -1,3 +1,10 @@
+# [1.17.0](https://github.com/cubicecho/heautou/compare/v1.16.1...v1.17.0) (2026-10-21)
+
+
+### Features
+
+* **pairing:** show that the dialog is still looking for offers ([2936fa0](https://github.com/cubicecho/heautou/commit/2936fa0a61c94bbad4bc64bab0f0f5d9646b106e))
+
 ## [1.16.1](https://github.com/cubicecho/heautou/compare/v1.16.0...v1.16.1) (2026-10-20)
 
 
