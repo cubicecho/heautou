@@ -90,6 +90,13 @@ export interface OidcClient {
    * how to configure the app again. Null for none.
    */
   preset: string | null;
+  /**
+   * The pairing that registered it, which ties together the clients one app registered (its sign-in client and its
+   * device client). Null for a client the operator added, or one paired before this was recorded.
+   */
+  pairingId: string | null;
+  /** The `client_uri` it paired with: the app's address, as the app gave it. Null for none. */
+  clientUri: string | null;
   /** When it was added, as an ISO 8601 string. */
   createdAt: string;
 }
@@ -208,6 +215,11 @@ const newClientSchema = clientFields
       .optional()
       .or(z.literal('').transform(() => undefined)),
     source: z.enum([CLIENT_SOURCE_ADMIN, CLIENT_SOURCE_PAIRED]).default(CLIENT_SOURCE_ADMIN),
+    pairingId: z.string().nullable().default(null),
+    clientUri: z
+      .url({ protocol: /^https?$/ })
+      .nullable()
+      .default(null),
   })
   .superRefine((client, ctx) => checkClientFlows(client, ctx, client.source === CLIENT_SOURCE_PAIRED));
 export type NewClient = z.input<typeof newClientSchema>;
@@ -258,6 +270,8 @@ function withDefaults(client: OidcClient): OidcClient {
     backchannelLogoutUri: client.backchannelLogoutUri ?? null,
     backchannelLogoutSessionRequired: client.backchannelLogoutSessionRequired ?? true,
     preset: client.preset ?? null,
+    pairingId: client.pairingId ?? null,
+    clientUri: client.clientUri ?? null,
   };
 }
 

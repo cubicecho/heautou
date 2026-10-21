@@ -21,6 +21,10 @@ fragment ClientFields on Client {
   backchannelLogoutUri
   backchannelLogoutSessionRequired
   preset
+  app {
+    id
+    uri
+  }
   apis {
     identifier
     name

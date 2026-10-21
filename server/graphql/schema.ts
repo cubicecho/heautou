@@ -108,6 +108,40 @@ interface PairingOffersView {
   api: OfferedApi | null;
 }
 
+/** What `ClientApp` resolves from. */
+interface ClientApp {
+  id: string;
+  uri: string | null;
+}
+
+/**
+ * Finds the app a client belongs to. A client paired since pairings were recorded on clients has its pairing. One
+ * paired before has nothing recorded, so it is placed by the APIs it is allowed on, when they are all on one origin:
+ * an app's sign-in and device clients are both allowed on its own API. A client the operator added has no app.
+ *
+ * @param client - The client.
+ * @param ctx - Request context, for the APIs.
+ * @returns The app, or null.
+ */
+function clientAppOf(client: OidcClient, ctx: Pick<Context, 'apis'>): ClientApp | null {
+  if (client.source !== CLIENT_SOURCE_PAIRED) {
+    return null;
+  }
+  if (client.pairingId !== null) {
+    return { id: client.pairingId, uri: client.clientUri };
+  }
+  const origins = new Set(
+    ctx.apis
+      .list()
+      .filter((api) => api.allowedClientIds.includes(client.clientId))
+      // An identifier that is not a web address (a URN) has no origin, and stands for itself.
+      .map((api) => (/^https?:/.test(api.identifier) ? new URL(api.identifier).origin : api.identifier)),
+  );
+  const [origin] = origins;
+  const isOneSite = origins.size === 1 && origin !== undefined && /^https?:/.test(origin);
+  return isOneSite ? { id: `api:${origin}`, uri: origin } : null;
+}
+
 /** What `OfferedApi` resolves from. */
 interface OfferedApiView extends OfferedApi {
   existing: Api | null;
@@ -504,6 +538,15 @@ const resolvers = {
     PAIRED: CLIENT_SOURCE_PAIRED,
   },
   Client: {
+    /**
+     * Resolves `Client.app`.
+     *
+     * @param client - The client.
+     * @param _args - Unused.
+     * @param ctx - Request context.
+     * @returns The app it belongs to, or null.
+     */
+    app: (client: OidcClient, _args: unknown, ctx: Context): ClientApp | null => clientAppOf(client, ctx),
     /**
      * Resolves `Client.apis`.
      *
