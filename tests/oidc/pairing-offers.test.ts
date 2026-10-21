@@ -183,6 +183,17 @@ describe('what a paired app offers', () => {
     expect(api?.allowedClientIds).toHaveLength(2);
     expect((await startDeviceFlow(device.client_id)).ok).toBe(true);
 
+    // The device client shows the one API it may get tokens to, and the app it belongs to.
+    const listed = await adminGql(admin, '{ clients { clientId app { id uri } apis { identifier } } }');
+    const appClients = listed.data.clients.filter((c: { app: { id: string } | null }) => c.app?.id === id);
+    expect(appClients).toHaveLength(2);
+    const deviceClient = appClients.find((c: { clientId: string }) => c.clientId === device.client_id);
+    expect(deviceClient).toEqual({
+      clientId: device.client_id,
+      app: { id, uri: APP_ORIGIN },
+      apis: [{ identifier: API }],
+    });
+
     // The app reads its registration (RFC 7592) and sees the device flow.
     const read = await fetch(device.registration_client_uri, {
       headers: { authorization: `Bearer ${device.registration_access_token}` },
@@ -211,6 +222,23 @@ describe('what a paired app offers', () => {
     await adminGql(admin, FINISH, { id, input: { deviceFlow: true, api: true } });
     expect(app.services.apis.find(API)).toMatchObject({ name: 'Mine' });
     expect(app.services.apis.find(API)?.allowedClientIds).toContain(device.client_id);
+  });
+
+  it('places a client paired before its pairing was recorded by the API it is allowed on', async () => {
+    const fields = { name: 'Old app', authMethod: 'client_secret_basic' as const, redirectUris: [REDIRECT_URI] };
+    const old = app.services.clients.create({ ...fields, postLogoutRedirectUris: [], source: 'paired' });
+    const handMade = app.services.clients.create({ ...fields, postLogoutRedirectUris: [] });
+    app.services.apis.create({
+      identifier: 'https://old.example/graphql',
+      name: 'Old API',
+      scopes: [],
+      allowedClientIds: [old.clientId, handMade.clientId],
+    });
+    const { data } = await adminGql(admin, '{ clients { clientId app { id uri } } }');
+    const appOf = (clientId: string) => data.clients.find((c: { clientId: string }) => c.clientId === clientId).app;
+    expect(appOf(old.clientId)).toEqual({ id: 'api:https://old.example', uri: 'https://old.example' });
+    // One the operator added belongs to no app.
+    expect(appOf(handMade.clientId)).toBeNull();
   });
 
   it('offers no API the metadata does not tie to this provider and the app', async () => {

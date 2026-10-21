@@ -252,6 +252,8 @@ async function registerWith(
       groupsClaim,
       allowDeviceFlow: false,
       source: CLIENT_SOURCE_PAIRED,
+      pairingId: pairing.id,
+      clientUri: clientUriOf(metadata),
     }),
   );
   if (first !== null) {

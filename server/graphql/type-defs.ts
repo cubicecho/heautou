@@ -57,8 +57,20 @@ export const TYPE_DEFS = /* GraphQL */ `
     preset: String
     "Its redirect and post-logout URIs the redirect rule refuses now. Saved before the rule applied, they still work; saving the client again needs them changed."
     refusedRedirectUris: [String!]!
+    "The app it belongs to, which groups the clients one app paired. Null for a client the operator added."
+    app: ClientApp
+    "The APIs that list it, which it may ask for access tokens to with a resource indicator. It can get tokens to no other API."
+    apis: [Api!]!
     "When it was added, as an ISO 8601 string."
     createdAt: String!
+  }
+
+  "The app a paired client belongs to. Its clients share the id."
+  type ClientApp {
+    "The pairing that registered its clients, or, for clients paired before that was recorded, the address of the API they are allowed on."
+    id: ID!
+    "The app's address: the client_uri it paired with, or that API's origin. Null when it gave none."
+    uri: String
   }
 
   "How long one client's tokens stay valid, in seconds. Null is the server's default."

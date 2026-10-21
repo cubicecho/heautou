@@ -14,6 +14,7 @@ import { List } from '@/components/list';
 import { EmptyState } from '@/components/page';
 import { PageLayout } from '@/components/page-layout';
 import { QueryState } from '@/components/query-state';
+import { Section } from '@/components/section';
 import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -27,6 +28,61 @@ export const Route = createFileRoute('/clients')({ component: ClientsPage });
 
 /** Which dialog is up: none, a new client, pairing an app, or one client's edit. */
 type Editing = { kind: 'closed' } | { kind: 'new' } | { kind: 'pair' } | { kind: 'edit'; client: ClientFieldsFragment };
+
+/** The clients one paired app registered (its sign-in client, its device client), shown together. */
+interface AppGroup {
+  /** The app's id, which its clients share. */
+  id: string;
+  /** What to call it: its sign-in client's name, or its first client's. */
+  name: string;
+  /** The app's address, or null when it gave none. */
+  uri: string | null;
+  /** Its clients, in the order the list has them. */
+  clients: ClientFieldsFragment[];
+}
+
+/**
+ * Splits the clients into the paired apps they belong to and the rest, keeping their order.
+ *
+ * @param clients - Every client.
+ * @returns The apps, in the order their first client comes, and the clients that belong to none.
+ */
+function groupByApp(clients: readonly ClientFieldsFragment[]): {
+  apps: AppGroup[];
+  others: ClientFieldsFragment[];
+} {
+  const apps = new Map<string, AppGroup>();
+  const others: ClientFieldsFragment[] = [];
+  for (const client of clients) {
+    const app = client.app ?? null;
+    if (app === null) {
+      others.push(client);
+      continue;
+    }
+    const group = apps.get(app.id) ?? { id: app.id, name: client.name, uri: app.uri ?? null, clients: [] };
+    group.clients.push(client);
+    apps.set(app.id, group);
+  }
+  for (const group of apps.values()) {
+    const signIn = group.clients.find((client) => client.redirectUris.length > 0);
+    group.name = signIn?.name ?? group.name;
+  }
+  return { apps: [...apps.values()], others };
+}
+
+/**
+ * What a paired app's heading says under its name: where it is, and the APIs its clients may get tokens to.
+ *
+ * @param app - The app.
+ * @returns The line.
+ */
+function appDescription(app: AppGroup): string {
+  const apis = [...new Map(app.clients.flatMap((client) => client.apis).map((api) => [api.identifier, api])).values()];
+  const where = app.uri ?? 'Paired app';
+  return apis.length === 0
+    ? `${where}. Its clients may get tokens to no API.`
+    : `${where}. Its clients may get tokens to ${apis.map((api) => api.name).join(', ')} only.`;
+}
 
 /**
  * The URIs a client may be sent back to, one per line.
@@ -152,6 +208,16 @@ function ClientCredentials({ client }: { client: ClientFieldsFragment }) {
             value={client.allowClientCredentials ? 'Allowed' : 'Not allowed'}
           />,
           <PropertyRow key="device" label="Device flow" value={client.allowDeviceFlow ? 'Allowed' : 'Not allowed'} />,
+          <PropertyRow
+            key="apis"
+            label="APIs"
+            value={
+              client.apis.length === 0
+                ? 'None. Its access tokens are only good for reading the user’s profile here.'
+                : client.apis.map((api) => `${api.name} (${api.identifier})`).join('\n')
+            }
+            valueClassName={client.apis.length === 0 ? undefined : 'break-all whitespace-pre-line'}
+          />,
           <PropertyRow key="lifetimes" label="Token lifetimes" value={lifetimesText(client.tokenLifetimes)} />,
         ]}
       />
@@ -173,6 +239,54 @@ function ClientsPage() {
   const [openId, setOpenId] = useState<string | null>(null);
   const [editing, setEditing] = useState<Editing>({ kind: 'closed' });
   const isFormOpen = editing.kind === 'new' || editing.kind === 'edit';
+  const { apps, others } = groupByApp(clients);
+  /**
+   * One client's row, opening onto its credentials.
+   *
+   * @param client - The client.
+   * @returns The row.
+   */
+  const clientRow = (client: ClientFieldsFragment) => (
+    <DisclosureRow
+      key={client.clientId}
+      open={openId === client.clientId}
+      onOpenChange={(next) => setOpenId(next ? client.clientId : null)}
+      title={client.name}
+      badgesSlot={
+        <>
+          <Badge variant="outline">{client.authMethod === 'NONE' ? 'Public' : 'Confidential'}</Badge>
+          {client.allowedGroups.length === 0 ? null : <Badge variant="secondary">Limited</Badge>}
+          {client.source === 'PAIRED' ? <Badge variant="secondary">Paired</Badge> : null}
+          {presetById(client.preset) === undefined ? null : (
+            <Badge variant="secondary">{presetById(client.preset)?.name}</Badge>
+          )}
+          {client.refusedRedirectUris.length === 0 ? null : <Badge variant="warning">http redirect</Badge>}
+        </>
+      }
+      meta={<span className="font-mono text-foreground/60 text-xs">{client.clientId}</span>}
+      actionSlot={
+        <>
+          <Button
+            aria-label={`Edit ${client.name}`}
+            variant="outline"
+            size="icon-sm"
+            iconSlot={<Pencil />}
+            onClick={() => setEditing({ kind: 'edit', client })}
+          />
+          <ConfirmButton
+            aria-label={`Delete ${client.name}`}
+            variant="destructive-outline"
+            size="icon-sm"
+            iconSlot={<Trash2 />}
+            title={`Delete ${client.name}?`}
+            description="The application can no longer sign anyone in, and the tokens it holds stop working."
+            onConfirm={() => remove.mutate(client.clientId)}
+          />
+        </>
+      }
+      contentSlot={<ClientCredentials client={client} />}
+    />
+  );
   const close = (next: boolean): void => {
     if (next === false) {
       setEditing({ kind: 'closed' });
@@ -235,50 +349,22 @@ function ClientsPage() {
               />
             }
           />
-          <List
-            label="Clients"
-            contentSlot={clients.map((client) => (
-              <DisclosureRow
-                key={client.clientId}
-                open={openId === client.clientId}
-                onOpenChange={(next) => setOpenId(next ? client.clientId : null)}
-                title={client.name}
-                badgesSlot={
-                  <>
-                    <Badge variant="outline">{client.authMethod === 'NONE' ? 'Public' : 'Confidential'}</Badge>
-                    {client.allowedGroups.length === 0 ? null : <Badge variant="secondary">Limited</Badge>}
-                    {client.source === 'PAIRED' ? <Badge variant="secondary">Paired</Badge> : null}
-                    {presetById(client.preset) === undefined ? null : (
-                      <Badge variant="secondary">{presetById(client.preset)?.name}</Badge>
-                    )}
-                    {client.refusedRedirectUris.length === 0 ? null : <Badge variant="warning">http redirect</Badge>}
-                  </>
-                }
-                meta={<span className="font-mono text-foreground/60 text-xs">{client.clientId}</span>}
-                actionSlot={
-                  <>
-                    <Button
-                      aria-label={`Edit ${client.name}`}
-                      variant="outline"
-                      size="icon-sm"
-                      iconSlot={<Pencil />}
-                      onClick={() => setEditing({ kind: 'edit', client })}
-                    />
-                    <ConfirmButton
-                      aria-label={`Delete ${client.name}`}
-                      variant="destructive-outline"
-                      size="icon-sm"
-                      iconSlot={<Trash2 />}
-                      title={`Delete ${client.name}?`}
-                      description="The application can no longer sign anyone in, and the tokens it holds stop working."
-                      onConfirm={() => remove.mutate(client.clientId)}
-                    />
-                  </>
-                }
-                contentSlot={<ClientCredentials client={client} />}
-              />
-            ))}
-          />
+          {apps.map((app) => (
+            <Section
+              key={app.id}
+              title={app.name}
+              description={appDescription(app)}
+              contentSlot={<List label={`${app.name} clients`} contentSlot={app.clients.map(clientRow)} />}
+            />
+          ))}
+          {apps.length === 0 ? (
+            <List label="Clients" contentSlot={others.map(clientRow)} />
+          ) : others.length === 0 ? null : (
+            <Section
+              title="Other clients"
+              contentSlot={<List label="Other clients" contentSlot={others.map(clientRow)} />}
+            />
+          )}
           {isFormOpen ? (
             <ClientFormDialog
               key={editing.kind === 'edit' ? editing.client.clientId : 'new'}
