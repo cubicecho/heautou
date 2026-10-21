@@ -43,6 +43,23 @@ interface OffersFormProps {
   client: ClientFieldsFragment;
   /** What the app offers. */
   offers: Offers;
+  /** Whether the app may still offer more. */
+  isLooking: boolean;
+}
+
+/**
+ * A line saying heautou is still asking the app what else it offers, so a dialog that looks done is not taken as done.
+ *
+ * @param props - The app's name.
+ * @param props.name - What the app is called.
+ */
+function LookingForOffers({ name }: { name: string }) {
+  return (
+    <div className="flex items-center gap-2 text-foreground/70 text-sm">
+      <Spinner label="Looking for more to set up" />
+      <span>Checking whether {name} offers device sign-in or an API…</span>
+    </div>
+  );
 }
 
 /**
@@ -51,7 +68,7 @@ interface OffersFormProps {
  *
  * @param props - The pairing, its client and what its app offers.
  */
-function OffersForm({ id, client, offers }: OffersFormProps) {
+function OffersForm({ id, client, offers, isLooking }: OffersFormProps) {
   const finish = useFinishPairing();
   const { deviceClient, api } = offers;
   const form = useAppForm({
@@ -84,6 +101,7 @@ function OffersForm({ id, client, offers }: OffersFormProps) {
       {api === null ? null : (
         <SwitchField form={form} name="api" label={`API: ${api.name}`} description={apiDescription} />
       )}
+      {isLooking ? <LookingForOffers name={client.name} /> : null}
       {finish.error === null ? null : (
         <Alert variant="destructive" title="Not set up" description={messageOf(finish.error)} />
       )}
@@ -110,7 +128,7 @@ function hasOffers(offers: PairingFieldsFragment['offers']): offers is Offers {
  * @param props - The pairing and what to do when it ends.
  */
 function SetupUrl({ id, setupUrl, onPaired, onRestart }: SetupUrlProps) {
-  const query = usePairing(id);
+  const { query, isLookingForOffers } = usePairing(id);
   const pairing = query.data;
   const client = pairing?.client ?? null;
 
@@ -129,7 +147,17 @@ function SetupUrl({ id, setupUrl, onPaired, onRestart }: SetupUrlProps) {
     );
   }
   if (client !== null && pairing.finished === false && hasOffers(pairing.offers)) {
-    return <OffersForm id={id} client={client} offers={pairing.offers} />;
+    const { deviceClient, api } = pairing.offers;
+    // A new offer starts the form again, so its switch starts on like the others.
+    return (
+      <OffersForm
+        key={`${deviceClient?.clientId ?? ''} ${api?.identifier ?? ''}`}
+        id={id}
+        client={client}
+        offers={pairing.offers}
+        isLooking={isLookingForOffers}
+      />
+    );
   }
   if (client !== null) {
     return (
@@ -139,6 +167,7 @@ function SetupUrl({ id, setupUrl, onPaired, onRestart }: SetupUrlProps) {
           title={`Paired with ${client.name}`}
           description="It can sign its users in now. Open it in the list for its settings."
         />
+        {isLookingForOffers ? <LookingForOffers name={client.name} /> : null}
         <DescriptionList
           contentSlot={[
             <PropertyRow key="id" label="Client ID" value={client.clientId} valueClassName="font-mono break-all" />,

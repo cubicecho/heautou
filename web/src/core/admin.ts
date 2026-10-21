@@ -35,6 +35,7 @@ import {
   type NewUserInput,
   PairingChangedDocument,
   PairingDocument,
+  type PairingFieldsFragment,
   type PairingInput,
   PasswordRulesDocument,
   ProviderDocument,
@@ -353,14 +354,33 @@ const OFFER_POLL_MS = 3000;
 const OFFER_POLLS = 10;
 
 /**
+ * Says whether a paired app may still describe more to set up, so its pairing is asked for again: it is paired and
+ * not finished, it has offered no API yet, and it has not been asked `OFFER_POLLS` times.
+ *
+ * @param pairing - The pairing as last read, if any.
+ * @param updates - How many times it has been read.
+ * @returns True while it is still being looked at.
+ */
+function isLookingForOffers(pairing: PairingFieldsFragment | null | undefined, updates: number): boolean {
+  return (
+    pairing?.status === 'PAIRED' &&
+    pairing.finished === false &&
+    (pairing.offers?.api ?? null) === null &&
+    updates <= OFFER_POLLS
+  );
+}
+
+/**
  * Watches a pairing, asking again every couple of seconds while no app has registered with it. When one has, the
  * client list is fetched again so the new client shows.
  *
  * @param id - The pairing's id.
- * @returns The query; its data is null once the pairing has expired or been cancelled.
+ * @returns The query, whose data is null once the pairing has expired or been cancelled, and whether the app may
+ * still offer more to set up.
  */
 export function usePairing(id: string) {
   const queryClient = useQueryClient();
+  const queryKey = [...KEYS.pairings, id];
   useEffect(
     () =>
       subscribe(
@@ -377,21 +397,18 @@ export function usePairing(id: string) {
       ),
     [queryClient, id],
   );
-  return useQuery({
-    queryKey: [...KEYS.pairings, id],
+  const query = useQuery({
+    queryKey,
     queryFn: async () => (await request(PairingDocument, { id })).pairing,
     // An app is often still finishing its pairing when it first shows as paired, and describes its API only after,
     // so ask again for a while until it does.
-    refetchInterval: (query) => {
-      const pairing = query.state.data;
-      const isLooking =
-        pairing?.status === 'PAIRED' &&
-        pairing.finished === false &&
-        (pairing.offers?.api ?? null) === null &&
-        query.state.dataUpdateCount <= OFFER_POLLS;
-      return isLooking ? OFFER_POLL_MS : false;
-    },
+    refetchInterval: (current) =>
+      isLookingForOffers(current.state.data, current.state.dataUpdateCount) ? OFFER_POLL_MS : false,
   });
+  // Reading when it was last updated has the query render again on every answer, even one that changed nothing.
+  void query.dataUpdatedAt;
+  const updates = queryClient.getQueryState(queryKey)?.dataUpdateCount ?? 0;
+  return { query, isLookingForOffers: isLookingForOffers(query.data, updates) };
 }
 
 /**
