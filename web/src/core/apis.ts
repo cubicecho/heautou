@@ -12,6 +12,20 @@ import { request } from '@/core/gql';
 
 /** The react-query key of the API list. A client's change or removal refetches it too, since APIs name clients. */
 export const APIS_KEY = ['apis'] as const;
+/** The client list's key (`KEYS.clients` in admin.ts, which imports this file): each client shows the APIs it may use. */
+const CLIENTS_KEY = ['clients'] as const;
+
+/**
+ * Fetches the APIs, and the clients that show them, again after one changed.
+ *
+ * @param queryClient - The query client.
+ * @returns When both are fetched.
+ */
+const refetchApisAndClients = (queryClient: ReturnType<typeof useQueryClient>) =>
+  Promise.all([
+    queryClient.invalidateQueries({ queryKey: APIS_KEY }),
+    queryClient.invalidateQueries({ queryKey: CLIENTS_KEY }),
+  ]);
 const BOUNDS_KEY = ['apiLifetimeBounds'] as const;
 
 /**
@@ -44,7 +58,7 @@ export function useCreateApi() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (input: NewApiInput) => (await request(CreateApiDocument, { input })).createApi,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: APIS_KEY }),
+    onSuccess: () => refetchApisAndClients(queryClient),
   });
 }
 
@@ -58,7 +72,7 @@ export function useUpdateApi() {
   return useMutation({
     mutationFn: async (vars: { identifier: string; input: ApiInput }) =>
       (await request(UpdateApiDocument, vars)).updateApi,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: APIS_KEY }),
+    onSuccess: () => refetchApisAndClients(queryClient),
   });
 }
 
@@ -71,6 +85,6 @@ export function useDeleteApi() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (identifier: string) => (await request(DeleteApiDocument, { identifier })).deleteApi,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: APIS_KEY }),
+    onSuccess: () => refetchApisAndClients(queryClient),
   });
 }

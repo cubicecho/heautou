@@ -152,6 +152,16 @@ function ClientCredentials({ client }: { client: ClientFieldsFragment }) {
             value={client.allowClientCredentials ? 'Allowed' : 'Not allowed'}
           />,
           <PropertyRow key="device" label="Device flow" value={client.allowDeviceFlow ? 'Allowed' : 'Not allowed'} />,
+          <PropertyRow
+            key="apis"
+            label="APIs"
+            value={
+              client.apis.length === 0
+                ? 'None. Its access tokens are only good for reading the user’s profile here.'
+                : client.apis.map((api) => `${api.name} (${api.identifier})`).join('\n')
+            }
+            valueClassName={client.apis.length === 0 ? undefined : 'break-all whitespace-pre-line'}
+          />,
           <PropertyRow key="lifetimes" label="Token lifetimes" value={lifetimesText(client.tokenLifetimes)} />,
         ]}
       />

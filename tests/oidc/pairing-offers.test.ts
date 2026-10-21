@@ -183,6 +183,11 @@ describe('what a paired app offers', () => {
     expect(api?.allowedClientIds).toHaveLength(2);
     expect((await startDeviceFlow(device.client_id)).ok).toBe(true);
 
+    // The device client shows the one API it may get tokens to.
+    const listed = await adminGql(admin, '{ clients { clientId apis { identifier } } }');
+    const deviceClient = listed.data.clients.find((c: { clientId: string }) => c.clientId === device.client_id);
+    expect(deviceClient.apis).toEqual([{ identifier: API }]);
+
     // The app reads its registration (RFC 7592) and sees the device flow.
     const read = await fetch(device.registration_client_uri, {
       headers: { authorization: `Bearer ${device.registration_access_token}` },

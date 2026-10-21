@@ -57,6 +57,8 @@ export const TYPE_DEFS = /* GraphQL */ `
     preset: String
     "Its redirect and post-logout URIs the redirect rule refuses now. Saved before the rule applied, they still work; saving the client again needs them changed."
     refusedRedirectUris: [String!]!
+    "The APIs that list it, which it may ask for access tokens to with a resource indicator. It can get tokens to no other API."
+    apis: [Api!]!
     "When it was added, as an ISO 8601 string."
     createdAt: String!
   }

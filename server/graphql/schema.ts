@@ -505,6 +505,16 @@ const resolvers = {
   },
   Client: {
     /**
+     * Resolves `Client.apis`.
+     *
+     * @param client - The client.
+     * @param _args - Unused.
+     * @param ctx - Request context.
+     * @returns The APIs that allow it, the only ones it can get access tokens to.
+     */
+    apis: (client: OidcClient, _args: unknown, ctx: Context): Api[] =>
+      ctx.apis.list().filter((api) => api.allowedClientIds.includes(client.clientId)),
+    /**
      * Resolves `Client.refusedRedirectUris`.
      *
      * @param client - The client.
