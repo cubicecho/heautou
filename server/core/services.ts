@@ -330,7 +330,8 @@ export async function openServices(settings: ServiceSettings): Promise<Services>
           target: {
             kind: AuditTargetKind.Client,
             id: client.clientId,
-            name: client.clientName ?? clients.find(client.clientId)?.name ?? client.clientId,
+            // As the store names it now; the provider passes an update the client as it was before.
+            name: clients.find(client.clientId)?.name ?? client.clientName ?? client.clientId,
           },
         });
         refreshSoon();
