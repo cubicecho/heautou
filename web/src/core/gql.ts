@@ -1,17 +1,10 @@
 import type { TypedDocumentNode } from '@graphql-typed-document-node/core';
+import { HttpStatus } from '@server/core/wire.ts';
 import { print } from 'graphql';
+import { ACCOUNT_PAGE, signInPath } from '@/core/paths';
 
 /** The browser talks to its own origin; Vite proxies `/graphql` to the server in dev. */
 const ENDPOINT = '/graphql';
-
-/** Where the server starts an admin sign-in; `?return=` is where it comes back to. */
-const ADMIN_LOGIN = '/admin/login';
-/** What `/graphql` answers when the admin session is missing or over. */
-const HTTP_UNAUTHORIZED = 401;
-/** What `/graphql` answers a signed-in user who is not an admin. */
-const HTTP_FORBIDDEN = 403;
-/** Where a user who is not an admin has their own page. */
-const ACCOUNT_PAGE = '/account';
 
 interface GraphQLResponse<T> {
   data?: T;
@@ -38,12 +31,12 @@ function errorOf(errors: { message: string }[]): Error {
  * @returns What to tell the caller when it was refused; null when it was not.
  */
 function sendOnIfRefused(status: number): Error | null {
-  if (status === HTTP_UNAUTHORIZED) {
+  if (status === HttpStatus.Unauthorized) {
     const here = `${window.location.pathname}${window.location.search}`;
-    window.location.assign(`${ADMIN_LOGIN}?return=${encodeURIComponent(here)}`);
+    window.location.assign(signInPath(here));
     return new Error('Your admin session ended. Signing in again…');
   }
-  if (status === HTTP_FORBIDDEN && window.location.pathname !== ACCOUNT_PAGE) {
+  if (status === HttpStatus.Forbidden && window.location.pathname !== ACCOUNT_PAGE) {
     window.location.assign(ACCOUNT_PAGE);
     return new Error('Only admins may use this page.');
   }
@@ -160,7 +153,7 @@ export function subscribe<TResult, TVariables>(
       body: JSON.stringify({ query, variables }),
       signal: abort.signal,
     });
-    if (sendOnIfRefused(response.status) !== null || response.status === HTTP_FORBIDDEN) {
+    if (sendOnIfRefused(response.status) !== null || response.status === HttpStatus.Forbidden) {
       return true;
     }
     if (response.ok === false || response.body === null) {

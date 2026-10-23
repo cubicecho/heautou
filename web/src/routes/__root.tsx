@@ -19,6 +19,7 @@ import { isThemePreference, type ThemePreference } from '@/components/ui/theme-p
 import { useAccount } from '@/core/account';
 import { Activity, AppWindow, LayoutDashboard, LogOut, Server, ShieldCheck, Tags, UsersRound } from '@/core/app-icons';
 import { BrandIcon, useBrandName } from '@/core/brand';
+import { ACCOUNT_PAGE } from '@/core/paths';
 import { signOut, useViewer } from '@/core/session';
 
 const SidebarLink = createLink(SidebarNavItem);
@@ -29,9 +30,6 @@ const BarLink = createLink(BarNavItem);
  * shell.
  */
 const PROVIDER_PAGES = ['/login/', '/logout', '/logged-out', '/error', '/device', '/setup', '/set-password'];
-
-/** A user's own account page, which an admin sees inside the admin shell and anyone else on its own. */
-const ACCOUNT_PAGE = '/account';
 
 /** The admin pages, in the order the sidebar lists them. */
 const PLACES = [

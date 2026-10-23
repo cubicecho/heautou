@@ -14,6 +14,7 @@ import { FormElement } from '@/components/ui/form-element';
 import { BrandIcon } from '@/core/brand';
 import { messageOf } from '@/core/errors';
 import { jsonReply, postJson, redirectReplySchema } from '@/core/json-reply';
+import { SIGN_IN_PATH } from '@/core/paths';
 import { QUERY_KEYS } from '@/core/query-keys';
 import { fragmentParam } from '@/core/url-fragment';
 import { PasswordStrengthMeter } from '@/passwords/strength-meter';
@@ -25,7 +26,6 @@ const TOKEN_PARAM = 'token';
 
 const FORM_ID = 'setup-form';
 const SETUP_URL = '/admin/setup';
-const ADMIN_LOGIN = '/admin/login';
 
 const statusSchema = z.object({ needed: z.boolean(), tokenRequired: z.boolean() });
 /** How the operator reads the setup link and its token, in the quick start's setup. */
@@ -157,7 +157,7 @@ function SetupPage() {
             <form.SubmitButton content="Make admin" />
           </form.AppForm>
         ) : isDone ? (
-          <Button content="Sign in" onClick={() => window.location.assign(ADMIN_LOGIN)} />
+          <Button content="Sign in" onClick={() => window.location.assign(SIGN_IN_PATH)} />
         ) : undefined
       }
     />

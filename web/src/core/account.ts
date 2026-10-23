@@ -1,3 +1,4 @@
+import { HttpStatus } from '@server/core/wire.ts';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 import { jsonReply, okReplySchema, postJson, redirectReplySchema } from '@/core/json-reply';
@@ -5,8 +6,6 @@ import { QUERY_KEYS } from '@/core/query-keys';
 
 /** Where a browser with no session signs in, coming back to the account page. */
 export const ACCOUNT_LOGIN = '/admin/login?return=%2Faccount';
-/** What `/api/account` answers a browser with no session. */
-const HTTP_UNAUTHORIZED = 401;
 
 const accountSchema = z.object({
   id: z.string(),
@@ -54,7 +53,7 @@ export function useAccount() {
     queryKey: QUERY_KEYS.account,
     queryFn: async () => {
       const response = await fetch('/api/account');
-      if (response.status === HTTP_UNAUTHORIZED) {
+      if (response.status === HttpStatus.Unauthorized) {
         window.location.assign(ACCOUNT_LOGIN);
         throw new Error('Signing you in…');
       }
