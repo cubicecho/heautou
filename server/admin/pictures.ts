@@ -1,6 +1,7 @@
 import { Readable } from 'node:stream';
 import type { ReadableStream as NodeReadableStream } from 'node:stream/web';
 import express, { type Request, type RequestHandler, type Response, Router } from 'express';
+import { requireSignedIn, viewerOf } from '../account/session.ts';
 import { HTTP_DEFAULTS, PROFILE_DEFAULTS } from '../core/defaults.ts';
 import { errorMessage } from '../core/errors.ts';
 import { ObjectStorageError } from '../core/object-storage.ts';
@@ -11,7 +12,7 @@ import { type AuditActor, type AuditLog, AuditType, actorOf, userTarget } from '
 import type { UserStore } from '../store/users.ts';
 import type { WebSessionStore } from '../store/web-sessions.ts';
 import { adminUrls } from './admin-client.ts';
-import { requireAdmin, requireSignedIn, viewerOf } from './routes.ts';
+import { requireAdmin } from './routes.ts';
 
 /** The picture routes. */
 export const PICTURE_PATH = {

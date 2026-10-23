@@ -1,5 +1,6 @@
 import express, { type Response, Router } from 'express';
 import { z } from 'zod';
+import { ADMIN_PATH, adminUrls, brandingView, sessionClientName, WEB_APP_PAGE } from '../admin/admin-client.ts';
 import { ADMIN_DEFAULTS, AUDIT_DEFAULTS, BRANDING_DEFAULTS, HTTP_DEFAULTS } from '../core/defaults.ts';
 import { errorMessage } from '../core/errors.ts';
 import type { PasswordPolicy } from '../core/password-policy.ts';
@@ -14,8 +15,7 @@ import type { PasswordLinkStore } from '../store/password-links.ts';
 import type { SettingsStore } from '../store/settings.ts';
 import { isAdmin, type UserStore } from '../store/users.ts';
 import type { WebSessionStore } from '../store/web-sessions.ts';
-import { ADMIN_PATH, adminUrls, brandingView, sessionClientName, WEB_APP_PAGE } from './admin-client.ts';
-import { COOKIE, requireSignedIn, sessionCookieOptions, signedInUser, viewerOf } from './routes.ts';
+import { COOKIE, requireSignedIn, sessionCookieOptions, signedInUser, viewerOf } from './session.ts';
 
 /** What the account, password link and branding routes use. */
 export interface AccountDeps {

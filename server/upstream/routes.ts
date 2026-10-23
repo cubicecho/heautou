@@ -1,7 +1,7 @@
 import express, { Router } from 'express';
 import { z } from 'zod';
+import { requireSignedIn, viewerOf } from '../account/session.ts';
 import { adminUrls, WEB_APP_PAGE } from '../admin/admin-client.ts';
-import { requireSignedIn, viewerOf } from '../admin/routes.ts';
 import { HTTP_DEFAULTS } from '../core/defaults.ts';
 import { errorMessage } from '../core/errors.ts';
 import { HttpStatus } from '../core/wire.ts';

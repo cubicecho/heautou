@@ -44,9 +44,9 @@ average 13); every failing file passes alone. See T5 and T6.
 
 | ID | Kind | What it does | Buys | Needs | Status |
 |---|---|---|---|---|---|
-| M1 | Model change | Splits "admin" into the web session (any signed-in user's) and admin (a user in the admin group), in code names and in the server folders | A reader stops thinking the account page is admin-only | — | approved |
+| M1 | Model change | Splits "admin" into the web session (any signed-in user's) and admin (a user in the admin group), in code names and in the server folders | A reader stops thinking the account page is admin-only | — | done |
 | R14 | Refactor [readability] | Renames the admin session store and service to web session, internal names only | M1 | M1 | done |
-| R15 | Refactor [pattern] | Moves the account page's routes (profile, second factors, own picture) out of `server/admin/` into `server/account/` | M1; P21 | M1 | approved |
+| R15 | Refactor [pattern] | Moves the account page's routes (profile, second factors, own picture) out of `server/admin/` into `server/account/` | M1; P21 | M1 | done |
 | A1 | API change | Lists the persisted and public "admin" names of the web session (table, cookie, document name, `/admin/account/*` URLs) and proposes keeping them | M1 without a breaking change | M1 | done |
 | M2 | Model change | Gives a client's display name (built-in name, else stored name, else ID) one owner | Removes five copies that already differ once | — | done |
 | B2 | Bug (question) | Asks whether a paired app's registration entries should name the client the way every other entry does | Settles the one differing copy before R4 merges them | — | done |
@@ -153,7 +153,7 @@ has to explain that "any enabled user may sign in this way". To-be: a **web sess
 browser signed in to heautou's web app; an **admin** is a user in the admin group; the
 account page's routes live in `server/account/`, the admin-only ones in `server/admin/`.
 Persisted and public names stay (A1). Why it is simpler: each word means one thing.
-Implemented by: R14, R15, A1. Status: open.
+Implemented by: R14, R15, A1. Status: done.
 
 ### M2 — Name "client display name" and give it one owner
 

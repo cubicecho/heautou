@@ -25,8 +25,8 @@ store change → document in memory → write queue → tables;  audit.record �
 backup: data set → archive (files) → restore: check → data set replaces all → stores reload → provider rebuilt
 ```
 
-Dependencies point from the HTTP doors (`http/`, `admin/`, `oidc/`, `forward-auth/`,
-`upstream/`, `mail/`, `graphql/`) to the stores (`store/`), and from the stores to the
+Dependencies point from the HTTP doors (`http/`, `admin/`, `account/`, `oidc/`,
+`forward-auth/`, `upstream/`, `mail/`, `graphql/`) to the stores (`store/`), and from the stores to the
 document layer (`db/`). `core/services.ts` builds everything and is the only module that
 knows every store. The provider reads stores from memory on every request.
 
@@ -176,7 +176,7 @@ Owner: `server/store/audit.ts`.
   recovery code, or a passkey. Owner: `server/store/factors.ts` (`factors`), `server/core/totp.ts`,
   `server/core/webauthn.ts`.
 - **Passkey:** a WebAuthn credential; it is a second factor, or with user verification signs
-  a user in alone. Owner: `server/store/factors.ts`, `server/admin/factors.ts`.
+  a user in alone. Owner: `server/store/factors.ts`, `server/account/factors.ts`.
 - **Upstream (sign-in provider):** another provider, such as Google or GitHub, that users may
   sign in through. Owner: `server/store/upstreams.ts`, `server/upstream/`.
 - **Linked account (link, identity):** an upstream identity tied to one local user; heautou
@@ -223,8 +223,9 @@ Owner: `server/store/audit.ts`.
   Its stored and wire names keep "admin" (A1): the `admin_sessions` table, the
   `admin-sessions.json` document and archive path, the `heautou_admin` cookie.
 - **Account page:** where any user changes their own profile, password, second factors,
-  picture, sessions and linked accounts. Owner: `server/admin/account.ts`,
-  `server/admin/factors.ts`, `web/src/routes/account.tsx`.
+  picture, sessions and linked accounts. Owner: `server/account/` (`routes.ts`,
+  `factors.ts`; the picture routes are in `server/admin/pictures.ts`),
+  `web/src/routes/account.tsx`.
 - **Profile picture:** a user's square picture, kept in the S3 bucket and served publicly by
   user id. Owner: `server/core/pictures.ts`, `server/admin/pictures.ts`.
 
@@ -308,8 +309,8 @@ Owner: `server/store/audit.ts`.
   else the stored name, else the name a request gave, else its ID. Owner: `clientDisplayName`
   in `server/admin/admin-client.ts`; `sessionClientName` there names the web app by the brand.
 - **Viewer:** the signed-in user a request is for. Owner: `requireSignedIn` (any enabled
-  user) and `requireAdmin` in `server/admin/routes.ts` find it; handlers read it with
-  `viewerOf(res)`.
+  user) in `server/account/session.ts` and `requireAdmin` in `server/admin/routes.ts` find
+  it; handlers read it with `viewerOf(res)`.
 - **Defaults group:** a tunable group in `server/core/defaults.ts` (`<CONCEPT>_DEFAULTS`).
   Facts are in `server/core/wire.ts`.
 

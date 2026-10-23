@@ -1,6 +1,7 @@
 import type { RegistrationResponseJSON } from '@simplewebauthn/server';
 import express, { type Request, type Response, Router } from 'express';
 import { z } from 'zod';
+import { adminUrls } from '../admin/admin-client.ts';
 import { HTTP_DEFAULTS, TWO_FACTOR_DEFAULTS } from '../core/defaults.ts';
 import { errorMessage } from '../core/errors.ts';
 import { createExpiringMap } from '../core/expiring-map.ts';
@@ -14,8 +15,7 @@ import type { BrandingStore } from '../store/branding.ts';
 import type { FactorStore } from '../store/factors.ts';
 import type { PublicUser, UserStore } from '../store/users.ts';
 import type { WebSessionStore } from '../store/web-sessions.ts';
-import { adminUrls } from './admin-client.ts';
-import { requireSignedIn, viewerOf } from './routes.ts';
+import { requireSignedIn, viewerOf } from './session.ts';
 
 /** The account page's second-factor routes. Every one acts on the signed-in user. */
 export const FACTOR_PATH = {
