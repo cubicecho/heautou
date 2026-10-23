@@ -46,4 +46,11 @@ describe('key store', () => {
     expect(store.current().rotatedAt).toEqual(expect.any(String));
     expect(store.isDue()).toBe(false);
   });
+
+  it('names the keys document when it was emptied under a running server', async () => {
+    const document = await openDocument(db, KEYS_DOCUMENT);
+    const store = await openKeyStore(document);
+    await document.update(() => null);
+    expect(() => store.current()).toThrow(/keys document/);
+  });
 });

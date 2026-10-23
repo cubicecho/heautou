@@ -115,7 +115,7 @@ export async function openKeyStore(
   const current = (): ProviderKeys => {
     const keys = document.read();
     if (keys === null) {
-      throw new Error('The key file was emptied while the server ran.');
+      throw new Error('The keys document was emptied while the server ran. Restart it to make new keys.');
     }
     return keys;
   };
