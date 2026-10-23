@@ -78,8 +78,9 @@ export function createForgotPasswordRouter(deps: ForgotPasswordDeps): Router {
    * @param identifier - What was typed.
    * @param uid - The sign-in it was asked from.
    * @param ip - Who asked.
+   * @returns Once the links are saved and their emails handed to the mailer.
    */
-  const sendLinks = (identifier: string, uid: string, ip: string | null): void => {
+  const sendLinks = async (identifier: string, uid: string, ip: string | null): Promise<void> => {
     const named = usersNamed(users.list(), identifier);
     if (named.length === 0) {
       audit.record({ type: AuditType.PasswordResetRequested, actor: null, ip, detail: { identifier } });
@@ -98,7 +99,7 @@ export function createForgotPasswordRouter(deps: ForgotPasswordDeps): Router {
       if (isRefused) {
         continue;
       }
-      const { token, expiresAt } = passwordLinks.issue(user.id);
+      const { token, expiresAt } = await passwordLinks.issue(user.id);
       const url = passwordLinkUrl(issuer, token, uid);
       const content = passwordLinkContent(MailKind.ForgotPassword, user, brandName, url, new Date(expiresAt));
       mailer.sendInBackground(MailKind.ForgotPassword, user.email, content, {
@@ -146,11 +147,9 @@ export function createForgotPasswordRouter(deps: ForgotPasswordDeps): Router {
     byIdentifier.add(identifierKey);
     res.json({ ok: true });
     setImmediate(() => {
-      try {
-        sendLinks(identifier, uid, req.ip ?? null);
-      } catch (error) {
+      sendLinks(identifier, uid, req.ip ?? null).catch((error: unknown) => {
         console.error(LOG_TAG, 'could not send a reset link:', errorMessage(error));
-      }
+      });
     });
   });
 

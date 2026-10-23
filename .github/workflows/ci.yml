@@ -22,6 +22,35 @@ jobs:
       - name: Test
         run: npm test
 
+  postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env: { POSTGRES_USER: heautou, POSTGRES_PASSWORD: heautou, POSTGRES_DB: heautou }
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U heautou" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgres://heautou:heautou@localhost:5432/heautou
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with: { node-version: 26, cache: npm }
+      - run: npm ci
+      - name: The committed migrations match the tables
+        run: npx drizzle-kit generate && test -z "$(git status --porcelain drizzle)"
+      - name: The migrations apply to Postgres
+        run: npm run db:migrate
+      - name: The server boots on Postgres
+        run: |
+          PORT=3100 ISSUER_URL=http://localhost:3100/oidc node server/index.ts &
+          for attempt in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:3100/healthz && exit 0
+            sleep 1
+          done
+          exit 1
+
   boot:
     runs-on: ubuntu-latest
     steps:

@@ -1,8 +1,9 @@
 import { randomBytes } from 'node:crypto';
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
-import { SECRET_KEY_BYTES } from '../../server/core/secret-box.ts';
+import { eq } from 'drizzle-orm';
+import { SECRET_KEY_BYTES, SecretKeyError } from '../../server/core/secret-box.ts';
 import { BACKUP_LAYOUT, openServices } from '../../server/core/services.ts';
+import { DOCUMENT_FILES } from '../../server/db/documents.ts';
+import { documents } from '../../server/db/schema.ts';
 import { AuditType } from '../../server/store/audit.ts';
 import { BackupErrorCode, readBackup } from '../../server/store/backup.ts';
 import { startTestApp, type TestApp } from '../helpers.ts';
@@ -18,6 +19,17 @@ const SET_OPTIONS = `mutation ($on: Boolean) { setMailOptions(notifyPasswordChan
 const EMAIL_LINK = 'mutation ($id: ID!) { emailPasswordLink(id: $id) { link { url expiresAt } sentTo error } }';
 const NEW_PASSWORD = 'a brand new one';
 
+/**
+ * Reads the mail settings as the database holds them.
+ *
+ * @param app - The running app.
+ * @returns The stored document, secrets as stored.
+ */
+async function storedMail(app: TestApp): Promise<{ server?: { password?: string } } | undefined> {
+  const [row] = await app.services.db.select().from(documents).where(eq(documents.name, DOCUMENT_FILES.mail));
+  return row?.body as { server?: { password?: string } } | undefined;
+}
+
 describe('email', () => {
   let app: TestApp;
   let fake: FakeTransport;
@@ -31,18 +43,19 @@ describe('email', () => {
       secretKeys: { current: randomBytes(SECRET_KEY_BYTES), previous: null },
     });
     admin = await signInAsAdmin(app);
-    app.services.users.update(app.services.users.list()[0]?.id ?? '', {
+    await app.services.users.update(app.services.users.list()[0]?.id ?? '', {
       username: 'root',
       email: 'root@example.home',
       name: 'Root',
       groups: ['heautou-admin'],
     });
-    adaId = app.services.users.create({
+    const ada = await app.services.users.create({
       username: 'ada',
       email: 'ada@example.home',
       name: 'Ada',
       groups: [],
-    }).id;
+    });
+    adaId = ada.id;
   });
 
   afterEach(() => app.close());
@@ -70,9 +83,10 @@ describe('email', () => {
       isConfigured: true,
       server: { host: TEST_SERVER.host, hasPassword: true },
     });
-    const onDisk = readFileSync(path.join(app.dataDir, 'mail.json'), 'utf8');
-    expect(onDisk).not.toContain(TEST_SERVER.password);
-    expect(JSON.parse(onDisk).server.password).toMatch(/^enc:v1:/);
+    await app.services.settled();
+    const stored = await storedMail(app);
+    expect(JSON.stringify(stored)).not.toContain(TEST_SERVER.password);
+    expect(stored?.server?.password).toMatch(/^enc:v1:/);
     expect(JSON.stringify(await adminGql(admin, MAIL))).not.toContain(TEST_SERVER.password);
 
     // A blank password keeps the saved one.
@@ -80,31 +94,33 @@ describe('email', () => {
     await adminGql(admin, 'mutation { sendTestEmail }');
     expect(fake.sent[0]?.server).toMatchObject({ port: 2525, password: TEST_SERVER.password });
 
-    // Booting again with another key stops, without touching the file.
-    const before = readFileSync(path.join(app.dataDir, 'mail.json'), 'utf8');
-    expect(() =>
+    // Booting again with another key stops, without touching the stored settings.
+    await app.services.settled();
+    const before = await storedMail(app);
+    await expect(
       openServices({
-        dataDir: app.dataDir,
+        database: app.database.db,
         issuer: app.services.issuer,
         isProxied: false,
         secretKeys: { current: randomBytes(SECRET_KEY_BYTES), previous: null },
       }),
-    ).toThrow(/SECRET_KEY/);
-    expect(readFileSync(path.join(app.dataDir, 'mail.json'), 'utf8')).toBe(before);
+    ).rejects.toThrow(SecretKeyError);
+    expect(await storedMail(app)).toEqual(before);
 
-    const types = app.services.audit.list({}).entries.map((entry) => entry.type);
-    expect(types).toContain(AuditType.MailServerSet);
-    expect(JSON.stringify(app.services.audit.list({}))).not.toContain(TEST_SERVER.password);
+    const log = await app.services.audit.list({});
+    expect(log.entries.map((entry) => entry.type)).toContain(AuditType.MailServerSet);
+    expect(JSON.stringify(log)).not.toContain(TEST_SERVER.password);
   });
 
   it('keeps the SMTP password sealed in a backup, and brings it back on a restore', async () => {
     await adminGql(admin, SET_SERVER, { input: TEST_SERVER });
-    const archive = app.services.backup.create({ includeSessions: false });
+    const archive = await app.services.backup.create({ includeSessions: false });
     expect(() => readBackup(archive, BACKUP_LAYOUT, null)).toThrow(
       expect.objectContaining({ code: BackupErrorCode.WrongKey }),
     );
-    app.services.mail.removeServer();
-    app.services.backup.restore(archive);
+    await app.services.mail.removeServer();
+    expect(app.services.mail.status().server).toBeNull();
+    await app.services.backup.restore(archive);
     expect(app.services.mail.status().server).toMatchObject({ host: TEST_SERVER.host, hasPassword: true });
   });
 
@@ -119,7 +135,8 @@ describe('email', () => {
     fake.failWith = 'connect ECONNREFUSED';
     const failed = await adminGql(admin, 'mutation ($to: String) { sendTestEmail(to: $to) }', { to: 'x@example.home' });
     expect(failed.errors[0].message).toMatch(/ECONNREFUSED/);
-    const [failure, success] = app.services.audit.list({ types: [AuditType.MailFailed, AuditType.MailSent] }).entries;
+    const [failure, success] = (await app.services.audit.list({ types: [AuditType.MailFailed, AuditType.MailSent] }))
+      .entries;
     expect(failure?.detail).toEqual({ kind: 'test', to: 'x@example.home', error: 'connect ECONNREFUSED' });
     expect(success?.detail).toEqual({ kind: 'test', to: 'root@example.home' });
   });
@@ -134,7 +151,7 @@ describe('email', () => {
     expect(mail?.text).toContain(reply.link.url);
     const token = new URLSearchParams(new URL(reply.link.url).hash.slice(1)).get('token') ?? '';
     expect(app.services.passwordLinks.find(token)).toBe(adaId);
-    const log = JSON.stringify(app.services.audit.list({}));
+    const log = JSON.stringify(await app.services.audit.list({}));
     expect(log).not.toContain(token);
     expect(log).toContain('"kind":"invite"');
 
@@ -144,12 +161,12 @@ describe('email', () => {
     expect(failed.error).toBe('mailbox unavailable');
     const second = new URLSearchParams(new URL(failed.link.url).hash.slice(1)).get('token') ?? '';
     expect(app.services.passwordLinks.find(second)).toBe(adaId);
-    expect(JSON.stringify(app.services.audit.list({}))).not.toContain(second);
+    expect(JSON.stringify(await app.services.audit.list({}))).not.toContain(second);
   });
 
   it('refuses a user with no address', async () => {
     await adminGql(admin, SET_SERVER, { input: TEST_SERVER });
-    const bob = app.services.users.create({ username: 'bob', email: '', name: '', groups: [] });
+    const bob = await app.services.users.create({ username: 'bob', email: '', name: '', groups: [] });
     const refused = await adminGql(admin, EMAIL_LINK, { id: bob.id });
     expect(refused.errors[0].message).toMatch(/no email address/);
   });

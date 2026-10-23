@@ -8,10 +8,10 @@ import {
 } from '../core/defaults.ts';
 import { badInput, notFound } from '../core/errors.ts';
 import { parseInput } from '../core/validation.ts';
+import type { DataDocument } from '../db/document.ts';
 import { DEFAULT_GROUPS_CLAIM, groupsClaimSchema, replaceGroupIn, withoutBlanks } from './claims.ts';
-import type { JsonFile } from './json-file.ts';
 import { redirectProblem, redirectUriProblem } from './redirect-uris.ts';
-import type { SecretMapper } from './sealed-file.ts';
+import type { SecretMapper } from './sealed-document.ts';
 
 /** How a client proves who it is at the token endpoint. */
 export const ClientAuthMethod = {
@@ -224,21 +224,21 @@ const newClientSchema = clientFields
   .superRefine((client, ctx) => checkClientFlows(client, ctx, client.source === CLIENT_SOURCE_PAIRED));
 export type NewClient = z.input<typeof newClientSchema>;
 
-/** The clients, kept in one JSON file. */
+/** The clients. A change is made in memory at once and resolves when it is saved. */
 export interface ClientStore {
   list: () => OidcClient[];
   find: (clientId: string) => OidcClient | null;
-  create: (input: NewClient) => OidcClient;
-  update: (clientId: string, input: ClientFields) => OidcClient;
-  rotateSecret: (clientId: string) => OidcClient;
-  remove: (clientId: string) => OidcClient;
+  create: (input: NewClient) => Promise<OidcClient>;
+  update: (clientId: string, input: ClientFields) => Promise<OidcClient>;
+  rotateSecret: (clientId: string) => Promise<OidcClient>;
+  remove: (clientId: string) => Promise<OidcClient>;
   /**
    * Renames a group in every client's allowed groups, or takes it out of them.
    *
    * @param from - The group.
    * @param to - Its new name, or null to remove it.
    */
-  replaceGroup: (from: string, to: string | null) => void;
+  replaceGroup: (from: string, to: string | null) => Promise<void>;
 }
 
 /** What the client store is built with besides its file. */
@@ -248,7 +248,7 @@ export interface ClientStoreOptions {
   /** Whether plain http redirect URIs are allowed on any host. Asked on every save; refused when left out. */
   allowsHttpRedirects?: () => boolean;
   /** Told after a client is removed, so what names it (an API's allowed clients) can let it go. */
-  onRemove?: (clientId: string) => void;
+  onRemove?: (clientId: string) => Promise<void>;
 }
 
 /**
@@ -310,15 +310,15 @@ export const clientSecretsIn: SecretMapper<OidcClient[]> = (clients, change) =>
   );
 
 /**
- * Builds the client store over a JSON file. Redirect and back-channel logout URIs are checked against the https
+ * Builds the client store over its document. Redirect and back-channel logout URIs are checked against the https
  * rule (`redirect-uris.ts`) when a client is saved; clients already in the file are read as they are.
  *
- * @param file - The file holding every client.
+ * @param file - The document holding every client.
  * @param [options] - The clock, whether plain http redirect URIs are allowed, and who is told of a removal.
  * @returns The store.
  */
-export function createClientStore(file: JsonFile<OidcClient[]>, options: ClientStoreOptions = {}): ClientStore {
-  const { now = () => new Date(), allowsHttpRedirects = () => false, onRemove = () => {} } = options;
+export function createClientStore(file: DataDocument<OidcClient[]>, options: ClientStoreOptions = {}): ClientStore {
+  const { now = () => new Date(), allowsHttpRedirects = () => false, onRemove = async () => {} } = options;
   type CheckedUris = Pick<
     OidcClient,
     'authMethod' | 'redirectUris' | 'postLogoutRedirectUris' | 'backchannelLogoutUri'
@@ -348,15 +348,15 @@ export function createClientStore(file: JsonFile<OidcClient[]>, options: ClientS
     return client;
   };
 
-  const replace = (next: OidcClient): OidcClient => {
-    file.update(() => stored().map((client) => (client.clientId === next.clientId ? next : client)));
+  const replace = async (next: OidcClient): Promise<OidcClient> => {
+    await file.update(() => stored().map((client) => (client.clientId === next.clientId ? next : client)));
     return next;
   };
 
   return {
     list: stored,
     find,
-    create: (input) => {
+    create: async (input) => {
       const { clientId = randomUUID(), ...fields } = parseInput(newClientSchema, withoutBlanks(input));
       const isBuiltIn = clientId === ADMIN_DEFAULTS.clientId || clientId === FORWARD_AUTH_DEFAULTS.clientId;
       const isTaken = find(clientId) !== null || isBuiltIn;
@@ -365,10 +365,10 @@ export function createClientStore(file: JsonFile<OidcClient[]>, options: ClientS
       }
       checkRedirects(fields);
       const client = withSecretFor({ ...fields, clientId, clientSecret: null, createdAt: now().toISOString() });
-      file.update(() => [...stored(), client]);
+      await file.update(() => [...stored(), client]);
       return client;
     },
-    update: (clientId, input) => {
+    update: async (clientId, input) => {
       const current = load(clientId);
       // What the input leaves out keeps its value, rather than taking the default a new client gets.
       const { allowedGroups, groupsClaim, allowClientCredentials, allowDeviceFlow, logoUri, tokenLifetimes } = current;
@@ -392,23 +392,24 @@ export function createClientStore(file: JsonFile<OidcClient[]>, options: ClientS
       checkRedirects(fields);
       return replace(withSecretFor({ ...current, ...fields }));
     },
-    rotateSecret: (clientId) => {
+    rotateSecret: async (clientId) => {
       const client = load(clientId);
       if (client.authMethod === ClientAuthMethod.None) {
         throw badInput(`"${client.name}" is a public client and has no secret.`);
       }
       return replace({ ...client, clientSecret: newSecret() });
     },
-    remove: (clientId) => {
+    remove: async (clientId) => {
       const client = load(clientId);
-      file.update(() => stored().filter((other) => other.clientId !== clientId));
-      onRemove(clientId);
+      const removed = file.update(() => stored().filter((other) => other.clientId !== clientId));
+      const released = onRemove(clientId);
+      await Promise.all([removed, released]);
       return client;
     },
-    replaceGroup: (from, to) => {
+    replaceGroup: async (from, to) => {
       const isUsed = stored().some((client) => client.allowedGroups.includes(from));
       if (isUsed) {
-        file.update(() =>
+        await file.update(() =>
           stored().map((client) => ({ ...client, allowedGroups: replaceGroupIn(client.allowedGroups, from, to) })),
         );
       }

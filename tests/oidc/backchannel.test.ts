@@ -110,8 +110,9 @@ describe('back-channel logout', () => {
     app = await startTestApp();
     standIn = await startStandInApp();
     admin = await signInAsAdmin(app);
-    adaId = app.services.users.create({ username: 'ada', password: PASSWORD, email: '', name: '', groups: [] }).id;
-    client = app.services.clients.create({
+    adaId = (await app.services.users.create({ username: 'ada', password: PASSWORD, email: '', name: '', groups: [] }))
+      .id;
+    client = await app.services.clients.create({
       name: 'Notes',
       authMethod: ClientAuthMethod.SecretBasic,
       redirectUris: [REDIRECT_URI],
@@ -215,7 +216,7 @@ describe('back-channel logout', () => {
   });
 
   it('records an app it cannot reach, without failing the sign-out', async () => {
-    const offline = app.services.clients.create({
+    const offline = await app.services.clients.create({
       name: 'Offline app',
       authMethod: ClientAuthMethod.SecretBasic,
       redirectUris: [REDIRECT_URI],
@@ -231,7 +232,7 @@ describe('back-channel logout', () => {
     expect(standIn.tokens).toHaveLength(1);
     expect(app.services.sessions.sessionsOf(adaId)).toEqual([]);
 
-    const [failure] = app.services.audit.list({ types: [AuditType.AppLogoutFailed] }).entries;
+    const [failure] = (await app.services.audit.list({ types: [AuditType.AppLogoutFailed] })).entries;
     expect(failure).toMatchObject({
       actor: { userId: adaId, username: 'ada' },
       target: { id: offline.clientId, name: 'Offline app' },
@@ -241,7 +242,7 @@ describe('back-channel logout', () => {
   });
 
   it('records an app it cannot reach when the user signs out at the provider', async () => {
-    const offline = app.services.clients.create({
+    const offline = await app.services.clients.create({
       name: 'Gone app',
       authMethod: ClientAuthMethod.SecretBasic,
       redirectUris: [REDIRECT_URI],
@@ -259,7 +260,7 @@ describe('back-channel logout', () => {
       body: new URLSearchParams({ xsrf: logoutPage.searchParams.get('xsrf') ?? '', logout: 'yes' }),
     });
     expect(confirmed.status).toBe(HttpStatus.SeeOther);
-    const [failure] = app.services.audit.list({ types: [AuditType.AppLogoutFailed] }).entries;
+    const [failure] = (await app.services.audit.list({ types: [AuditType.AppLogoutFailed] })).entries;
     expect(failure).toMatchObject({ target: { id: offline.clientId, name: 'Gone app' }, ip: expect.any(String) });
   });
 });

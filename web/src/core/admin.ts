@@ -9,10 +9,10 @@ import {
 import { useEffect, useState } from 'react';
 import { z } from 'zod';
 import {
+  AuditEntriesDocument,
   AuditEntryAddedDocument,
   type AuditEntryFieldsFragment,
-  AuditLogDocument,
-  type AuditLogQuery,
+  type AuditEntryFilters,
   type AuditType,
   CancelPairingDocument,
   type ClientInput,
@@ -293,7 +293,7 @@ export function useSetUserDisabled() {
 export function useUserSessions(id: string) {
   return useQuery({
     queryKey: [...KEYS.sessions, id],
-    queryFn: async () => (await request(UserSessionsDocument, { id })).user.sessions,
+    queryFn: async () => (await request(UserSessionsDocument, { id })).user?.sessions ?? [],
   });
 }
 
@@ -646,6 +646,52 @@ export interface AuditFilters {
 /** The first page of the audit log has no cursor. */
 const FIRST_PAGE: string | null = null;
 
+/** How many audit log entries a page shows. */
+const AUDIT_PAGE_SIZE = 50;
+
+/** One page of the audit log, and the cursor the next one starts after, or null on the last. */
+interface AuditPage {
+  entries: AuditEntryFieldsFragment[];
+  nextCursor: string | null;
+}
+
+/** The audit log's pages as the query cache holds them. */
+type AuditPages = InfiniteData<AuditPage, string | null>;
+
+/**
+ * Turns the activity page's filters into the audit log's: one type, and entries done by the user or to them.
+ *
+ * @param filters - The type and user to keep.
+ * @returns The filters, or null for every entry.
+ */
+function auditWhere({ type, userId }: AuditFilters): AuditEntryFilters | null {
+  const byType: AuditEntryFilters = type === null ? {} : { type: { eq: type } };
+  const byUser: AuditEntryFilters =
+    userId === null
+      ? {}
+      : { OR: [{ actorUserId: { eq: userId } }, { targetKind: { eq: 'USER' }, targetId: { eq: userId } }] };
+  const where = { ...byType, ...byUser };
+  return Object.keys(where).length === 0 ? null : where;
+}
+
+/**
+ * Reads one page of the audit log. It asks for one entry more than a page shows, to know whether another follows.
+ *
+ * @param filters - The type and user to keep.
+ * @param after - The cursor of the entry the page starts after, or null for the newest.
+ * @returns The page.
+ */
+async function auditPage(filters: AuditFilters, after: string | null): Promise<AuditPage> {
+  const { auditEntries } = await request(AuditEntriesDocument, {
+    limit: AUDIT_PAGE_SIZE + 1,
+    after,
+    where: auditWhere(filters),
+  });
+  const entries = auditEntries.slice(0, AUDIT_PAGE_SIZE);
+  const hasMore = auditEntries.length > AUDIT_PAGE_SIZE;
+  return { entries, nextCursor: hasMore ? (entries.at(-1)?.cursor ?? null) : null };
+}
+
 /**
  * Reads the audit log, newest first, a page at a time.
  *
@@ -655,14 +701,11 @@ const FIRST_PAGE: string | null = null;
 export function useAuditLog(filters: AuditFilters) {
   return useInfiniteQuery({
     queryKey: [...KEYS.audit, filters],
-    queryFn: async ({ pageParam }) => (await request(AuditLogDocument, { ...filters, after: pageParam })).auditLog,
+    queryFn: ({ pageParam }) => auditPage(filters, pageParam),
     initialPageParam: FIRST_PAGE,
     getNextPageParam: (page) => page.nextCursor,
   });
 }
-
-/** The audit log's pages as the query cache holds them. */
-type AuditPages = InfiniteData<AuditLogQuery['auditLog'], string | null>;
 
 /**
  * Puts a new entry at the top of the cached first page, once.

@@ -80,11 +80,9 @@ async function postEmpty(browser: Browser, url: string) {
  * @param app - The running app.
  * @returns The types.
  */
-function auditTypes(app: TestApp): string[] {
-  return app.services.audit
-    .list({ first: 100 })
-    .entries.map((entry) => entry.type)
-    .reverse();
+async function auditTypes(app: TestApp): Promise<string[]> {
+  const { entries } = await app.services.audit.list({ first: 100 });
+  return entries.map((entry) => entry.type).reverse();
 }
 
 describe('profile pictures', () => {
@@ -96,13 +94,14 @@ describe('profile pictures', () => {
     s3 = createFakeS3();
     app = await startTestApp({ objectStorage: s3.storage });
     await signInAsAdmin(app);
-    adaId = app.services.users.create({
+    const ada = await app.services.users.create({
       username: 'ada',
       password: PASSWORD,
       email: 'ada@example.home',
       name: 'Ada',
       groups: [],
-    }).id;
+    });
+    adaId = ada.id;
   });
 
   afterEach(() => app.close());
@@ -120,7 +119,7 @@ describe('profile pictures', () => {
     expect(url.origin + url.pathname).toBe(`${app.base}/users/${adaId}/picture`);
     expect(url.searchParams.get('v')).toMatch(/^[0-9a-f]{16}$/);
     expect([...s3.objects.keys()]).toEqual([`pictures/${adaId}/${url.searchParams.get('v')}`]);
-    expect(auditTypes(app)).toContain(AuditType.PictureSet);
+    expect(await auditTypes(app)).toContain(AuditType.PictureSet);
 
     // Anyone may fetch it, signed in or not: apps show it.
     const res = await fetch(url);
@@ -169,7 +168,7 @@ describe('profile pictures', () => {
   it('releases the picture claim with the profile scope', async () => {
     const browser = await signInToWebApp(app, 'ada');
     const { body } = await upload(browser, '/admin/account/picture', await image('#33cc33'));
-    const client = app.services.clients.create({
+    const client = await app.services.clients.create({
       name: 'Gallery',
       authMethod: ClientAuthMethod.SecretBasic,
       redirectUris: [REDIRECT_URI],
@@ -195,7 +194,7 @@ describe('profile pictures', () => {
     expect(removed).toEqual({ status: HttpStatus.Ok, body: { url: null } });
     expect(s3.objects.size).toBe(0);
     expect((await fetch(second.body.url)).status).toBe(HttpStatus.NotFound);
-    expect(auditTypes(app).filter((type) => type.startsWith('picture_'))).toEqual([
+    expect((await auditTypes(app)).filter((type) => type.startsWith('picture_'))).toEqual([
       AuditType.PictureSet,
       AuditType.PictureSet,
       AuditType.PictureRemoved,
@@ -209,7 +208,7 @@ describe('profile pictures', () => {
     const listed = await adminGql(admin, `{ users { username pictureUrl } profilePictures { isEnabled maxBytes } }`);
     expect(listed.data.users).toContainEqual({ username: 'ada', pictureUrl: set.body.url });
     expect(listed.data.profilePictures).toEqual({ isEnabled: true, maxBytes: PROFILE_DEFAULTS.maxPictureBytes });
-    const entry = app.services.audit.list({ first: 1 }).entries[0];
+    const [entry] = (await app.services.audit.list({ first: 1 })).entries;
     expect(entry).toMatchObject({ type: AuditType.PictureSet, actor: { username: 'root' }, target: { id: adaId } });
 
     const ada = await signInToWebApp(app, 'ada');

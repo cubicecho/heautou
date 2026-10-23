@@ -12,13 +12,15 @@ services:
     environment:
       ISSUER_URL: ${ISSUER_URL:-http://localhost:3000/oidc}
       TRUST_PROXY: ${TRUST_PROXY:-false}
-      # Seals client secrets and signing keys on disk; see .env.example. Unset keeps them plain text.
+      # Seals client secrets and signing keys in the database; see .env.example. Unset keeps them plain text.
       SECRET_KEY: ${SECRET_KEY:-}
+      # Unset keeps the data in PGlite under /data. docker-compose.postgres.yml adds a Postgres and sets it.
+      DATABASE_URL: ${DATABASE_URL:-}
       NODE_ENV: production
     ports:
       - "${PORT:-3000}:3000"
     volumes:
-      # Clients, users, signing keys and sessions, as plain JSON.
+      # The database (PGlite, in /data/pg) unless DATABASE_URL names a Postgres.
       - heautou-data:/data
     # Or keep the key in a Docker secret, outside the data volume:
     #   openssl rand -base64 32 > secret_key && chmod 600 secret_key

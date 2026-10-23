@@ -1,10 +1,13 @@
 import { randomBytes } from 'node:crypto';
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
+import { eq } from 'drizzle-orm';
 import { SECRET_KEY_BYTES, SecretKeyErrorCode, type SecretKeys } from '../../server/core/secret-box.ts';
 import { openServices, type Services } from '../../server/core/services.ts';
+import type { Database, OpenDatabase } from '../../server/db/client.ts';
+import { DOCUMENT_FILES } from '../../server/db/documents.ts';
+import { clients, documents } from '../../server/db/schema.ts';
 import { ClientAuthMethod } from '../../server/store/clients.ts';
-import { startTestApp, tempDir } from '../helpers.ts';
+import { createTestDatabase } from '../db.ts';
+import { startTestApp } from '../helpers.ts';
 import { PASSWORD, payloadOf, REDIRECT_URI, signInForTokens } from '../oidc/browser.ts';
 
 const ISSUER = 'http://127.0.0.1:1/oidc';
@@ -19,96 +22,113 @@ const SEALED = 'enc:v1:';
 const newKey = (): Buffer => randomBytes(SECRET_KEY_BYTES);
 
 /**
- * Opens the services on a data directory, as a boot does.
+ * Opens the services on a database, as a boot does, and waits for what the boot writes.
  *
- * @param dataDir - The directory.
+ * @param db - The database.
  * @param [current] - The sealing key, or null for none.
  * @param [previous] - The key before it.
  * @returns The services.
  */
-function boot(dataDir: string, current: Buffer | null = null, previous: Buffer | null = null): Services {
+async function boot(db: Database, current: Buffer | null = null, previous: Buffer | null = null): Promise<Services> {
   const secretKeys: SecretKeys | null = current === null ? null : { current, previous };
-  return openServices({ dataDir, issuer: ISSUER, isProxied: false, secretKeys });
+  const services = await openServices({ database: db, issuer: ISSUER, isProxied: false, secretKeys });
+  await services.settled();
+  return services;
 }
 
 /**
- * Reads the two files that hold secrets.
+ * Reads the stored clients and keys, which hold secrets, as the database has them.
  *
- * @param dataDir - The directory.
- * @returns Their text, joined.
+ * @param db - The database.
+ * @returns Their rows, as JSON.
  */
-function secretFiles(dataDir: string): string {
-  return ['clients.json', 'keys.json'].map((name) => readFileSync(path.join(dataDir, name), 'utf8')).join('\n');
+async function storedSecrets(db: Database): Promise<string> {
+  const clientRows = await db.select().from(clients);
+  const keyRows = await db.select().from(documents).where(eq(documents.name, DOCUMENT_FILES.keys));
+  return JSON.stringify({ clientRows, keyRows });
 }
 
 /**
- * Adds a confidential client.
+ * Adds a confidential client and waits for it to be saved.
  *
  * @param services - The services.
  * @returns The client.
  */
-function addClient(services: Services) {
-  return services.clients.create({
+async function addClient(services: Services) {
+  const client = await services.clients.create({
     name: 'App',
     authMethod: ClientAuthMethod.SecretBasic,
     redirectUris: [REDIRECT_URI],
     postLogoutRedirectUris: [],
   });
+  await services.settled();
+  return client;
 }
 
 describe('secrets at rest', () => {
-  it('keeps plain text without a key, then seals it on the first boot with one', () => {
-    const dataDir = tempDir();
-    const plain = boot(dataDir);
-    const secret = addClient(plain).clientSecret ?? '';
+  let database: OpenDatabase;
+
+  beforeEach(async () => {
+    database = await createTestDatabase();
+  });
+
+  afterEach(() => database.close());
+
+  it('keeps plain text without a key, then seals it on the first boot with one', async () => {
+    const { db } = database;
+    const plain = await boot(db);
+    const secret = (await addClient(plain)).clientSecret ?? '';
     const privateHalf = plain.keys.current().jwks[0]?.d ?? '';
     const cookieKey = plain.keys.current().cookieKeys[0] ?? '';
-    expect(secretFiles(dataDir)).toContain(secret);
-    expect(secretFiles(dataDir)).not.toContain(SEALED);
+    expect(await storedSecrets(db)).toContain(secret);
+    expect(await storedSecrets(db)).not.toContain(SEALED);
 
-    const sealed = boot(dataDir, newKey());
-    const onDisk = secretFiles(dataDir);
+    const sealed = await boot(db, newKey());
+    const stored = await storedSecrets(db);
     for (const value of [secret, privateHalf, cookieKey]) {
-      expect(onDisk).not.toContain(value);
+      expect(stored).not.toContain(value);
     }
-    expect(onDisk).toContain(SEALED);
+    expect(stored).toContain(SEALED);
+    const [row] = await db.select().from(clients);
+    expect(row?.clientSecret).toMatch(/^enc:v1:/);
     expect(sealed.clients.list()[0]?.clientSecret).toBe(secret);
     expect(sealed.keys.current().jwks[0]?.d).toBe(privateHalf);
     expect(sealed.keys.current().cookieKeys[0]).toBe(cookieKey);
   });
 
-  it('refuses a wrong key, or no key, without changing the files', () => {
-    const dataDir = tempDir();
-    addClient(boot(dataDir, newKey()));
-    const before = secretFiles(dataDir);
-    expect(() => boot(dataDir, newKey())).toThrow(expect.objectContaining({ code: SecretKeyErrorCode.Wrong }));
-    expect(() => boot(dataDir)).toThrow(expect.objectContaining({ code: SecretKeyErrorCode.Missing }));
-    expect(secretFiles(dataDir)).toBe(before);
+  it('refuses a wrong key, or no key, without changing the stored data', async () => {
+    const { db } = database;
+    await addClient(await boot(db, newKey()));
+    const before = await storedSecrets(db);
+    await expect(boot(db, newKey())).rejects.toMatchObject({ code: SecretKeyErrorCode.Wrong });
+    await expect(boot(db)).rejects.toMatchObject({ code: SecretKeyErrorCode.Missing });
+    expect(await storedSecrets(db)).toBe(before);
   });
 
-  it('re-seals under a new key while the old one is the previous key', () => {
-    const dataDir = tempDir();
+  it('re-seals under a new key while the old one is the previous key', async () => {
+    const { db } = database;
     const old = newKey();
-    const secret = addClient(boot(dataDir, old)).clientSecret;
+    const { clientSecret } = await addClient(await boot(db, old));
     const next = newKey();
-    boot(dataDir, next, old);
-    expect(boot(dataDir, next).clients.list()[0]?.clientSecret).toBe(secret);
-    expect(() => boot(dataDir, old)).toThrow(expect.objectContaining({ code: SecretKeyErrorCode.Wrong }));
+    await boot(db, next, old);
+    expect((await boot(db, next)).clients.list()[0]?.clientSecret).toBe(clientSecret);
+    await expect(boot(db, old)).rejects.toMatchObject({ code: SecretKeyErrorCode.Wrong });
   });
 
   it('signs a user in with sealed keys and secrets, and writes new secrets sealed', async () => {
     const app = await startTestApp({ secretKeys: { current: newKey(), previous: null } });
     try {
-      app.services.users.create({ username: 'ada', password: PASSWORD, email: '', name: '', groups: [] });
-      const client = app.services.clients.rotateSecret(addClient(app.services).clientId);
-      app.services.keys.rotate();
+      await app.services.users.create({ username: 'ada', password: PASSWORD, email: '', name: '', groups: [] });
+      const client = await app.services.clients.rotateSecret((await addClient(app.services)).clientId);
+      await app.services.keys.rotate();
       app.services.host.refresh();
       const tokens = await signInForTokens(app, client, 'ada');
       expect(payloadOf(tokens.id_token).sub).toEqual(expect.any(String));
-      const onDisk = secretFiles(app.dataDir);
-      expect(onDisk).not.toContain(client.clientSecret ?? '');
+      await app.services.settled();
+      const stored = await storedSecrets(app.services.db);
+      expect(stored).not.toContain(client.clientSecret ?? '');
       for (const jwk of app.services.keys.current().jwks) {
-        expect(onDisk).not.toContain(jwk.d ?? '');
+        expect(stored).not.toContain(jwk.d ?? '');
       }
     } finally {
       await app.close();

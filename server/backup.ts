@@ -1,31 +1,50 @@
 // The backup CLI: `node server/backup.ts export <file> [--sessions]` and `node server/backup.ts restore <file>`.
-// It reads DATA_DIR and SECRET_KEY as the server does, and shares the archive code with Settings.
+// It reads DATA_DIR, DATABASE_URL and SECRET_KEY as the server does, and shares the archive code with Settings.
 import { readFileSync, writeFileSync } from 'node:fs';
-import path from 'node:path';
-import { dataDir, secretKeys } from './core/config.ts';
+import { databaseUrl, dataDir, isProduction, secretKeys } from './core/config.ts';
 import { errorMessage } from './core/errors.ts';
 import { createSecretBox } from './core/secret-box.ts';
-import { BACKUP_LAYOUT, DATA_FILES } from './core/services.ts';
+import { BACKUP_LAYOUT } from './core/services.ts';
+import { FILE_MODE } from './core/wire.ts';
+import { DatabaseKind, type OpenDatabase, openDatabase } from './db/client.ts';
+import { createDataSet } from './db/data-set.ts';
+import { createWriteQueue, type DocumentStore } from './db/document.ts';
+import { waitForDatabase } from './db/wait.ts';
 import { AuditType, openAuditLog } from './store/audit.ts';
-import { createBackup, readBackup, restoreBackup } from './store/backup.ts';
-import { FILE_MODE } from './store/json-file.ts';
+import { createBackup, filesToRestore, readBackup } from './store/backup.ts';
 
 /** The commands. */
 const Command = { Export: 'export', Restore: 'restore' } as const;
 /** Takes the provider's sessions and tokens too. */
 const SESSIONS_FLAG = '--sessions';
 const USAGE = `Usage:
-  node server/backup.ts export <file> [${SESSIONS_FLAG}]   back DATA_DIR up to <file>
-  node server/backup.ts restore <file>                 replace DATA_DIR with <file>; stop the server first`;
+  node server/backup.ts export <file> [${SESSIONS_FLAG}]   back the data up to <file>
+  node server/backup.ts restore <file>                 replace the data with <file>; stop the server first`;
 
 /**
- * Writes an archive of the data directory.
+ * Opens the database the server uses, migrated. PGlite refuses while the server has it open.
  *
+ * @returns The database.
+ */
+async function openData(): Promise<OpenDatabase> {
+  const database = await openDatabase({ url: databaseUrl(), dataDir: dataDir(), isProduction: isProduction() });
+  if (database.kind === DatabaseKind.Postgres) {
+    await waitForDatabase(database.db);
+  }
+  await database.migrate();
+  return database;
+}
+
+/**
+ * Writes an archive of the data.
+ *
+ * @param store - The database and a write queue.
  * @param file - Where to.
  * @param includeSessions - Whether to take the provider's sessions and tokens.
  */
-function exportTo(file: string, includeSessions: boolean): void {
-  const archive = createBackup(dataDir(), BACKUP_LAYOUT, { includeSessions });
+async function exportTo(store: DocumentStore, file: string, includeSessions: boolean): Promise<void> {
+  const files = await createDataSet(store).exportFiles({ includeSessions, skipped: BACKUP_LAYOUT.skipped });
+  const archive = createBackup(files, BACKUP_LAYOUT, { includeSessions });
   writeFileSync(file, archive, { mode: FILE_MODE });
   const sealing =
     secretKeys() === null
@@ -35,45 +54,58 @@ function exportTo(file: string, includeSessions: boolean): void {
 }
 
 /**
- * Checks an archive and makes the data directory hold it.
+ * Checks an archive and puts its data in the database.
  *
+ * @param store - The database and a write queue.
  * @param file - The archive.
+ * @param label - Where the data is, for the log.
  */
-function restoreFrom(file: string): void {
+async function restoreFrom(store: DocumentStore, file: string, label: string): Promise<void> {
   const keys = secretKeys();
   const box = keys === null ? null : createSecretBox(keys);
-  const directory = dataDir();
   const checked = readBackup(readFileSync(file), BACKUP_LAYOUT, box);
-  const restored = restoreBackup(directory, BACKUP_LAYOUT, checked);
-  openAuditLog(path.join(directory, DATA_FILES.audit)).record({
+  const { files, summary } = filesToRestore(BACKUP_LAYOUT, checked);
+  await createDataSet(store).replaceAll(files);
+  const audit = openAuditLog(store);
+  audit.record({
     type: AuditType.DataRestored,
     actor: null,
     ip: null,
     detail: {
-      madeAt: restored.createdAt,
-      files: String(restored.files),
-      sessions: restored.includesSessions ? 'included' : 'left out',
+      madeAt: summary.createdAt,
+      files: String(summary.files),
+      sessions: summary.includesSessions ? 'included' : 'left out',
       via: 'cli',
     },
   });
+  await audit.settled();
   console.log(
-    `[backup] Restored ${restored.files} files from the backup made ${restored.createdAt} into ${directory}. Start the server to use them.`,
+    `[backup] Restored ${summary.files} files from the backup made ${summary.createdAt} into ${label}. Start the server to use them.`,
   );
 }
 
 const [command, file, ...flags] = process.argv.slice(2);
 const isKnownFlag = flags.every((flag) => flag === SESSIONS_FLAG);
 const isUsable = file !== undefined && isKnownFlag;
-try {
-  if (command === Command.Export && isUsable) {
-    exportTo(file, flags.includes(SESSIONS_FLAG));
-  } else if (command === Command.Restore && isUsable && flags.length === 0) {
-    restoreFrom(file);
-  } else {
-    console.error(USAGE);
-    process.exitCode = 1;
-  }
-} catch (error) {
-  console.error(`[backup] ${errorMessage(error)}`);
+const isExport = command === Command.Export && isUsable;
+const isRestore = command === Command.Restore && isUsable && flags.length === 0;
+if (file === undefined || (isExport || isRestore) === false) {
+  console.error(USAGE);
   process.exitCode = 1;
+} else {
+  let database: OpenDatabase | null = null;
+  try {
+    database = await openData();
+    const store = { db: database.db, queue: createWriteQueue() };
+    if (isExport) {
+      await exportTo(store, file, flags.includes(SESSIONS_FLAG));
+    } else {
+      await restoreFrom(store, file, database.label);
+    }
+  } catch (error) {
+    console.error(`[backup] ${errorMessage(error)}`);
+    process.exitCode = 1;
+  } finally {
+    await database?.close();
+  }
 }

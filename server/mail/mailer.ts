@@ -103,20 +103,20 @@ export interface Mailer {
    * @returns The server.
    * @throws BAD_USER_INPUT while the environment sets the server, or for a server the store refuses.
    */
-  setServer: (input: MailServerInput) => MailServer;
+  setServer: (input: MailServerInput) => Promise<MailServer>;
   /**
    * Forgets the server saved under Settings.
    *
    * @throws BAD_USER_INPUT while the environment sets the server.
    */
-  removeServer: () => void;
+  removeServer: () => Promise<void>;
   /**
    * Changes the options.
    *
    * @param changes - The options to change.
    * @returns The options.
    */
-  setOptions: (changes: Partial<MailOptions>) => MailOptions;
+  setOptions: (changes: Partial<MailOptions>) => Promise<MailOptions>;
   /**
    * Sends an email and records it as `mail_sent`, or as `mail_failed` with the error.
    *
@@ -215,13 +215,13 @@ export function createMailer(deps: MailerDeps): Mailer {
     },
     isConfigured: () => server() !== null,
     isOn: (option) => server() !== null && store.options()[option],
-    setServer: (input) => {
+    setServer: async (input) => {
       refuseWhenLocked();
       return store.setServer(input);
     },
-    removeServer: () => {
+    removeServer: async () => {
       refuseWhenLocked();
-      store.removeServer();
+      await store.removeServer();
     },
     setOptions: store.setOptions,
     send,

@@ -15,9 +15,9 @@ import type { Services } from '../core/services.ts';
 import { FORWARD_AUTH_PATH } from '../forward-auth/client.ts';
 import { createForwardAuthRouter } from '../forward-auth/routes.ts';
 import { createProxyTrust } from '../forward-auth/trust.ts';
+import { createSchema } from '../graphql/build-schema.ts';
 import { graphqlLogger } from '../graphql/logger.ts';
 import { useOperationLimits } from '../graphql/operation-limits.ts';
-import { schema } from '../graphql/schema.ts';
 import { createForgotPasswordRouter } from '../mail/forgot-password.ts';
 import { createInteractionRouter } from '../oidc/interactions.ts';
 import type { PublicUser } from '../store/users.ts';
@@ -58,7 +58,7 @@ const WEB_DIST = fileURLToPath(new URL('../../dist', import.meta.url));
 export function createApp(services: Services): Express {
   const isDev = isProduction() === false;
   const yoga = createYoga<{ req: Request; res: Response }, Context>({
-    schema,
+    schema: createSchema(services.db),
     graphqlEndpoint: GRAPHQL_ENDPOINT,
     logging: graphqlLogger,
     graphiql: isDev,
@@ -66,6 +66,7 @@ export function createApp(services: Services): Express {
     cors: false,
     plugins: [useOperationLimits()],
     context: ({ req, res }): Context => ({
+      db: services.db,
       clients: services.clients,
       apis: services.apis,
       users: services.users,
@@ -99,7 +100,7 @@ export function createApp(services: Services): Express {
   app.disable('x-powered-by');
   app.set('trust proxy', trustProxy());
   app.use(securityHeaders());
-  app.get(HEALTH_ENDPOINT, healthHandler());
+  app.get(HEALTH_ENDPOINT, healthHandler(services.db));
   app.use(LIMITED_ROUTES, limitRequests());
   app.use(
     GRAPHQL_ENDPOINT,

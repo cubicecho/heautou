@@ -576,11 +576,11 @@ export function createInteractionRouter(deps: InteractionDeps): Router {
       const { user, uid, record } = waiting;
       const { factor, detail } = firstFactorOf(waiting.waiting);
       const { code } = parsed.data;
-      if (factors.checkTotp(user.id, code)) {
+      if (await factors.checkTotp(user.id, code)) {
         await finish(provider, req, res, user, METHOD_AFTER[factor].totp, detail);
         return;
       }
-      if (factors.useRecoveryCode(user.id, code)) {
+      if (await factors.useRecoveryCode(user.id, code)) {
         await finish(provider, req, res, user, METHOD_AFTER[factor].recoveryCode, {
           ...detail,
           recoveryCodesLeft: String(factors.summary(user.id).recoveryCodesLeft),
@@ -666,7 +666,7 @@ export function createInteractionRouter(deps: InteractionDeps): Router {
         sendError(res, HttpStatus.Unauthorized, 'That passkey is not registered here, or did not work. Try again.');
         return;
       }
-      factors.usedPasskey(found.passkey.id, check.counter);
+      await factors.usedPasskey(found.passkey.id, check.counter);
       if (isAfterPassword) {
         const { factor, detail } = firstFactorOf(waiting);
         await finish(provider, req, res, owner, METHOD_AFTER[factor].passkey, detail);
@@ -719,7 +719,12 @@ export function createInteractionRouter(deps: InteractionDeps): Router {
         backToLogin(res, uid, outcome.error);
         return;
       }
-      const resolved = resolveUpstreamUser({ upstreams, users, audit }, upstream, outcome.identity, req.ip ?? null);
+      const resolved = await resolveUpstreamUser(
+        { upstreams, users, audit },
+        upstream,
+        outcome.identity,
+        req.ip ?? null,
+      );
       if (resolved.user === null) {
         recordUpstream(req, clientId, AuditType.SignInRefused, upstream, {
           reason: resolved.refusal.reason,

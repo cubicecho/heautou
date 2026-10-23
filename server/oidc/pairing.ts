@@ -79,7 +79,7 @@ export async function startPairing(
     expiresIn: PAIRING_DEFAULTS.linkSeconds,
     policies: [PAIRING_POLICY],
   }).save();
-  const pairing = pairings.start(token, input);
+  const pairing = await pairings.start(token, input);
   return { ...pairing, setupUrl: setupUrlFor(provider.issuer, token, brandName) };
 }
 
@@ -158,9 +158,9 @@ export function clientFieldsFrom(metadata: ClientMetadata): ClientFields {
  * @returns The client as stored.
  * @throws InvalidClientMetadata with the store's reason.
  */
-function stored(write: () => OidcClient): OidcClient {
+async function stored(write: () => Promise<OidcClient>): Promise<OidcClient> {
   try {
-    return write();
+    return await write();
   } catch (error) {
     throw new errors.InvalidClientMetadata(errorMessage(error));
   }
@@ -244,7 +244,7 @@ async function registerWith(
     throw new errors.InvalidToken('the setup URL has expired, been used or been cancelled');
   }
   const { allowedGroups, groupsClaim } = pairing;
-  const client = stored(() =>
+  const client = await stored(() =>
     deps.clients.create({
       ...fields,
       clientId: metadata.client_id,
@@ -257,10 +257,10 @@ async function registerWith(
     }),
   );
   if (first !== null) {
-    deps.pairings.complete(pairing.id, client.clientId, clientUriOf(metadata));
+    await deps.pairings.complete(pairing.id, client.clientId, clientUriOf(metadata));
   }
   if (asksForDeviceFlow(metadata)) {
-    deps.pairings.addDeviceClient(pairing.id, client.clientId);
+    await deps.pairings.addDeviceClient(pairing.id, client.clientId);
   }
   if (second !== null) {
     await initialToken.destroy();
@@ -315,7 +315,7 @@ export function createPairingPolicy(
     const initialToken = ctx.oidc.entities.InitialAccessToken;
     const client =
       initialToken === undefined
-        ? stored(() => deps.clients.update(metadata.client_id, fields))
+        ? await stored(() => deps.clients.update(metadata.client_id, fields))
         : await registerWith(deps, initialToken, metadata, fields);
     answerGranted(metadata, client);
     if (client.clientSecret === null) {

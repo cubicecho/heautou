@@ -1,89 +1,98 @@
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
 import { createSecretBox } from '../../server/core/secret-box.ts';
 import { newTotpSecret, totpCode, totpStepAt } from '../../server/core/totp.ts';
-import { createFactorStore, type FactorsDocument, factorSecretsIn } from '../../server/store/factors.ts';
-import { openJsonFile } from '../../server/store/json-file.ts';
-import { openSealedFile } from '../../server/store/sealed-file.ts';
-import { tempDir } from '../helpers.ts';
+import { openDocument } from '../../server/db/document.ts';
+import { FACTORS_DOCUMENT } from '../../server/db/documents.ts';
+import { recoveryCodes, totpFactors } from '../../server/db/schema.ts';
+import { createFactorStore, type FactorStore, factorSecretsIn } from '../../server/store/factors.ts';
+import { openSealedDocument } from '../../server/store/sealed-document.ts';
+import { createTestStore, type TestStore } from '../db.ts';
 
 const NOW = 1_800_000_000_000;
 const PASSKEY = { id: 'cred-1', publicKey: 'cHVibGlj', counter: 0, transports: ['internal'], name: 'Laptop' };
 
-/**
- * Opens a factor store on a fresh file.
- *
- * @returns The store and the file's path.
- */
-function freshStore() {
-  const file = path.join(tempDir(), 'factors.json');
-  return { file, store: createFactorStore(openJsonFile<FactorsDocument>(file, {}), () => NOW) };
-}
-
 describe('factor store', () => {
-  it('checks an authenticator code once', () => {
-    const { store } = freshStore();
+  let db: TestStore;
+  let store: FactorStore;
+
+  beforeEach(async () => {
+    db = await createTestStore();
+    store = createFactorStore(await openDocument(db, FACTORS_DOCUMENT), () => NOW);
+  });
+
+  afterEach(() => db.close());
+
+  it('checks an authenticator code once', async () => {
     const secret = newTotpSecret();
-    store.setTotp('ada', secret, -1);
+    await store.setTotp('ada', secret, -1);
     const code = totpCode(secret, totpStepAt(NOW));
     expect(store.hasSecondFactor('ada')).toBe(true);
-    expect(store.checkTotp('ada', code)).toBe(true);
-    expect(store.checkTotp('ada', code)).toBe(false);
-    expect(store.checkTotp('bob', code)).toBe(false);
+    expect(await store.checkTotp('ada', code)).toBe(true);
+    expect(await store.checkTotp('ada', code)).toBe(false);
+    expect(await store.checkTotp('bob', code)).toBe(false);
   });
 
-  it('keeps recovery codes hashed and lets each be used once', () => {
-    const { file, store } = freshStore();
-    store.setTotp('ada', newTotpSecret(), -1);
-    const codes = store.newRecoveryCodes('ada');
+  it('keeps the used step, so a code is refused after the store is opened again', async () => {
+    const secret = newTotpSecret();
+    await store.setTotp('ada', secret, -1);
+    const code = totpCode(secret, totpStepAt(NOW));
+    expect(await store.checkTotp('ada', code)).toBe(true);
+    const reopened = createFactorStore(await openDocument(db, FACTORS_DOCUMENT), () => NOW);
+    expect(await reopened.checkTotp('ada', code)).toBe(false);
+  });
+
+  it('keeps recovery codes hashed and lets each be used once', async () => {
+    await store.setTotp('ada', newTotpSecret(), -1);
+    const codes = await store.newRecoveryCodes('ada');
     expect(codes).toHaveLength(10);
     const [first = '', second = ''] = codes;
-    expect(readFileSync(file, 'utf8')).not.toContain(first);
-    expect(store.useRecoveryCode('ada', first.toLowerCase().replace('-', ' '))).toBe(true);
-    expect(store.useRecoveryCode('ada', first)).toBe(false);
+    const rows = await db.db.select().from(recoveryCodes);
+    expect(rows).toHaveLength(10);
+    expect(JSON.stringify(rows)).not.toContain(first);
+    expect(await store.useRecoveryCode('ada', first.toLowerCase().replace('-', ' '))).toBe(true);
+    expect(await store.useRecoveryCode('ada', first)).toBe(false);
     expect(store.summary('ada').recoveryCodesLeft).toBe(9);
-    store.newRecoveryCodes('ada');
-    expect(store.useRecoveryCode('ada', second)).toBe(false);
+    await store.newRecoveryCodes('ada');
+    expect(await store.useRecoveryCode('ada', second)).toBe(false);
   });
 
-  it('drops the recovery codes with the last factor', () => {
-    const { store } = freshStore();
-    store.addPasskey('ada', PASSKEY);
-    store.newRecoveryCodes('ada');
-    store.removePasskey('ada', PASSKEY.id);
+  it('drops the recovery codes with the last factor', async () => {
+    await store.addPasskey('ada', PASSKEY);
+    await store.newRecoveryCodes('ada');
+    await store.removePasskey('ada', PASSKEY.id);
     expect(store.summary('ada')).toEqual({ hasTotp: false, recoveryCodesLeft: 0, passkeys: [] });
     expect(store.hasSecondFactor('ada')).toBe(false);
   });
 
-  it('finds a passkey by credential and records its use', () => {
-    const { store } = freshStore();
-    store.addPasskey('ada', PASSKEY);
+  it('finds a passkey by credential and records its use', async () => {
+    await store.addPasskey('ada', PASSKEY);
     expect(store.findPasskey(PASSKEY.id)?.userId).toBe('ada');
-    store.usedPasskey(PASSKEY.id, 3);
+    await store.usedPasskey(PASSKEY.id, 3);
     expect(store.passkeysOf('ada')[0]).toMatchObject({ counter: 3, lastUsedAt: new Date(NOW).toISOString() });
     expect(store.summary('ada').passkeys[0]).not.toHaveProperty('publicKey');
-    expect(() => store.removePasskey('bob', PASSKEY.id)).toThrow(/not registered/);
+    await expect(store.removePasskey('bob', PASSKEY.id)).rejects.toThrow(/not registered/);
   });
 
-  it('removes everything for a lost phone', () => {
-    const { store } = freshStore();
-    store.setTotp('ada', newTotpSecret(), -1);
-    store.addPasskey('ada', PASSKEY);
-    expect(store.removeAll('ada')).toBe(true);
+  it('removes everything for a lost phone', async () => {
+    await store.setTotp('ada', newTotpSecret(), -1);
+    await store.addPasskey('ada', PASSKEY);
+    expect(await store.removeAll('ada')).toBe(true);
     expect(store.hasSecondFactor('ada')).toBe(false);
     expect(store.findPasskey(PASSKEY.id)).toBeNull();
-    expect(store.removeAll('ada')).toBe(false);
+    expect(await store.removeAll('ada')).toBe(false);
   });
 
-  it('seals the authenticator secret on disk under the secret key', () => {
-    const file = path.join(tempDir(), 'factors.json');
+  it('seals the authenticator secret in the database under the secret key', async () => {
     const box = createSecretBox({ current: Buffer.alloc(32, 7), previous: null });
-    const sealed = openSealedFile(openJsonFile<FactorsDocument>(file, {}), box, factorSecretsIn);
+    const open = async (): Promise<FactorStore> =>
+      createFactorStore(
+        await openSealedDocument(await openDocument(db, FACTORS_DOCUMENT), box, factorSecretsIn),
+        () => NOW,
+      );
     const secret = newTotpSecret();
-    createFactorStore(sealed, () => NOW).setTotp('ada', secret, -1);
-    expect(readFileSync(file, 'utf8')).not.toContain(secret);
-    expect(readFileSync(file, 'utf8')).toContain('enc:v1:');
-    const reopened = openSealedFile(openJsonFile<FactorsDocument>(file, {}), box, factorSecretsIn);
-    expect(createFactorStore(reopened, () => NOW).checkTotp('ada', totpCode(secret, totpStepAt(NOW)))).toBe(true);
+    await (await open()).setTotp('ada', secret, -1);
+    const rows = await db.db.select().from(totpFactors);
+    expect(JSON.stringify(rows)).not.toContain(secret);
+    expect(rows[0]?.secret).toMatch(/^enc:v1:/);
+    expect(await (await open()).checkTotp('ada', totpCode(secret, totpStepAt(NOW)))).toBe(true);
   });
 });

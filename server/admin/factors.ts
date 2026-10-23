@@ -137,14 +137,15 @@ export function createFactorRouter(deps: FactorRouteDeps): Router {
    *
    * @param req - The request.
    * @param user - The user.
-   * @returns The codes, or null when they already have some.
+   * @returns Once saved: the codes, or null when they already have some.
    */
-  const firstRecoveryCodes = (req: Request, user: PublicUser): string[] | null => {
+  const firstRecoveryCodes = async (req: Request, user: PublicUser): Promise<string[] | null> => {
     if (factors.summary(user.id).recoveryCodesLeft > 0) {
       return null;
     }
+    const codes = factors.newRecoveryCodes(user.id);
     record(req, user, AuditType.RecoveryCodesMade);
-    return factors.newRecoveryCodes(user.id);
+    return codes;
   };
 
   router.get(FACTOR_PATH.factors, (req, res) => {
@@ -164,7 +165,7 @@ export function createFactorRouter(deps: FactorRouteDeps): Router {
     res.json({ secret, uri: totpUri(secret, branding.read().name, user.username) });
   });
 
-  router.post(FACTOR_PATH.totpConfirm, ...json, (req, res) => {
+  router.post(FACTOR_PATH.totpConfirm, ...json, async (req, res) => {
     const user = viewerOf(req, res);
     const parsed = codeSchema.safeParse(req.body);
     if (user === null) {
@@ -185,9 +186,11 @@ export function createFactorRouter(deps: FactorRouteDeps): Router {
       return;
     }
     totpSetups.delete(user.id);
-    factors.setTotp(user.id, secret, step);
+    const saving = factors.setTotp(user.id, secret, step);
+    const recoveryCodes = firstRecoveryCodes(req, user);
+    await saving;
     record(req, user, AuditType.TotpAdded);
-    res.json({ recoveryCodes: firstRecoveryCodes(req, user) });
+    res.json({ recoveryCodes: await recoveryCodes });
   });
 
   router.post(FACTOR_PATH.totpRemove, ...json, async (req, res) => {
@@ -202,7 +205,7 @@ export function createFactorRouter(deps: FactorRouteDeps): Router {
     }
     const isConfirmed = await confirmPassword(req, res, user, parsed.data.password);
     if (isConfirmed) {
-      factors.removeTotp(user.id);
+      await factors.removeTotp(user.id);
       record(req, user, AuditType.TotpRemoved);
       res.json(factors.summary(user.id));
     }
@@ -224,7 +227,7 @@ export function createFactorRouter(deps: FactorRouteDeps): Router {
     }
     const isConfirmed = await confirmPassword(req, res, user, parsed.data.password);
     if (isConfirmed) {
-      const recoveryCodes = factors.newRecoveryCodes(user.id);
+      const recoveryCodes = await factors.newRecoveryCodes(user.id);
       record(req, user, AuditType.RecoveryCodesMade);
       res.json({ recoveryCodes });
     }
@@ -263,9 +266,9 @@ export function createFactorRouter(deps: FactorRouteDeps): Router {
     }
     try {
       const { name } = parsed.data;
-      const passkey = factors.addPasskey(user.id, { ...made, name });
+      const passkey = await factors.addPasskey(user.id, { ...made, name });
       record(req, user, AuditType.PasskeyAdded, { name });
-      res.json({ passkey, recoveryCodes: firstRecoveryCodes(req, user) });
+      res.json({ passkey, recoveryCodes: await firstRecoveryCodes(req, user) });
     } catch (caught) {
       sendRefusal(res, HttpStatus.BadRequest, errorMessage(caught));
     }
@@ -286,7 +289,7 @@ export function createFactorRouter(deps: FactorRouteDeps): Router {
       return;
     }
     try {
-      const removed = factors.removePasskey(user.id, parsed.data.id);
+      const removed = await factors.removePasskey(user.id, parsed.data.id);
       record(req, user, AuditType.PasskeyRemoved, { name: removed.name });
       res.json(factors.summary(user.id));
     } catch (caught) {

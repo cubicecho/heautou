@@ -184,7 +184,10 @@ describe('what a paired app offers', () => {
     expect((await startDeviceFlow(device.client_id)).ok).toBe(true);
 
     // The device client shows the one API it may get tokens to, and the app it belongs to.
-    const listed = await adminGql(admin, '{ clients { clientId app { id uri } apis { identifier } } }');
+    const listed = await adminGql(
+      admin,
+      '{ clients(limit: 20) { clientId app { id uri } apis(limit: 10) { identifier } } }',
+    );
     const appClients = listed.data.clients.filter((c: { app: { id: string } | null }) => c.app?.id === id);
     expect(appClients).toHaveLength(2);
     const deviceClient = appClients.find((c: { clientId: string }) => c.clientId === device.client_id);
@@ -200,14 +203,14 @@ describe('what a paired app offers', () => {
     });
     expect((await read.json()).grant_types).toContain(DEVICE_CODE_GRANT);
 
-    const finished = app.services.audit.list({ first: 5, types: [AuditType.PairingFinished] }).entries[0];
+    const finished = (await app.services.audit.list({ first: 5, types: [AuditType.PairingFinished] })).entries[0];
     expect(finished?.detail).toEqual({ deviceFlow: 'on', api: API });
     const again = await adminGql(admin, FINISH, { id, input: { deviceFlow: true, api: true } });
     expect(again.errors?.[0]?.message).toMatch(/finished already/);
   });
 
   it('removes the device client and adds nothing the operator turns off', async () => {
-    app.services.apis.remove(API);
+    await app.services.apis.remove(API);
     const { id, device } = await pairBoth();
     await adminGql(admin, FINISH, { id, input: { deviceFlow: false, api: false } });
     expect(app.services.clients.find(device.client_id)).toBeNull();
@@ -218,7 +221,7 @@ describe('what a paired app offers', () => {
     const { id, device } = await pairBoth();
     const { data } = await adminGql(admin, OFFERS, { id });
     expect(data.pairing.offers.api.existing).toBeNull();
-    app.services.apis.create({ identifier: API, name: 'Mine', scopes: [], allowedClientIds: [] });
+    await app.services.apis.create({ identifier: API, name: 'Mine', scopes: [], allowedClientIds: [] });
     await adminGql(admin, FINISH, { id, input: { deviceFlow: true, api: true } });
     expect(app.services.apis.find(API)).toMatchObject({ name: 'Mine' });
     expect(app.services.apis.find(API)?.allowedClientIds).toContain(device.client_id);
@@ -226,9 +229,9 @@ describe('what a paired app offers', () => {
 
   it('places a client paired before its pairing was recorded by the API it is allowed on', async () => {
     const fields = { name: 'Old app', authMethod: 'client_secret_basic' as const, redirectUris: [REDIRECT_URI] };
-    const old = app.services.clients.create({ ...fields, postLogoutRedirectUris: [], source: 'paired' });
-    const handMade = app.services.clients.create({ ...fields, postLogoutRedirectUris: [] });
-    app.services.apis.create({
+    const old = await app.services.clients.create({ ...fields, postLogoutRedirectUris: [], source: 'paired' });
+    const handMade = await app.services.clients.create({ ...fields, postLogoutRedirectUris: [] });
+    await app.services.apis.create({
       identifier: 'https://old.example/graphql',
       name: 'Old API',
       scopes: [],

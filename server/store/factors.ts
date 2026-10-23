@@ -2,8 +2,8 @@ import { createHash, randomBytes } from 'node:crypto';
 import { TWO_FACTOR_DEFAULTS } from '../core/defaults.ts';
 import { badInput, notFound } from '../core/errors.ts';
 import { base32Encode, matchTotp } from '../core/totp.ts';
-import type { JsonFile } from './json-file.ts';
-import type { SecretMapper } from './sealed-file.ts';
+import type { DataDocument } from '../db/document.ts';
+import type { SecretMapper } from './sealed-document.ts';
 
 /** A passkey a user registered: a WebAuthn credential. */
 export interface Passkey {
@@ -67,8 +67,8 @@ export interface FactorStore {
    * @param secret - The secret, base32.
    * @param step - The step of the code they confirmed it with, which can't be used again.
    */
-  setTotp: (userId: string, secret: string, step: number) => void;
-  removeTotp: (userId: string) => void;
+  setTotp: (userId: string, secret: string, step: number) => Promise<void>;
+  removeTotp: (userId: string) => Promise<void>;
   /**
    * Checks an authenticator code and uses it up.
    *
@@ -76,14 +76,14 @@ export interface FactorStore {
    * @param code - What they typed.
    * @returns Whether it was right.
    */
-  checkTotp: (userId: string, code: string) => boolean;
+  checkTotp: (userId: string, code: string) => Promise<boolean>;
   /**
    * Makes new recovery codes, replacing any the user had.
    *
    * @param userId - The user.
    * @returns The codes, which are only kept hashed: this is the one time they can be shown.
    */
-  newRecoveryCodes: (userId: string) => string[];
+  newRecoveryCodes: (userId: string) => Promise<string[]>;
   /**
    * Checks a recovery code and uses it up.
    *
@@ -91,7 +91,7 @@ export interface FactorStore {
    * @param code - What they typed. Case, spaces and dashes don't matter.
    * @returns Whether it was one of theirs.
    */
-  useRecoveryCode: (userId: string, code: string) => boolean;
+  useRecoveryCode: (userId: string, code: string) => Promise<boolean>;
   passkeysOf: (userId: string) => Passkey[];
   /**
    * Finds a passkey by its credential ID, whoever it belongs to.
@@ -100,22 +100,22 @@ export interface FactorStore {
    * @returns The passkey and its user, or null.
    */
   findPasskey: (credentialId: string) => { userId: string; passkey: Passkey } | null;
-  addPasskey: (userId: string, passkey: Omit<Passkey, 'createdAt' | 'lastUsedAt'>) => PasskeyInfo;
+  addPasskey: (userId: string, passkey: Omit<Passkey, 'createdAt' | 'lastUsedAt'>) => Promise<PasskeyInfo>;
   /**
    * Records a passkey sign-in.
    *
    * @param credentialId - The passkey.
    * @param counter - The authenticator's new signature counter.
    */
-  usedPasskey: (credentialId: string, counter: number) => void;
-  removePasskey: (userId: string, credentialId: string) => PasskeyInfo;
+  usedPasskey: (credentialId: string, counter: number) => Promise<void>;
+  removePasskey: (userId: string, credentialId: string) => Promise<PasskeyInfo>;
   /**
    * Removes every factor a user has, as for a lost phone or a deleted user.
    *
    * @param userId - The user.
    * @returns Whether they had any.
    */
-  removeAll: (userId: string) => boolean;
+  removeAll: (userId: string) => Promise<boolean>;
 }
 
 /**
@@ -184,10 +184,10 @@ function infoOf({ id, name, createdAt, lastUsedAt }: Passkey): PasskeyInfo {
  * @param [now] - The clock, in epoch milliseconds.
  * @returns The store.
  */
-export function createFactorStore(file: JsonFile<FactorsDocument>, now: () => number = Date.now): FactorStore {
+export function createFactorStore(file: DataDocument<FactorsDocument>, now: () => number = Date.now): FactorStore {
   const of = (userId: string): UserFactors => file.read()[userId] ?? NO_FACTORS;
-  const change = (userId: string, update: (factors: UserFactors) => UserFactors): void => {
-    file.update((document) => {
+  const change = async (userId: string, update: (factors: UserFactors) => UserFactors): Promise<void> => {
+    await file.update((document) => {
       const next = update(document[userId] ?? NO_FACTORS);
       const { [userId]: _replaced, ...others } = document;
       // Recovery codes stand in for a factor, so they go with the last one.
@@ -213,31 +213,31 @@ export function createFactorStore(file: JsonFile<FactorsDocument>, now: () => nu
       const { totp, passkeys } = of(userId);
       return totp !== null || passkeys.length > 0;
     },
-    setTotp: (userId, secret, step) => {
-      change(userId, (factors) => ({ ...factors, totp: { secret, lastStep: step, createdAt: timestamp() } }));
+    setTotp: async (userId, secret, step) => {
+      await change(userId, (factors) => ({ ...factors, totp: { secret, lastStep: step, createdAt: timestamp() } }));
     },
-    removeTotp: (userId) => {
-      change(userId, (factors) => ({ ...factors, totp: null }));
+    removeTotp: async (userId) => {
+      await change(userId, (factors) => ({ ...factors, totp: null }));
     },
-    checkTotp: (userId, code) => {
+    checkTotp: async (userId, code) => {
       const { totp } = of(userId);
       const step = totp === null ? null : matchTotp(totp.secret, code, now(), totp.lastStep);
       if (totp === null || step === null) {
         return false;
       }
-      change(userId, (factors) => ({ ...factors, totp: { ...totp, lastStep: step } }));
+      await change(userId, (factors) => ({ ...factors, totp: { ...totp, lastStep: step } }));
       return true;
     },
-    newRecoveryCodes: (userId) => {
+    newRecoveryCodes: async (userId) => {
       const codes = Array.from({ length: TWO_FACTOR_DEFAULTS.recoveryCodeCount }, newRecoveryCode);
-      change(userId, (factors) => ({ ...factors, recoveryCodes: codes.map(digest) }));
+      await change(userId, (factors) => ({ ...factors, recoveryCodes: codes.map(digest) }));
       return codes;
     },
-    useRecoveryCode: (userId, code) => {
+    useRecoveryCode: async (userId, code) => {
       const hashed = digest(code);
       const isKnown = of(userId).recoveryCodes.includes(hashed);
       if (isKnown) {
-        change(userId, (factors) => ({
+        await change(userId, (factors) => ({
           ...factors,
           recoveryCodes: factors.recoveryCodes.filter((each) => each !== hashed),
         }));
@@ -254,17 +254,17 @@ export function createFactorStore(file: JsonFile<FactorsDocument>, now: () => nu
       }
       return null;
     },
-    addPasskey: (userId, fields) => {
+    addPasskey: async (userId, fields) => {
       const { passkeys } = of(userId);
       if (passkeys.length >= TWO_FACTOR_DEFAULTS.maxPasskeys) {
         throw badInput(`You can have at most ${TWO_FACTOR_DEFAULTS.maxPasskeys} passkeys. Remove one first.`);
       }
       const passkey: Passkey = { ...fields, createdAt: timestamp(), lastUsedAt: null };
-      change(userId, (factors) => ({ ...factors, passkeys: [...factors.passkeys, passkey] }));
+      await change(userId, (factors) => ({ ...factors, passkeys: [...factors.passkeys, passkey] }));
       return infoOf(passkey);
     },
-    usedPasskey: (credentialId, counter) => {
-      file.update((document) =>
+    usedPasskey: async (credentialId, counter) => {
+      await file.update((document) =>
         Object.fromEntries(
           Object.entries(document).map(([userId, factors]) => [
             userId,
@@ -278,18 +278,18 @@ export function createFactorStore(file: JsonFile<FactorsDocument>, now: () => nu
         ),
       );
     },
-    removePasskey: (userId, credentialId) => {
+    removePasskey: async (userId, credentialId) => {
       const passkey = passkeyOf(userId, credentialId);
-      change(userId, (factors) => ({
+      await change(userId, (factors) => ({
         ...factors,
         passkeys: factors.passkeys.filter((each) => each.id !== credentialId),
       }));
       return infoOf(passkey);
     },
-    removeAll: (userId) => {
+    removeAll: async (userId) => {
       const hadAny = file.read()[userId] !== undefined;
       if (hadAny) {
-        change(userId, () => NO_FACTORS);
+        await change(userId, () => NO_FACTORS);
       }
       return hadAny;
     },

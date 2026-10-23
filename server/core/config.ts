@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
-import { HTTP_DEFAULTS, OBJECT_STORAGE_DEFAULTS } from './defaults.ts';
+import { DATABASE_DEFAULTS, HTTP_DEFAULTS, OBJECT_STORAGE_DEFAULTS } from './defaults.ts';
 import { parseSecretKey, SecretKeyError, SecretKeyErrorCode, type SecretKeys } from './secret-box.ts';
 
 const NODE_ENV_PRODUCTION = 'production';
@@ -186,6 +186,35 @@ function envOrFile(name: string): string {
   }
   return (process.env[name] ?? '').trim();
 }
+
+/** What a Postgres connection URL starts with. */
+const POSTGRES_URL = /^postgres(ql)?:\/\//;
+
+/**
+ * The Postgres server to keep the data in.
+ *
+ * @returns `DATABASE_URL` (or the file `DATABASE_URL_FILE` names), or an empty string when neither is set and the data
+ * is kept in PGlite under `DATA_DIR`.
+ * @throws When it is set to something that is not a postgres:// URL.
+ */
+export const databaseUrl = (): string => {
+  const url = envOrFile('DATABASE_URL');
+  const isPostgres = url === '' || POSTGRES_URL.test(url);
+  if (isPostgres === false) {
+    throw new Error(
+      'DATABASE_URL is not a postgres:// URL. Set it to one, such as postgres://heautou:password@db:5432/heautou, or unset it to keep the data under DATA_DIR.',
+    );
+  }
+  return url;
+};
+
+/**
+ * How long boot waits for Postgres.
+ *
+ * @returns `DB_CONNECT_TIMEOUT_MS`, or `DATABASE_DEFAULTS.connectTimeoutMs`.
+ */
+export const dbConnectTimeoutMs = (): number =>
+  envNumber(process.env.DB_CONNECT_TIMEOUT_MS, DATABASE_DEFAULTS.connectTimeoutMs);
 
 /**
  * The bucket profile pictures are kept in.

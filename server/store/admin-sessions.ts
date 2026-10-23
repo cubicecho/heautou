@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { ADMIN_DEFAULTS } from '../core/defaults.ts';
 import { MS_PER_SECOND } from '../core/wire.ts';
-import type { JsonFile } from './json-file.ts';
+import type { DataDocument } from '../db/document.ts';
 
 /** One signed-in admin browser. */
 interface AdminSession {
@@ -24,7 +24,7 @@ export interface AdminSessionStore {
    * @param userId - Who signed in.
    * @returns The token for the cookie.
    */
-  create: (userId: string) => string;
+  create: (userId: string) => Promise<string>;
   /**
    * Looks a session up.
    *
@@ -37,13 +37,13 @@ export interface AdminSessionStore {
    *
    * @param token - The cookie's value.
    */
-  remove: (token: string) => void;
+  remove: (token: string) => Promise<void>;
   /**
    * Ends every session of one user, when they are disabled, removed or sign out everywhere.
    *
    * @param userId - The user.
    */
-  removeUser: (userId: string) => void;
+  removeUser: (userId: string) => Promise<void>;
 }
 
 /**
@@ -64,17 +64,17 @@ function digest(token: string): string {
  * @returns The store. Expired sessions are dropped whenever it writes.
  */
 export function createAdminSessionStore(
-  file: JsonFile<AdminSessionDocument>,
+  file: DataDocument<AdminSessionDocument>,
   now: () => number = Date.now,
 ): AdminSessionStore {
   const live = (sessions: AdminSessionDocument): AdminSessionDocument =>
     Object.fromEntries(Object.entries(sessions).filter(([, session]) => session.expiresAt > now()));
 
   return {
-    create: (userId) => {
+    create: async (userId) => {
       const token = randomBytes(ADMIN_DEFAULTS.tokenBytes).toString('base64url');
       const expiresAt = now() + ADMIN_DEFAULTS.sessionSeconds * MS_PER_SECOND;
-      file.update((sessions) => ({ ...live(sessions), [digest(token)]: { userId, expiresAt } }));
+      await file.update((sessions) => ({ ...live(sessions), [digest(token)]: { userId, expiresAt } }));
       return token;
     },
     find: (token) => {
@@ -82,12 +82,14 @@ export function createAdminSessionStore(
       const isLive = session !== undefined && session.expiresAt > now();
       return isLive ? session.userId : null;
     },
-    remove: (token) => {
+    remove: async (token) => {
       const key = digest(token);
-      file.update((sessions) => Object.fromEntries(Object.entries(live(sessions)).filter(([other]) => other !== key)));
+      await file.update((sessions) =>
+        Object.fromEntries(Object.entries(live(sessions)).filter(([other]) => other !== key)),
+      );
     },
-    removeUser: (userId) => {
-      file.update((sessions) =>
+    removeUser: async (userId) => {
+      await file.update((sessions) =>
         Object.fromEntries(Object.entries(live(sessions)).filter(([, session]) => session.userId !== userId)),
       );
     },

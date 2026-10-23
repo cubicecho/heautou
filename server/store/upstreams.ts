@@ -2,10 +2,10 @@ import { z } from 'zod';
 import { ADMIN_DEFAULTS, UPSTREAM_DEFAULTS } from '../core/defaults.ts';
 import { badInput, notFound } from '../core/errors.ts';
 import { parseInput } from '../core/validation.ts';
+import type { DataDocument } from '../db/document.ts';
 import { replaceGroupIn } from './claims.ts';
-import type { JsonFile } from './json-file.ts';
 import { redirectUriProblem } from './redirect-uris.ts';
-import type { SecretMapper } from './sealed-file.ts';
+import type { SecretMapper } from './sealed-document.ts';
 
 /** How an upstream provider signs users in. */
 export const UpstreamKind = {
@@ -195,15 +195,15 @@ const idSchema = z
 export interface UpstreamStore {
   list: () => UpstreamProvider[];
   find: (id: string) => UpstreamProvider | null;
-  create: (input: NewUpstream) => UpstreamProvider;
-  update: (id: string, input: UpstreamFields) => UpstreamProvider;
+  create: (input: NewUpstream) => Promise<UpstreamProvider>;
+  update: (id: string, input: UpstreamFields) => Promise<UpstreamProvider>;
   /**
    * Removes a provider and every identity linked through it.
    *
    * @param id - The provider.
    * @returns It, and how many links went with it.
    */
-  remove: (id: string) => { provider: UpstreamProvider; unlinked: number };
+  remove: (id: string) => Promise<{ provider: UpstreamProvider; unlinked: number }>;
   /** Every identity linked to a user, oldest first. */
   linksOf: (userId: string) => UpstreamLink[];
   /** How many identities are linked through a provider. */
@@ -224,13 +224,13 @@ export interface UpstreamStore {
    * @returns The link.
    * @throws BAD_USER_INPUT when the identity is someone else's, or the user already has one there.
    */
-  link: (userId: string, key: IdentityKey, label: string) => UpstreamLink;
+  link: (userId: string, key: IdentityKey, label: string) => Promise<UpstreamLink>;
   /**
    * Records a sign-in through a link.
    *
    * @param key - The identity.
    */
-  usedLink: (key: IdentityKey) => void;
+  usedLink: (key: IdentityKey) => Promise<void>;
   /**
    * Unlinks a user's identity at a provider.
    *
@@ -239,21 +239,21 @@ export interface UpstreamStore {
    * @returns The link that was removed.
    * @throws NOT_FOUND when they have none there.
    */
-  unlink: (userId: string, providerId: string) => UpstreamLink;
+  unlink: (userId: string, providerId: string) => Promise<UpstreamLink>;
   /**
    * Unlinks everything of a user, as for a deleted user.
    *
    * @param userId - The user.
    * @returns How many links they had.
    */
-  removeUser: (userId: string) => number;
+  removeUser: (userId: string) => Promise<number>;
   /**
    * Renames a local group in every provider's created groups and mappings, or takes it out of them.
    *
    * @param from - The group.
    * @param to - Its new name, or null to remove it.
    */
-  replaceGroup: (from: string, to: string | null) => void;
+  replaceGroup: (from: string, to: string | null) => Promise<void>;
 }
 
 /** What the upstream store is built with besides its file. */
@@ -298,7 +298,7 @@ function isSameIdentity(link: IdentityKey, key: IdentityKey): boolean {
  * @returns The store.
  */
 export function createUpstreamStore(
-  file: JsonFile<UpstreamsDocument>,
+  file: DataDocument<UpstreamsDocument>,
   options: UpstreamStoreOptions = {},
 ): UpstreamStore {
   const { now = () => new Date(), allowsHttp = () => false } = options;
@@ -314,8 +314,8 @@ export function createUpstreamStore(
     }
     return provider;
   };
-  const write = (change: (document: UpstreamsDocument) => UpstreamsDocument): void => {
-    file.update(() => change(read()));
+  const write = async (change: (document: UpstreamsDocument) => UpstreamsDocument): Promise<void> => {
+    await file.update(() => change(read()));
   };
 
   /**
@@ -352,29 +352,29 @@ export function createUpstreamStore(
   return {
     list: () => read().providers,
     find,
-    create: (input) => {
+    create: async (input) => {
       const { id: sentId, ...fields } = input;
       const id = parseInput(idSchema, sentId);
       if (find(id) !== null) {
         throw badInput(`id: "${id}" is already taken.`);
       }
       const provider: UpstreamProvider = { id, ...settle(fields, null), createdAt: now().toISOString() };
-      write((document) => ({ ...document, providers: [...document.providers, provider] }));
+      await write((document) => ({ ...document, providers: [...document.providers, provider] }));
       return provider;
     },
-    update: (id, input) => {
+    update: async (id, input) => {
       const current = load(id);
       const next: UpstreamProvider = { ...current, ...settle(input, current) };
-      write((document) => ({
+      await write((document) => ({
         ...document,
         providers: document.providers.map((provider) => (provider.id === id ? next : provider)),
       }));
       return next;
     },
-    remove: (id) => {
+    remove: async (id) => {
       const provider = load(id);
       const unlinked = read().links.filter((link) => link.providerId === id).length;
-      write((document) => ({
+      await write((document) => ({
         providers: document.providers.filter((each) => each.id !== id),
         links: document.links.filter((link) => link.providerId !== id),
       }));
@@ -383,7 +383,7 @@ export function createUpstreamStore(
     linksOf: (userId) => read().links.filter((link) => link.userId === userId),
     linkCount: (providerId) => read().links.filter((link) => link.providerId === providerId).length,
     findLink: (key) => read().links.find((link) => isSameIdentity(link, key)) ?? null,
-    link: (userId, key, label) => {
+    link: async (userId, key, label) => {
       const { providers, links } = read();
       const provider = providers.find((each) => each.id === key.providerId);
       if (provider === undefined) {
@@ -401,32 +401,32 @@ export function createUpstreamStore(
         throw badInput(`You already have a ${provider.name} account linked. Unlink it first.`);
       }
       const linked: UpstreamLink = { userId, ...key, label, linkedAt: now().toISOString(), lastUsedAt: null };
-      write((document) => ({ ...document, links: [...document.links, linked] }));
+      await write((document) => ({ ...document, links: [...document.links, linked] }));
       return linked;
     },
-    usedLink: (key) => {
+    usedLink: async (key) => {
       const at = now().toISOString();
-      write((document) => ({
+      await write((document) => ({
         ...document,
         links: document.links.map((link) => (isSameIdentity(link, key) ? { ...link, lastUsedAt: at } : link)),
       }));
     },
-    unlink: (userId, providerId) => {
+    unlink: async (userId, providerId) => {
       const found = read().links.find((link) => link.userId === userId && link.providerId === providerId);
       if (found === undefined) {
         throw notFound(`Nothing is linked at "${providerId}".`);
       }
-      write((document) => ({ ...document, links: document.links.filter((link) => link !== found) }));
+      await write((document) => ({ ...document, links: document.links.filter((link) => link !== found) }));
       return found;
     },
-    removeUser: (userId) => {
+    removeUser: async (userId) => {
       const count = read().links.filter((link) => link.userId === userId).length;
       if (count > 0) {
-        write((document) => ({ ...document, links: document.links.filter((link) => link.userId !== userId) }));
+        await write((document) => ({ ...document, links: document.links.filter((link) => link.userId !== userId) }));
       }
       return count;
     },
-    replaceGroup: (from, to) => {
+    replaceGroup: async (from, to) => {
       const isUsed = read().providers.some(
         (provider) =>
           provider.createGroups.includes(from) || provider.groupMappings.some((mapping) => mapping.local === from),
@@ -434,7 +434,7 @@ export function createUpstreamStore(
       if (isUsed === false) {
         return;
       }
-      write((document) => ({
+      await write((document) => ({
         ...document,
         providers: document.providers.map((provider) => ({
           ...provider,

@@ -55,8 +55,8 @@ describe('pairing an app with a setup URL', () => {
   beforeAll(async () => {
     app = await startTestApp({ now: () => time });
     admin = await signInAsAdmin(app);
-    app.services.users.create({ username: 'ada', password: PASSWORD, email: '', name: '', groups: ['family'] });
-    app.services.users.create({ username: 'bob', password: PASSWORD, email: '', name: '', groups: [] });
+    await app.services.users.create({ username: 'ada', password: PASSWORD, email: '', name: '', groups: ['family'] });
+    await app.services.users.create({ username: 'bob', password: PASSWORD, email: '', name: '', groups: [] });
   });
 
   afterAll(() => app.close());
@@ -189,9 +189,9 @@ describe('pairing an app with a setup URL', () => {
 
     expect((await manage('DELETE', updated.registration_access_token)).status).toBe(HttpStatus.NoContent);
     expect(app.services.clients.find(registered.client_id)).toBeNull();
-    const recorded = app.services.audit
-      .list({ first: 3 })
-      .entries.filter((entry) => entry.target?.id === registered.client_id);
+    const recorded = (await app.services.audit.list({ first: 3 })).entries.filter(
+      (entry) => entry.target?.id === registered.client_id,
+    );
     expect(recorded.map((entry) => entry.type)).toEqual([
       AuditType.RegistrationDeleted,
       AuditType.RegistrationUpdated,
@@ -239,7 +239,7 @@ describe('pairing an app with a setup URL', () => {
       isSet: false,
       isIssuerHttp: true,
     });
-    const earlier = app.services.clients.create({
+    const earlier = await app.services.clients.create({
       name: 'Old app',
       authMethod: ClientAuthMethod.SecretBasic,
       redirectUris: [REDIRECT_URI],
@@ -258,16 +258,20 @@ describe('pairing an app with a setup URL', () => {
     expect((await register(pairing.endpoint, pairing.token, secure)).status).toBe(HttpStatus.Created);
 
     // A client saved before the rule keeps working, and is flagged.
-    const { data } = await adminGql(admin, 'query ($id: ID!) { client(clientId: $id) { refusedRedirectUris } }', {
-      id: earlier.clientId,
-    });
+    const { data } = await adminGql(
+      admin,
+      'query ($id: String!) { client(where: { clientId: { eq: $id } }) { refusedRedirectUris } }',
+      {
+        id: earlier.clientId,
+      },
+    );
     expect(data.client.refusedRedirectUris).toEqual([REDIRECT_URI]);
 
     const reset = await adminGql(admin, setHttpRedirects, { allowed: null });
     expect(reset.data.setHttpRedirects).toEqual({ isAllowed: true, isSet: false, isIssuerHttp: true });
-    const changes = app.services.audit
-      .list({ first: 50, types: [AuditType.HttpRedirectsSet] })
-      .entries.map((entry) => entry.detail);
+    const changes = (await app.services.audit.list({ first: 50, types: [AuditType.HttpRedirectsSet] })).entries.map(
+      (entry) => entry.detail,
+    );
     expect(changes).toEqual([
       { httpRedirects: 'allowed', chosenBy: 'issuer' },
       { httpRedirects: 'refused', chosenBy: 'operator' },

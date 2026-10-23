@@ -5,6 +5,7 @@ import type { Services } from './services.ts';
 export interface Context
   extends Pick<
     Services,
+    | 'db'
     | 'clients'
     | 'apis'
     | 'users'

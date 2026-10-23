@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import { MAIL_DEFAULTS } from '../core/defaults.ts';
 import { parseInput } from '../core/validation.ts';
-import type { JsonFile } from './json-file.ts';
-import type { SecretMapper } from './sealed-file.ts';
+import type { DataDocument } from '../db/document.ts';
+import type { SecretMapper } from './sealed-document.ts';
 
 /** Highest TCP port. */
 const MAX_PORT = 65_535;
@@ -116,11 +116,11 @@ export interface MailStore {
    * @returns The server.
    * @throws BAD_USER_INPUT for a missing host, a port out of range or a sender that is not an address.
    */
-  setServer: (input: MailServerInput) => MailServer;
+  setServer: (input: MailServerInput) => Promise<MailServer>;
   /**
    * Forgets the saved server, so email is off unless the environment sets one.
    */
-  removeServer: () => void;
+  removeServer: () => Promise<void>;
   /**
    * Reads the options.
    *
@@ -133,7 +133,7 @@ export interface MailStore {
    * @param changes - The options to change; one left out keeps its value.
    * @returns The options.
    */
-  setOptions: (changes: Partial<MailOptions>) => MailOptions;
+  setOptions: (changes: Partial<MailOptions>) => Promise<MailOptions>;
 }
 
 /**
@@ -143,11 +143,11 @@ export interface MailStore {
  * option is off.
  * @returns The store.
  */
-export function createMailStore(file: JsonFile<MailDocument>): MailStore {
+export function createMailStore(file: DataDocument<MailDocument>): MailStore {
   const options = (): MailOptions => ({ ...MAIL_OPTIONS_OFF, ...file.read().options });
   return {
     server: () => file.read().server ?? null,
-    setServer: (input) => {
+    setServer: async (input) => {
       const parsed = parseInput(serverSchema, input);
       const secure = parsed.secure ?? parsed.port === MAIL_DEFAULTS.implicitTlsPort;
       const port = parsed.port ?? (secure ? MAIL_DEFAULTS.implicitTlsPort : MAIL_DEFAULTS.port);
@@ -161,17 +161,17 @@ export function createMailStore(file: JsonFile<MailDocument>): MailStore {
         password: typed === '' ? saved : typed,
         from: parsed.from,
       };
-      file.update((current) => ({ ...current, server }));
+      await file.update((current) => ({ ...current, server }));
       return server;
     },
-    removeServer: () => {
-      file.update(({ server: _removed, ...rest }) => rest);
+    removeServer: async () => {
+      await file.update(({ server: _removed, ...rest }) => rest);
     },
     options,
-    setOptions: (changes) => {
+    setOptions: async (changes) => {
       const parsed = parseInput(optionsSchema, changes);
       const given = Object.fromEntries(Object.entries(parsed).filter(([, value]) => value !== undefined));
-      file.update((current) => ({ ...current, options: { ...current.options, ...given } }));
+      await file.update((current) => ({ ...current, options: { ...current.options, ...given } }));
       return options();
     },
   };

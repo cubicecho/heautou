@@ -1,9 +1,10 @@
-import path from 'node:path';
 import type { Adapter, AdapterFactory, AdapterPayload, ResponseType } from 'oidc-provider';
 import { DEVICE_FLOW_DEFAULTS } from '../core/defaults.ts';
 import { MS_PER_SECOND } from '../core/wire.ts';
+import { type DataDocument, type DocumentStore, documentFromRows, type Row } from '../db/document.ts';
+import { oidcModelDocument } from '../db/documents.ts';
+import { oidcModels } from '../db/schema.ts';
 import { ClientAuthMethod, type ClientStore, type OidcClient } from '../store/clients.ts';
-import { type JsonFile, openJsonFile } from '../store/json-file.ts';
 
 /** One stored artefact: a session, a code, a token, a grant. */
 export interface StoredEntry {
@@ -16,45 +17,58 @@ export interface StoredEntry {
 export type ModelDocument = Record<string, StoredEntry>;
 
 /**
- * The provider's model files, one per model, each opened once. The provider is rebuilt when its keys or claims
- * change, and the session tools read the same files, so every reader must share one in-memory copy.
+ * The provider's models, one document each, each opened once. The provider is rebuilt when its keys or claims
+ * change, and the session tools read the same models, so every reader must share one in-memory copy.
  */
-export interface ModelFiles {
+export interface ModelDocuments {
   /**
-   * Opens a model's file, or returns the one already open.
+   * Returns a model's document. Every model's rows were read when these were opened, so this reads nothing.
    *
    * @param model - The model's name, such as `Session`.
    * @returns Its document.
    */
-  open: (model: string) => JsonFile<ModelDocument>;
-  /** Reads every open file again, after a restore replaced them. */
-  reload: () => void;
+  open: (model: string) => DataDocument<ModelDocument>;
+  /** Reads every model again, after a restore replaced them. */
+  reload: () => Promise<void>;
   /** The clock, in epoch milliseconds. */
   now: () => number;
 }
 
 /**
- * Opens model files under a directory as `<dir>/<Model>.json`.
+ * Opens the provider's models: reads every row of `oidc_models` once, so a model is then found without a query.
  *
- * @param dir - The directory.
+ * @param store - The database and its write queue.
  * @param [now] - The clock, in epoch milliseconds.
- * @returns The files.
+ * @returns The models.
  */
-export function createModelFiles(dir: string, now: () => number = Date.now): ModelFiles {
-  const opened = new Map<string, JsonFile<ModelDocument>>();
+export async function openModelDocuments(store: DocumentStore, now: () => number = Date.now): Promise<ModelDocuments> {
+  const opened = new Map<string, DataDocument<ModelDocument>>();
+  /**
+   * Reads every model's rows, grouped by model.
+   *
+   * @returns The rows of each model.
+   */
+  const loadAll = async (): Promise<Map<string, Row[]>> => {
+    const byModel = new Map<string, Row[]>();
+    for (const row of await store.db.select().from(oidcModels)) {
+      byModel.set(row.model, [...(byModel.get(row.model) ?? []), row]);
+    }
+    return byModel;
+  };
+  const rowsAtOpen = await loadAll();
   return {
     open: (model) => {
       const existing = opened.get(model);
       if (existing !== undefined) {
         return existing;
       }
-      const file = openJsonFile<ModelDocument>(path.join(dir, `${model}.json`), {});
-      opened.set(model, file);
-      return file;
+      const document = documentFromRows(store, oidcModelDocument(model), [rowsAtOpen.get(model) ?? []]);
+      opened.set(model, document);
+      return document;
     },
-    reload: () => {
-      for (const file of opened.values()) {
-        file.reload();
+    reload: async () => {
+      for (const document of opened.values()) {
+        await document.reload();
       }
     },
     now,
@@ -151,7 +165,7 @@ function createClientAdapter(clients: ClientStore, builtIns: AdapterPayload[]): 
     destroy: async (id) => {
       const isStored = isBuiltIn(id) === false && clients.find(id) !== null;
       if (isStored) {
-        clients.remove(id);
+        await clients.remove(id);
       }
     },
     revokeByGrantId: ignore,
@@ -169,12 +183,12 @@ function createClientAdapter(clients: ClientStore, builtIns: AdapterPayload[]): 
  * @remarks
  * Expired entries are dropped whenever the file is written, so it only grows with live sessions and tokens.
  */
-function createFileAdapter(document: JsonFile<ModelDocument>, now: () => number, keptSeconds = 0): Adapter {
+function createDocumentAdapter(document: DataDocument<ModelDocument>, now: () => number, keptSeconds = 0): Adapter {
   const live = (): [string, StoredEntry][] =>
     Object.entries(document.read()).filter(([, entry]) => isLive(entry, now()));
 
-  const write = (change: (entries: [string, StoredEntry][]) => [string, StoredEntry][]): void => {
-    document.update(() => Object.fromEntries(change(live())));
+  const write = async (change: (entries: [string, StoredEntry][]) => [string, StoredEntry][]): Promise<void> => {
+    await document.update(() => Object.fromEntries(change(live())));
   };
 
   const findWhere = (matches: (payload: AdapterPayload) => boolean): AdapterPayload | undefined =>
@@ -183,7 +197,7 @@ function createFileAdapter(document: JsonFile<ModelDocument>, now: () => number,
   return {
     upsert: async (id, payload, expiresIn) => {
       const expiresAt = expiresIn === undefined ? null : now() + (expiresIn + keptSeconds) * MS_PER_SECOND;
-      write((entries) => [...entries.filter(([key]) => key !== id), [id, { payload, expiresAt }]]);
+      await write((entries) => [...entries.filter(([key]) => key !== id), [id, { payload, expiresAt }]]);
     },
     find: async (id) => {
       const entry = document.read()[id];
@@ -194,7 +208,7 @@ function createFileAdapter(document: JsonFile<ModelDocument>, now: () => number,
     findByUserCode: async (userCode) => findWhere((payload) => payload.userCode === userCode),
     consume: async (id) => {
       const consumedAt = Math.floor(now() / MS_PER_SECOND);
-      write((entries) =>
+      await write((entries) =>
         entries.map(([key, entry]) => [
           key,
           key === id ? { ...entry, payload: { ...entry.payload, consumed: consumedAt } } : entry,
@@ -202,37 +216,37 @@ function createFileAdapter(document: JsonFile<ModelDocument>, now: () => number,
       );
     },
     destroy: async (id) => {
-      write((entries) => entries.filter(([key]) => key !== id));
+      await write((entries) => entries.filter(([key]) => key !== id));
     },
     revokeByGrantId: async (grantId) => {
-      write((entries) => entries.filter(([, entry]) => entry.payload.grantId !== grantId));
+      await write((entries) => entries.filter(([, entry]) => entry.payload.grantId !== grantId));
     },
   };
 }
 
 /** What the adapter factory is built from. */
 export interface AdapterSettings {
-  /** The model files. */
-  files: ModelFiles;
+  /** The provider's models. */
+  models: ModelDocuments;
   clients: ClientStore;
   /** Client metadata served before the store's, for the server's own clients. */
   builtInClients?: AdapterPayload[];
 }
 
 /**
- * Builds the provider's adapter: clients from the client store, everything else in flat files.
+ * Builds the provider's adapter: clients from the client store, every other model in its own document.
  *
- * @param settings - Where the files go, the clients, and the clock.
+ * @param settings - The models, the clients and the built-in clients.
  * @returns A factory the provider calls once per model.
  */
 export function createAdapterFactory(settings: AdapterSettings): AdapterFactory {
-  const { files, clients, builtInClients = [] } = settings;
+  const { models, clients, builtInClients = [] } = settings;
   return (model) => {
     if (model === CLIENT_MODEL) {
       return createClientAdapter(clients, builtInClients);
     }
     // A device still polling after its code expired is told `expired_token` (RFC 8628), which needs the code found.
     const keptSeconds = model === DEVICE_CODE_MODEL ? DEVICE_FLOW_DEFAULTS.expiredKeptSeconds : 0;
-    return createFileAdapter(files.open(model), files.now, keptSeconds);
+    return createDocumentAdapter(models.open(model), models.now, keptSeconds);
   };
 }

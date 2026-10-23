@@ -80,7 +80,6 @@ export function ClientFormDialog({ client, open, onOpenChange, onSaved }: Client
   const update = useUpdateClient();
   const failure = isEdit ? update.error : create.error;
   const lifetimes = useTokenLifetimeDefaults().data;
-  const ownLifetimes = client?.tokenLifetimes;
 
   const form = useAppForm({
     defaultValues: {
@@ -95,9 +94,9 @@ export function ClientFormDialog({ client, open, onOpenChange, onSaved }: Client
       groupsClaim: client?.groupsClaim ?? DEFAULT_GROUPS_CLAIM,
       allowClientCredentials: client?.allowClientCredentials ?? false,
       allowDeviceFlow: client?.allowDeviceFlow ?? false,
-      accessToken: lifetimeText(ownLifetimes?.accessTokenSeconds),
-      idToken: lifetimeText(ownLifetimes?.idTokenSeconds),
-      refreshToken: lifetimeText(ownLifetimes?.refreshTokenSeconds),
+      accessToken: lifetimeText(client?.accessTokenSeconds),
+      idToken: lifetimeText(client?.idTokenSeconds),
+      refreshToken: lifetimeText(client?.refreshTokenSeconds),
       backchannelLogoutUri: client?.backchannelLogoutUri ?? '',
       backchannelLogoutSessionRequired: client?.backchannelLogoutSessionRequired ?? true,
     },
@@ -149,7 +148,7 @@ export function ClientFormDialog({ client, open, onOpenChange, onSaved }: Client
     if (form.getFieldValue('clientId').trim() === '') {
       form.setFieldValue('clientId', preset.id);
     }
-    form.validateField('redirectUris', 'change');
+    void form.validateField('redirectUris', 'change');
   };
 
   return (
@@ -182,24 +181,22 @@ export function ClientFormDialog({ client, open, onOpenChange, onSaved }: Client
               }
               const preset = isEdit ? undefined : presetById(presetId);
               return preset === undefined ? null : (
-                <>
-                  <InputField
-                    form={form}
-                    name="baseUrl"
-                    label={`${preset.name}'s address`}
-                    required
-                    description={<PresetLinks preset={preset} />}
-                    placeholder={preset.baseUrlExample}
-                    listeners={{ onChange: applyPreset }}
-                    validators={{
-                      // Still registered after another preset is chosen, so it checks only for the one shown.
-                      onChange: ({ value, fieldApi }) =>
-                        presetById(fieldApi.form.getFieldValue('preset')) !== undefined && baseUrlFrom(value) === null
-                          ? `Give the address you open it at, such as ${preset.baseUrlExample}.`
-                          : undefined,
-                    }}
-                  />
-                </>
+                <InputField
+                  form={form}
+                  name="baseUrl"
+                  label={`${preset.name}'s address`}
+                  required
+                  description={<PresetLinks preset={preset} />}
+                  placeholder={preset.baseUrlExample}
+                  listeners={{ onChange: applyPreset }}
+                  validators={{
+                    // Still registered after another preset is chosen, so it checks only for the one shown.
+                    onChange: ({ value, fieldApi }) =>
+                      presetById(fieldApi.form.getFieldValue('preset')) !== undefined && baseUrlFrom(value) === null
+                        ? `Give the address you open it at, such as ${preset.baseUrlExample}.`
+                        : undefined,
+                  }}
+                />
               );
             }}
           </form.Subscribe>

@@ -3,8 +3,8 @@ import { z } from 'zod';
 import { ADMIN_DEFAULTS, CREDENTIAL_DEFAULTS } from '../core/defaults.ts';
 import { badInput, notFound } from '../core/errors.ts';
 import { parseInput } from '../core/validation.ts';
+import type { DataDocument } from '../db/document.ts';
 import { customClaimsSchema, replaceGroupIn, withoutBlanks } from './claims.ts';
-import type { JsonFile } from './json-file.ts';
 import { dummyPasswordHash, hashPassword, verifyPassword } from './password.ts';
 
 /** Someone who can sign in through the provider. */
@@ -81,15 +81,17 @@ const newUserSchema = userFieldsSchema.extend({
 });
 export type NewUser = z.input<typeof newUserSchema>;
 
-/** The users, kept in one JSON file. */
+/**
+ * The users. Reads are answered from memory; a change is made in memory at once and resolves when it is saved.
+ */
 export interface UserStore {
   list: () => PublicUser[];
   find: (id: string) => PublicUser | null;
-  create: (input: NewUser) => PublicUser;
-  update: (id: string, input: UserFields) => PublicUser;
-  setPassword: (id: string, password: string) => PublicUser;
+  create: (input: NewUser) => Promise<PublicUser>;
+  update: (id: string, input: UserFields) => Promise<PublicUser>;
+  setPassword: (id: string, password: string) => Promise<PublicUser>;
   /** Disables or enables a user. Disabling the last admin who can sign in is refused. */
-  setDisabled: (id: string, disabled: boolean) => PublicUser;
+  setDisabled: (id: string, disabled: boolean) => Promise<PublicUser>;
   /**
    * Records which profile picture a user has. The picture itself is in the bucket.
    *
@@ -97,8 +99,8 @@ export interface UserStore {
    * @param version - The new picture's version, or null when it was removed.
    * @returns The user.
    */
-  setPictureVersion: (id: string, version: string | null) => PublicUser;
-  remove: (id: string) => PublicUser;
+  setPictureVersion: (id: string, version: string | null) => Promise<PublicUser>;
+  remove: (id: string) => Promise<PublicUser>;
   /**
    * Renames a group in every user, or takes it off them all.
    *
@@ -106,7 +108,7 @@ export interface UserStore {
    * @param to - Its new name, or null to remove it.
    * @returns How many users had it.
    */
-  replaceGroup: (from: string, to: string | null) => number;
+  replaceGroup: (from: string, to: string | null) => Promise<number>;
   /** Whether any user is an admin who is not disabled. While none is, the server offers the setup page. */
   hasAdmin: () => boolean;
   /**
@@ -146,13 +148,13 @@ function withDefaults(user: User): User {
 }
 
 /**
- * Builds the user store over a JSON file.
+ * Builds the user store over its document.
  *
- * @param file - The file holding every user.
+ * @param file - The document holding every user.
  * @param [now] - The clock, for `createdAt`.
  * @returns The store.
  */
-export function createUserStore(file: JsonFile<User[]>, now: () => Date = () => new Date()): UserStore {
+export function createUserStore(file: DataDocument<User[]>, now: () => Date = () => new Date()): UserStore {
   const stored = (): User[] => file.read().map(withDefaults);
   const findStored = (id: string): User | null => stored().find((user) => user.id === id) ?? null;
 
@@ -184,14 +186,14 @@ export function createUserStore(file: JsonFile<User[]>, now: () => Date = () => 
     }
   };
 
-  const write = (change: (users: User[]) => User[]): void => {
+  const write = async (change: (users: User[]) => User[]): Promise<void> => {
     const next = change(stored());
     assertAdminRemains(next);
-    file.update(() => next);
+    await file.update(() => next);
   };
 
-  const replace = (next: User): PublicUser => {
-    write((users) => users.map((user) => (user.id === next.id ? next : user)));
+  const replace = async (next: User): Promise<PublicUser> => {
+    await write((users) => users.map((user) => (user.id === next.id ? next : user)));
     return toPublic(next);
   };
 
@@ -201,7 +203,7 @@ export function createUserStore(file: JsonFile<User[]>, now: () => Date = () => 
       const user = findStored(id);
       return user === null ? null : toPublic(user);
     },
-    create: (input) => {
+    create: async (input) => {
       const { password, claims = {}, ...fields } = parseInput(newUserSchema, withoutBlanks(input));
       assertUsernameFree(fields.username, null);
       const user: User = {
@@ -213,29 +215,29 @@ export function createUserStore(file: JsonFile<User[]>, now: () => Date = () => 
         passwordHash: password === undefined ? '' : hashPassword(password),
         createdAt: now().toISOString(),
       };
-      write((users) => [...users, user]);
+      await write((users) => [...users, user]);
       return toPublic(user);
     },
-    update: (id, input) => {
+    update: async (id, input) => {
       const fields = withoutBlanks(parseInput(userFieldsSchema, withoutBlanks(input)));
       assertUsernameFree(fields.username ?? '', id);
       return replace({ ...load(id), ...fields });
     },
-    setPassword: (id, password) => {
+    setPassword: async (id, password) => {
       const parsed = parseInput(passwordSchema, password);
       return replace({ ...load(id), passwordHash: hashPassword(parsed) });
     },
     setDisabled: (id, disabled) => replace({ ...load(id), disabled }),
     setPictureVersion: (id, version) => replace({ ...load(id), pictureVersion: version }),
-    remove: (id) => {
+    remove: async (id) => {
       const user = load(id);
-      write((users) => users.filter((other) => other.id !== id));
+      await write((users) => users.filter((other) => other.id !== id));
       return toPublic(user);
     },
-    replaceGroup: (from, to) => {
+    replaceGroup: async (from, to) => {
       const holders = stored().filter((user) => user.groups.includes(from)).length;
       if (holders > 0) {
-        write((users) => users.map((user) => ({ ...user, groups: replaceGroupIn(user.groups, from, to) })));
+        await write((users) => users.map((user) => ({ ...user, groups: replaceGroupIn(user.groups, from, to) })));
       }
       return holders;
     },

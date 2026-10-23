@@ -1,9 +1,11 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { openServices, type ServiceSettings, type Services } from '../server/core/services.ts';
+import type { OpenDatabase } from '../server/db/client.ts';
 import { createApp } from '../server/http/app.ts';
+import { createTestDatabase } from './db.ts';
 
 /**
  * Reads the port a test server was given.
@@ -29,49 +31,65 @@ export function tempDir(): string {
   return mkdtempSync(path.join(tmpdir(), 'heautou-test-'));
 }
 
-/** A running app on its own data directory. */
+/** A running app on its own database. */
 export interface TestApp {
   /** `http://127.0.0.1:<port>`. */
   base: string;
   services: Services;
-  /** Where its files are. */
-  dataDir: string;
-  /** Stops the server and deletes the data directory. */
+  /** The database its services keep their data in. */
+  database: OpenDatabase;
+  /** Stops the server, waits for its writes, and hands the database back emptied (unless it was passed in). */
   close: () => Promise<void>;
 }
 
+/** What a test app is started with: the services' settings it may change, and the database to use. */
+export type TestAppSettings = Pick<
+  ServiceSettings,
+  | 'now'
+  | 'secretKeys'
+  | 'fetchRange'
+  | 'fetchUpstream'
+  | 'fetchPairing'
+  | 'mailServer'
+  | 'mailTransport'
+  | 'objectStorage'
+  | 'proxyCookieDomain'
+  | 'trustedProxies'
+> & {
+  /**
+   * A database to start on, such as another app's, to start that app again as after a restart. Left out, an empty
+   * one; a database passed in is left open when the app closes.
+   */
+  database?: OpenDatabase;
+};
+
 /**
- * Starts the whole app on a random port with an empty data directory. The issuer is that port's `/oidc`.
+ * Starts the whole app on a random port with an empty database. The issuer is that port's `/oidc`.
  *
- * @param [settings] - Overrides for the services, such as the clock, the secret key, a fake Have I Been Pwned or a fake mail transport.
+ * @param [settings] - Overrides for the services, such as the clock, the secret key, a fake Have I Been Pwned or a fake mail transport, and the database to start on.
  * @returns The running app.
  */
-export async function startTestApp(
-  settings: Pick<
-    ServiceSettings,
-    | 'now'
-    | 'secretKeys'
-    | 'fetchRange'
-    | 'fetchUpstream'
-    | 'fetchPairing'
-    | 'mailServer'
-    | 'mailTransport'
-    | 'objectStorage'
-    | 'proxyCookieDomain'
-    | 'trustedProxies'
-  > = {},
-): Promise<TestApp> {
-  const dataDir = tempDir();
+export async function startTestApp(settings: TestAppSettings = {}): Promise<TestApp> {
+  const { database: given, ...serviceSettings } = settings;
+  const database = given ?? (await createTestDatabase());
   const server = createServer();
   server.listen(0, '127.0.0.1');
   await new Promise<void>((resolve) => server.once('listening', resolve));
   const base = `http://127.0.0.1:${portOf(server)}`;
-  const services = openServices({ dataDir, issuer: `${base}/oidc`, isProxied: false, ...settings });
+  const services = await openServices({
+    database: database.db,
+    issuer: `${base}/oidc`,
+    isProxied: false,
+    ...serviceSettings,
+  });
   server.on('request', createApp(services));
   const close = async (): Promise<void> => {
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));
-    rmSync(dataDir, { recursive: true, force: true });
+    await services.settled();
+    if (given === undefined) {
+      await database.close();
+    }
   };
-  return { base, services, dataDir, close };
+  return { base, services, database, close };
 }

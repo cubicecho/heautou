@@ -1,42 +1,49 @@
-import path from 'node:path';
 import { API_DEFAULTS } from '../../server/core/defaults.ts';
 import { ErrorCode } from '../../server/core/errors.ts';
+import { openDocument } from '../../server/db/document.ts';
+import { APIS_DOCUMENT } from '../../server/db/documents.ts';
 import { SCOPES } from '../../server/oidc/provider.ts';
 import {
   type Api,
+  type ApiStore,
   createApiStore,
   identifierProblem,
   TOKEN_FORMAT_JWT,
   TOKEN_FORMAT_OPAQUE,
 } from '../../server/store/apis.ts';
-import { openJsonFile } from '../../server/store/json-file.ts';
-import { tempDir } from '../helpers.ts';
+import { createTestStore, type TestStore } from '../db.ts';
 
 const IDENTIFIER = 'https://photos-api.home.lan';
 const KNOWN_CLIENTS = ['photos', 'backup'];
 
-/**
- * Opens an API store on a fresh file, with two clients that exist.
- *
- * @returns The store and the file's path.
- */
-function freshStore() {
-  const file = path.join(tempDir(), 'apis.json');
-  const open = () =>
-    createApiStore(openJsonFile<Api[]>(file, []), {
+const badInput = expect.objectContaining({ extensions: expect.objectContaining({ code: ErrorCode.BadUserInput }) });
+
+describe('API store', () => {
+  let db: TestStore;
+  let store: ApiStore;
+
+  /**
+   * Opens an API store on the test database, with two clients that exist.
+   *
+   * @returns The store.
+   */
+  async function open(): Promise<ApiStore> {
+    return createApiStore(await openDocument(db, APIS_DOCUMENT), {
       clientExists: (clientId) => KNOWN_CLIENTS.includes(clientId),
       reservedScopes: SCOPES,
       now: () => new Date('2026-10-18T00:00:00Z'),
     });
-  return { open, store: open() };
-}
+  }
 
-const badInput = expect.objectContaining({ extensions: expect.objectContaining({ code: ErrorCode.BadUserInput }) });
+  beforeEach(async () => {
+    db = await createTestStore();
+    store = await open();
+  });
 
-describe('API store', () => {
-  it('saves an API with JWT tokens and no lifetime of its own by default', () => {
-    const { open, store } = freshStore();
-    const api = store.create({
+  afterEach(() => db.close());
+
+  it('saves an API with JWT tokens and no lifetime of its own by default', async () => {
+    const api = await store.create({
       identifier: ` ${IDENTIFIER} `,
       name: 'Photos API',
       scopes: ['photos:read', 'photos:read'],
@@ -50,58 +57,57 @@ describe('API store', () => {
       allowedClientIds: [],
       createdAt: '2026-10-18T00:00:00.000Z',
     });
-    expect(open().find(IDENTIFIER)).toEqual(api);
+    expect((await open()).find(IDENTIFIER)).toEqual(api);
   });
 
-  it('takes only an absolute URI with no fragment as the identifier', () => {
+  it('takes only an absolute URI with no fragment as the identifier', async () => {
     expect(identifierProblem(IDENTIFIER)).toBeNull();
     expect(identifierProblem('urn:home:photos')).toBeNull();
     expect(identifierProblem('/photos')).toContain('absolute URI');
     expect(identifierProblem('https://photos api.home.lan')).toContain('absolute URI');
     expect(identifierProblem(`${IDENTIFIER}#v1`)).toContain('fragment');
-    const { store } = freshStore();
-    expect(() => store.create({ identifier: 'photos', name: 'Photos' })).toThrow(badInput);
-    store.create({ identifier: IDENTIFIER, name: 'Photos' });
-    expect(() => store.create({ identifier: IDENTIFIER, name: 'Again' })).toThrow(/already taken/);
+    await expect(store.create({ identifier: 'photos', name: 'Photos' })).rejects.toThrow(badInput);
+    await store.create({ identifier: IDENTIFIER, name: 'Photos' });
+    await expect(store.create({ identifier: IDENTIFIER, name: 'Again' })).rejects.toThrow(/already taken/);
   });
 
-  it('refuses the provider’s own scopes and malformed ones', () => {
-    const { store } = freshStore();
-    expect(() => store.create({ identifier: IDENTIFIER, name: 'Photos', scopes: ['openid'] })).toThrow(
+  it('refuses the provider’s own scopes and malformed ones', async () => {
+    await expect(store.create({ identifier: IDENTIFIER, name: 'Photos', scopes: ['openid'] })).rejects.toThrow(
       /provider's \(openid/,
     );
-    expect(() => store.create({ identifier: IDENTIFIER, name: 'Photos', scopes: ['photos read'] })).toThrow(badInput);
-    expect(() => store.create({ identifier: IDENTIFIER, name: 'Photos', scopes: ['say"hi'] })).toThrow(badInput);
+    await expect(store.create({ identifier: IDENTIFIER, name: 'Photos', scopes: ['photos read'] })).rejects.toThrow(
+      badInput,
+    );
+    await expect(store.create({ identifier: IDENTIFIER, name: 'Photos', scopes: ['say"hi'] })).rejects.toThrow(
+      badInput,
+    );
   });
 
-  it('keeps the lifetime within its bounds', () => {
-    const { store } = freshStore();
+  it('keeps the lifetime within its bounds', async () => {
     const { minAccessTokenSeconds, maxAccessTokenSeconds } = API_DEFAULTS;
-    expect(() =>
+    await expect(
       store.create({ identifier: IDENTIFIER, name: 'Photos', accessTokenSeconds: minAccessTokenSeconds - 1 }),
-    ).toThrow(/at least/);
-    expect(() =>
+    ).rejects.toThrow(/at least/);
+    await expect(
       store.create({ identifier: IDENTIFIER, name: 'Photos', accessTokenSeconds: maxAccessTokenSeconds + 1 }),
-    ).toThrow(/at most/);
+    ).rejects.toThrow(/at most/);
   });
 
-  it('names only clients that exist', () => {
-    const { store } = freshStore();
-    expect(() => store.create({ identifier: IDENTIFIER, name: 'Photos', allowedClientIds: ['ghost'] })).toThrow(
+  it('names only clients that exist', async () => {
+    await expect(store.create({ identifier: IDENTIFIER, name: 'Photos', allowedClientIds: ['ghost'] })).rejects.toThrow(
       /"ghost"/,
     );
   });
 
-  it('keeps what an update leaves out, and clears the lifetime on null', () => {
-    const { store } = freshStore();
-    store.create({
+  it('keeps what an update leaves out, and clears the lifetime on null', async () => {
+    await store.create({
       identifier: IDENTIFIER,
       name: 'Photos',
       scopes: ['photos:read'],
       accessTokenSeconds: 300,
       allowedClientIds: ['photos'],
     });
-    const renamed = store.update(IDENTIFIER, { name: 'Photo library', tokenFormat: TOKEN_FORMAT_OPAQUE });
+    const renamed = await store.update(IDENTIFIER, { name: 'Photo library', tokenFormat: TOKEN_FORMAT_OPAQUE });
     expect(renamed).toMatchObject({
       name: 'Photo library',
       tokenFormat: TOKEN_FORMAT_OPAQUE,
@@ -109,17 +115,26 @@ describe('API store', () => {
       accessTokenSeconds: 300,
       allowedClientIds: ['photos'],
     });
-    expect(store.update(IDENTIFIER, { accessTokenSeconds: null }).accessTokenSeconds).toBeNull();
-    expect(() => store.update('https://nowhere.home.lan', { name: 'x' })).toThrow(/No API/);
+    expect((await store.update(IDENTIFIER, { accessTokenSeconds: null })).accessTokenSeconds).toBeNull();
+    await expect(store.update('https://nowhere.home.lan', { name: 'x' })).rejects.toThrow(/No API/);
   });
 
-  it('takes a removed client off every API', () => {
-    const { store } = freshStore();
-    store.create({ identifier: IDENTIFIER, name: 'Photos', allowedClientIds: ['photos', 'backup'] });
-    store.create({ identifier: 'https://notes-api.home.lan', name: 'Notes', allowedClientIds: ['photos'] });
-    store.removeClient('photos');
+  it('takes a removed client off every API', async () => {
+    await store.create({ identifier: IDENTIFIER, name: 'Photos', allowedClientIds: ['photos', 'backup'] });
+    await store.create({ identifier: 'https://notes-api.home.lan', name: 'Notes', allowedClientIds: ['photos'] });
+    await store.removeClient('photos');
     expect(store.list().map((api) => api.allowedClientIds)).toEqual([['backup'], []]);
-    expect(store.remove(IDENTIFIER).name).toBe('Photos');
+    expect((await store.remove(IDENTIFIER)).name).toBe('Photos');
     expect(store.find(IDENTIFIER)).toBeNull();
+  });
+
+  it('reads back what was saved when opened again on the same database', async () => {
+    await store.create({ identifier: IDENTIFIER, name: 'Photos', allowedClientIds: ['photos', 'backup'] });
+    await store.create({ identifier: 'https://notes-api.home.lan', name: 'Notes', allowedClientIds: ['photos'] });
+    await store.removeClient('photos');
+    // Both were made in the same millisecond, which the database orders by identifier rather than by creation.
+    const byIdentifier = (list: readonly Api[]): Api[] =>
+      list.toSorted((a, b) => a.identifier.localeCompare(b.identifier));
+    expect(byIdentifier((await open()).list())).toEqual(byIdentifier(store.list()));
   });
 });

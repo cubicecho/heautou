@@ -184,21 +184,26 @@ describe('device flow', () => {
 
   beforeEach(async () => {
     app = await startTestApp();
-    ada = app.services.users.create({
+    ada = await app.services.users.create({
       username: 'ada',
       password: PASSWORD,
       name: 'Ada Lovelace',
       email: 'ada@example.com',
       groups: [],
     });
-    hub = app.services.clients.create({
+    hub = await app.services.clients.create({
       name: 'Home Assistant',
       authMethod: ClientAuthMethod.None,
       redirectUris: [],
       postLogoutRedirectUris: [],
       allowDeviceFlow: true,
     });
-    app.services.apis.create({ identifier: TELOS_API, name: 'Telos', scopes: [], allowedClientIds: [hub.clientId] });
+    await app.services.apis.create({
+      identifier: TELOS_API,
+      name: 'Telos',
+      scopes: [],
+      allowedClientIds: [hub.clientId],
+    });
   });
 
   afterEach(() => app.close());
@@ -282,7 +287,7 @@ describe('device flow', () => {
   });
 
   it('puts the API scopes the device asked for and the API lifetime in the access token', async () => {
-    app.services.apis.update(TELOS_API, {
+    await app.services.apis.update(TELOS_API, {
       name: 'Telos',
       scopes: ['todos'],
       allowedClientIds: [hub.clientId],
@@ -332,7 +337,7 @@ describe('device flow', () => {
 
   it('audits the code shown and the approval, never with the code', async () => {
     const device = (await startDevice(app, hub)).body as unknown as DeviceAuthorization;
-    const [issued] = app.services.audit.list({ types: [AuditType.DeviceCodeIssued] }).entries;
+    const [issued] = (await app.services.audit.list({ types: [AuditType.DeviceCodeIssued] })).entries;
     expect(issued).toMatchObject({
       actor: null,
       target: { kind: 'client', id: hub.clientId, name: 'Home Assistant' },
@@ -341,7 +346,7 @@ describe('device flow', () => {
 
     const browser = createBrowser(app.base);
     await approve(app, browser, await enterCode(app, browser, device.user_code), 'ada');
-    const { entries } = app.services.audit.list({});
+    const { entries } = await app.services.audit.list({});
     expect(entries[0]).toMatchObject({
       type: AuditType.DeviceApproved,
       actor: { userId: ada.id, username: 'ada' },
@@ -363,7 +368,7 @@ describe('device flow', () => {
     const cancelled = await press(app, browser, await enterCode(app, browser, device.user_code), 'abort');
     // Entering the code again only says it was used; that is not a second refusal.
     await enterCode(app, browser, device.user_code);
-    const refused = app.services.audit.list({ types: [AuditType.DeviceRefused] }).entries;
+    const refused = (await app.services.audit.list({ types: [AuditType.DeviceRefused] })).entries;
     expect(cancelled.searchParams.get('error')).toBe('aborted');
     expect(refused).toHaveLength(1);
     expect(refused[0]).toMatchObject({
@@ -394,7 +399,7 @@ describe('device flow', () => {
   });
 
   it('refuses a client the operator did not allow the device flow', async () => {
-    const app2 = app.services.clients.create({
+    const app2 = await app.services.clients.create({
       name: 'Browser app',
       authMethod: ClientAuthMethod.None,
       redirectUris: ['http://127.0.0.1/callback'],
@@ -409,13 +414,13 @@ describe('device flow', () => {
   });
 
   it('refuses an API that does not list the client', async () => {
-    app.services.apis.create({ identifier: 'https://notes.home.lan', name: 'Notes', scopes: [] });
+    await app.services.apis.create({ identifier: 'https://notes.home.lan', name: 'Notes', scopes: [] });
     const refused = await startDevice(app, hub, 'https://notes.home.lan');
     expect(refused).toMatchObject({ status: HttpStatus.BadRequest, body: { error: 'invalid_target' } });
   });
 
   it('refuses a user outside the client’s groups at sign-in', async () => {
-    app.services.clients.update(hub.clientId, { ...hub, allowedGroups: ['family'] });
+    await app.services.clients.update(hub.clientId, { ...hub, allowedGroups: ['family'] });
     const device = (await startDevice(app, hub)).body as unknown as DeviceAuthorization;
     const browser = createBrowser(app.base);
     const confirm = await enterCode(app, browser, device.user_code);
@@ -442,21 +447,21 @@ describe('device flow', () => {
     expect(refreshed).toMatchObject({ status: HttpStatus.BadRequest, body: { error: 'invalid_grant' } });
   });
 
-  it('keeps clients saved before the device flow as they were', () => {
-    const before = app.services.clients.create({
+  it('keeps clients saved before the device flow as they were', async () => {
+    const before = await app.services.clients.create({
       name: 'Old app',
       authMethod: ClientAuthMethod.SecretBasic,
       redirectUris: ['https://old.example/callback'],
       postLogoutRedirectUris: [],
     });
     expect(before.allowDeviceFlow).toBe(false);
-    expect(() =>
+    await expect(
       app.services.clients.create({
         name: 'Nowhere',
         authMethod: ClientAuthMethod.None,
         redirectUris: [],
         postLogoutRedirectUris: [],
       }),
-    ).toThrow(/redirect URI/);
+    ).rejects.toThrow(/redirect URI/);
   });
 });

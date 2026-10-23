@@ -53,13 +53,14 @@ describe('the account page', () => {
     app = await startTestApp();
     // With no admin yet, sign-in goes to the setup page instead.
     await signInAsAdmin(app);
-    adaId = app.services.users.create({
+    const ada = await app.services.users.create({
       username: 'ada',
       password: PASSWORD,
       email: '',
       name: 'Ada',
       groups: ['family'],
-    }).id;
+    });
+    adaId = ada.id;
   });
 
   afterEach(() => app.close());
@@ -74,7 +75,7 @@ describe('the account page', () => {
       groups: ['family'],
       sessions: [{ clientNames: ['Heautou'] }],
     });
-    app.services.branding.setName('Home');
+    await app.services.branding.setName('Home');
     expect(await (await browser.send('/admin/account')).json()).toMatchObject({
       sessions: [{ clientNames: ['Home'] }],
     });
@@ -172,7 +173,7 @@ describe('password links', () => {
   });
 
   it('refuses a weak password and keeps the link for another try', async () => {
-    const id = app.services.users.create({ username: 'dee', email: '', name: '', groups: [] }).id;
+    const { id } = await app.services.users.create({ username: 'dee', email: '', name: '', groups: [] });
     const link = await adminGql(admin, 'mutation($id: ID!) { createPasswordLink(id: $id) { url } }', { id });
     const token = new URLSearchParams(new URL(link.data.createPasswordLink.url).hash.slice(1)).get('token');
     const visitor = createBrowser(app.base);
@@ -185,7 +186,13 @@ describe('password links', () => {
   });
 
   it('lets a new link replace the last and an admin-set password cancel it', async () => {
-    const id = app.services.users.create({ username: 'cy', password: PASSWORD, email: '', name: '', groups: [] }).id;
+    const { id } = await app.services.users.create({
+      username: 'cy',
+      password: PASSWORD,
+      email: '',
+      name: '',
+      groups: [],
+    });
     const MAKE = 'mutation($id: ID!) { createPasswordLink(id: $id) { url } }';
     const tokenOf = (reply: Awaited<ReturnType<typeof adminGql>>): string | null =>
       new URLSearchParams(new URL(reply.data.createPasswordLink.url).hash.slice(1)).get('token');
@@ -210,8 +217,8 @@ describe('groups', () => {
     app = await startTestApp();
     admin = await signInAsAdmin(app);
     const { users } = app.services;
-    users.create({ username: 'ada', password: PASSWORD, email: '', name: '', groups: ['family', 'media'] });
-    users.create({ username: 'bob', password: PASSWORD, email: '', name: '', groups: ['family'] });
+    await users.create({ username: 'ada', password: PASSWORD, email: '', name: '', groups: ['family', 'media'] });
+    await users.create({ username: 'bob', password: PASSWORD, email: '', name: '', groups: ['family'] });
   });
 
   afterEach(() => app.close());
@@ -233,7 +240,7 @@ describe('groups', () => {
   });
 
   it('renames a group in users and clients, and merges into one that exists', async () => {
-    const client = app.services.clients.create({
+    const client = await app.services.clients.create({
       name: 'Photos',
       authMethod: ClientAuthMethod.SecretBasic,
       redirectUris: ['http://app.example/callback'],
@@ -260,7 +267,7 @@ describe('groups', () => {
   });
 
   it('deletes a group unless a client is limited to it', async () => {
-    app.services.clients.create({
+    await app.services.clients.create({
       name: 'Photos',
       authMethod: ClientAuthMethod.SecretBasic,
       redirectUris: ['http://app.example/callback'],
@@ -336,14 +343,14 @@ describe('breached passwords', () => {
       },
     });
     await signInAsAdmin(app);
-    app.services.settings.setPasswordRules({ checkBreaches: true });
+    await app.services.settings.setPasswordRules({ checkBreaches: true });
   });
 
   afterEach(() => app.close());
 
   it('refuses a password Have I Been Pwned knows, once the operator turns the check on', async () => {
-    const id = app.services.users.create({ username: 'dee', email: '', name: '', groups: [] }).id;
-    const token = app.services.passwordLinks.issue(id).token;
+    const { id } = await app.services.users.create({ username: 'dee', email: '', name: '', groups: [] });
+    const { token } = await app.services.passwordLinks.issue(id);
     const set = await postJson(createBrowser(app.base), '/admin/password-link/set', { token, password: PASSWORD });
     expect(set.status).toBe(HttpStatus.BadRequest);
     expect(set.body.error).toMatch(/data breach/);

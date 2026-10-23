@@ -97,11 +97,11 @@ function uriList(uris: readonly string[]) {
 /**
  * The lifetimes a client was given, by token.
  *
- * @param lifetimes - Its own lifetimes, null where it has the server's.
+ * @param client - The client, whose own lifetimes are null where it has the server's.
  * @returns Each token's lifetime, or "Server defaults" when it was given none.
  */
-function lifetimesText(lifetimes: ClientFieldsFragment['tokenLifetimes']): string {
-  const { accessTokenSeconds, idTokenSeconds, refreshTokenSeconds } = lifetimes;
+function lifetimesText(client: ClientFieldsFragment): string {
+  const { accessTokenSeconds, idTokenSeconds, refreshTokenSeconds } = client;
   const named = [
     { label: 'access', seconds: accessTokenSeconds },
     { label: 'ID', seconds: idTokenSeconds },
@@ -218,7 +218,7 @@ function ClientCredentials({ client }: { client: ClientFieldsFragment }) {
             }
             valueClassName={client.apis.length === 0 ? undefined : 'break-all whitespace-pre-line'}
           />,
-          <PropertyRow key="lifetimes" label="Token lifetimes" value={lifetimesText(client.tokenLifetimes)} />,
+          <PropertyRow key="lifetimes" label="Token lifetimes" value={lifetimesText(client)} />,
         ]}
       />
       {rotate.error === null ? null : (

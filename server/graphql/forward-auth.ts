@@ -1,3 +1,4 @@
+import type { GraphQLResolveInfo } from 'graphql';
 import { adminUrls } from '../admin/admin-client.ts';
 import type { Context } from '../core/context.ts';
 import { FORWARD_AUTH_DEFAULTS } from '../core/defaults.ts';
@@ -5,25 +6,10 @@ import { badInput } from '../core/errors.ts';
 import { FLAG_ON, FORWARD_AUTH_PARAM, FORWARD_AUTH_PATH, siteTarget } from '../forward-auth/client.ts';
 import { type AuditEvent, AuditTargetKind, AuditType, actorOf } from '../store/audit.ts';
 import type { ProtectedSite, SiteFields } from '../store/protected-sites.ts';
+import { GeneratedTable, requiredRow, rowWhere } from './rows.ts';
 
 /** The protected sites and forward auth settings, beside the rest of the admin API. */
 export const FORWARD_AUTH_TYPE_DEFS = /* GraphQL */ `
-  "A site behind the reverse proxy that only signed-in users may reach (forward auth)."
-  type ProtectedSite {
-    id: ID!
-    name: String!
-    "The host the proxy asks about, such as sonarr.home.lan."
-    host: String!
-    "Only paths under this one, such as /admin. Empty for the whole host."
-    pathPrefix: String!
-    "Only users in one of these groups may reach it. Empty lets every enabled user in."
-    allowedGroups: [String!]!
-    "Whether the user must have signed in with a second factor."
-    requireSecondFactor: Boolean!
-    "When it was added, as an ISO 8601 string."
-    createdAt: String!
-  }
-
   "How a reverse proxy is pointed at forward auth."
   type ForwardAuth {
     "The domain the session cookie is set on, so every site under it shares the sign-in. Null for Heautou's own host."
@@ -52,8 +38,6 @@ export const FORWARD_AUTH_TYPE_DEFS = /* GraphQL */ `
   }
 
   extend type Query {
-    "The protected sites, oldest first."
-    protectedSites: [ProtectedSite!]!
     "Forward auth's addresses and cookie domain."
     forwardAuth: ForwardAuth!
   }
@@ -150,17 +134,16 @@ function siteDetail(site: ProtectedSite): Record<string, string> {
   return { address: `${site.host}${site.pathPrefix}` };
 }
 
+/**
+ * Picks a site's row out by its id.
+ *
+ * @param id - The site.
+ * @returns The filter.
+ */
+const byId = (id: string) => ({ id: { eq: id } });
+
 export const forwardAuthResolvers = {
   Query: {
-    /**
-     * Resolves `Query.protectedSites`.
-     *
-     * @param _parent - Unused.
-     * @param _args - Unused.
-     * @param ctx - Request context.
-     * @returns The sites, oldest first.
-     */
-    protectedSites: (_parent: unknown, _args: unknown, ctx: Context): ProtectedSite[] => ctx.protectedSites.list(),
     /**
      * Resolves `Query.forwardAuth`.
      *
@@ -180,9 +163,15 @@ export const forwardAuthResolvers = {
      * @param ctx - Request context.
      * @returns The site.
      */
-    createProtectedSite: (_parent: unknown, args: { input: SiteInputArgs }, ctx: Context): ProtectedSite => {
-      const site = ctx.protectedSites.create(siteFieldsOf(args.input));
-      return auditedSite(ctx, AuditType.ProtectedSiteCreated, site, siteDetail(site));
+    createProtectedSite: async (
+      _parent: unknown,
+      args: { input: SiteInputArgs },
+      ctx: Context,
+      info: GraphQLResolveInfo,
+    ) => {
+      const site = await ctx.protectedSites.create(siteFieldsOf(args.input));
+      auditedSite(ctx, AuditType.ProtectedSiteCreated, site, siteDetail(site));
+      return requiredRow(ctx, info, GeneratedTable.ProtectedSites, byId(site.id));
     },
     /**
      * Resolves `Mutation.updateProtectedSite`.
@@ -192,13 +181,15 @@ export const forwardAuthResolvers = {
      * @param ctx - Request context.
      * @returns The site.
      */
-    updateProtectedSite: (
+    updateProtectedSite: async (
       _parent: unknown,
       args: { id: string; input: SiteInputArgs },
       ctx: Context,
-    ): ProtectedSite => {
-      const site = ctx.protectedSites.update(args.id, siteFieldsOf(args.input));
-      return auditedSite(ctx, AuditType.ProtectedSiteUpdated, site, siteDetail(site));
+      info: GraphQLResolveInfo,
+    ) => {
+      const site = await ctx.protectedSites.update(args.id, siteFieldsOf(args.input));
+      auditedSite(ctx, AuditType.ProtectedSiteUpdated, site, siteDetail(site));
+      return requiredRow(ctx, info, GeneratedTable.ProtectedSites, byId(site.id));
     },
     /**
      * Resolves `Mutation.deleteProtectedSite`.
@@ -208,9 +199,11 @@ export const forwardAuthResolvers = {
      * @param ctx - Request context.
      * @returns The removed site.
      */
-    deleteProtectedSite: (_parent: unknown, args: { id: string }, ctx: Context): ProtectedSite => {
-      const site = ctx.protectedSites.remove(args.id);
-      return auditedSite(ctx, AuditType.ProtectedSiteDeleted, site, siteDetail(site));
+    deleteProtectedSite: async (_parent: unknown, args: { id: string }, ctx: Context, info: GraphQLResolveInfo) => {
+      const row = await rowWhere(ctx, info, GeneratedTable.ProtectedSites, byId(args.id));
+      const site = await ctx.protectedSites.remove(args.id);
+      auditedSite(ctx, AuditType.ProtectedSiteDeleted, site, siteDetail(site));
+      return row;
     },
     /**
      * Resolves `Mutation.setForwardAuthCookieDomain`.
@@ -221,11 +214,15 @@ export const forwardAuthResolvers = {
      * @returns Forward auth's settings.
      * @throws BAD_USER_INPUT while `FORWARD_AUTH_COOKIE_DOMAIN` is set, or for a domain the browser would refuse.
      */
-    setForwardAuthCookieDomain: (_parent: unknown, args: { domain?: string | null }, ctx: Context): ForwardAuthView => {
+    setForwardAuthCookieDomain: async (
+      _parent: unknown,
+      args: { domain?: string | null },
+      ctx: Context,
+    ): Promise<ForwardAuthView> => {
       if (ctx.forwardAuth.environmentCookieDomain !== null) {
         throw badInput('FORWARD_AUTH_COOKIE_DOMAIN sets the cookie domain. Change it there, or unset it.');
       }
-      const domain = ctx.protectedSites.setCookieDomain(args.domain ?? null);
+      const domain = await ctx.protectedSites.setCookieDomain(args.domain ?? null);
       ctx.audit.record({
         type: AuditType.ProxyCookieDomainSet,
         actor: actorOf(ctx.viewer),

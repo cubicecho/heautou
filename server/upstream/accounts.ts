@@ -111,14 +111,14 @@ export function mappedGroups(provider: UpstreamProvider, identity: UpstreamIdent
  * @param provider - The provider.
  * @param identity - Who signed in there.
  * @param ip - The browser's address, for the audit log.
- * @returns The user, or why there is none.
+ * @returns Once saved: the user, or why there is none.
  */
-export function resolveUpstreamUser(
+export async function resolveUpstreamUser(
   deps: UpstreamAccountDeps,
   provider: UpstreamProvider,
   identity: UpstreamIdentity,
   ip: string | null,
-): ResolvedUser {
+): Promise<ResolvedUser> {
   const { upstreams, users, audit } = deps;
   const key = { providerId: provider.id, issuer: identity.issuer, subject: identity.subject };
   const link = upstreams.findLink(key);
@@ -137,14 +137,14 @@ export function resolveUpstreamUser(
     if (problem !== null) {
       return { user: null, refusal: { reason: UpstreamRefusal.NotEligible, message: problem } };
     }
-    user = users.create({
+    user = await users.create({
       username: freeUsername(users, provider, identity),
       // Only an address the provider vouches for: this provider tells apps every address is verified.
       email: identity.verifiedEmail ?? '',
       name: identity.name ?? '',
       groups: provider.createGroups,
     });
-    upstreams.link(user.id, key, identity.label);
+    await upstreams.link(user.id, key, identity.label);
     audit.record({
       type: AuditType.UserCreated,
       actor: actorOf(user),
@@ -160,7 +160,7 @@ export function resolveUpstreamUser(
       detail: { identity: identity.label },
     });
   }
-  upstreams.usedLink(key);
+  await upstreams.usedLink(key);
   const signedIn = user;
   const hasMappings = provider.groupMappings.length > 0 && provider.groupsClaim !== null;
   if (hasMappings === false) {
@@ -173,7 +173,7 @@ export function resolveUpstreamUser(
     return { user: signedIn, refusal: null };
   }
   const { username, email, name } = signedIn;
-  const updated = users.update(signedIn.id, { username, email, name, groups: next });
+  const updated = await users.update(signedIn.id, { username, email, name, groups: next });
   audit.record({
     type: AuditType.UpstreamGroupsApplied,
     actor: actorOf(updated),

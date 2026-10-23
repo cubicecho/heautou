@@ -20,6 +20,25 @@ export const HTTP_DEFAULTS: Readonly<HttpSettings> = Object.freeze({
   trustProxy: false,
 });
 
+/** Reaching Postgres at boot, when `DATABASE_URL` names one. PGlite, the default, is up the moment it opens. */
+export interface DatabaseSettings {
+  /** How long boot waits for Postgres before giving up. `DB_CONNECT_TIMEOUT_MS` overrides it. */
+  connectTimeoutMs: number;
+  /** The wait before the first retry. */
+  firstRetryDelayMs: number;
+  /** The longest wait between two retries. */
+  maxRetryDelayMs: number;
+  /** How much the wait grows after each failed attempt. */
+  retryBackoffFactor: number;
+}
+
+export const DATABASE_DEFAULTS: Readonly<DatabaseSettings> = Object.freeze({
+  connectTimeoutMs: 60_000,
+  firstRetryDelayMs: 500,
+  maxRetryDelayMs: 5_000,
+  retryBackoffFactor: 2,
+});
+
 /** Bounds on one GraphQL operation. */
 export interface OperationLimitSettings {
   /** Deepest selection allowed. */
@@ -30,13 +49,23 @@ export interface OperationLimitSettings {
   maxCost: number;
   /** Cost of a field with no hint of its own. */
   defaultFieldCost: number;
+  /** Rows a generated list returns when the request passes no limit. The admin pages list every user and client. */
+  defaultPageSize: number;
+  /** Most rows a generated list may be asked for. */
+  maxPageSize: number;
+  /** Rows a related list (a user's linked identities, a client's APIs) returns when the request passes no limit. */
+  relationPageSize: number;
 }
 
 export const OPERATION_LIMIT_DEFAULTS: Readonly<OperationLimitSettings> = Object.freeze({
   maxDepth: 8,
   maxAliases: 15,
-  maxCost: 10_000,
+  // A full page of users, each with a page of linked identities, is the dearest screen.
+  maxCost: 100_000,
   defaultFieldCost: 1,
+  defaultPageSize: 500,
+  maxPageSize: 1000,
+  relationPageSize: 20,
 });
 
 /** How long each thing the provider issues stays valid. */
@@ -254,10 +283,10 @@ export const PAIRING_DEFAULTS: Readonly<PairingSettings> = Object.freeze({
 
 /** How the audit log is kept and read. */
 export interface AuditSettings {
-  /** Largest the current file may grow before it is rotated, in bytes. */
-  maxFileBytes: number;
-  /** How many rotated files are kept besides the current one. The oldest is dropped past it. */
-  keptFiles: number;
+  /** How many entries are kept. Older ones are dropped. */
+  keptEntries: number;
+  /** How many entries are recorded between two checks for ones past `keptEntries`. */
+  pruneEveryEntries: number;
   /** Entries in one page of the admin's activity list, unless the request asks for fewer. */
   pageSize: number;
   /** Most entries one page may ask for. */
@@ -267,8 +296,8 @@ export interface AuditSettings {
 }
 
 export const AUDIT_DEFAULTS: Readonly<AuditSettings> = Object.freeze({
-  maxFileBytes: 1_048_576,
-  keptFiles: 2,
+  keptEntries: 20_000,
+  pruneEveryEntries: 100,
   pageSize: 50,
   maxPageSize: 200,
   accountEntries: 20,

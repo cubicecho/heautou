@@ -62,9 +62,10 @@ describe('who may sign in, and what clients see', () => {
   beforeEach(async () => {
     app = await startTestApp();
     const { users, clients } = app.services;
-    adaId = users.create({ username: 'ada', password: PASSWORD, email: '', name: 'Ada', groups: ['family'] }).id;
-    users.create({ username: 'eve', password: PASSWORD, email: '', name: '', groups: ['guests'] });
-    client = clients.create({
+    adaId = (await users.create({ username: 'ada', password: PASSWORD, email: '', name: 'Ada', groups: ['family'] }))
+      .id;
+    await users.create({ username: 'eve', password: PASSWORD, email: '', name: '', groups: ['guests'] });
+    client = await clients.create({
       name: 'Photos',
       authMethod: ClientAuthMethod.SecretBasic,
       redirectUris: [REDIRECT_URI],
@@ -75,7 +76,7 @@ describe('who may sign in, and what clients see', () => {
   afterEach(() => app.close());
 
   it('lets only the allowed groups sign in to a limited client', async () => {
-    app.services.clients.update(client.clientId, { ...client, allowedGroups: ['family'] });
+    await app.services.clients.update(client.clientId, { ...client, allowedGroups: ['family'] });
     const refused = await tryLogin(app, client.clientId, 'eve');
     expect(refused.status).toBe(HttpStatus.Forbidden);
     expect(refused.error).toContain('only for family');
@@ -85,7 +86,7 @@ describe('who may sign in, and what clients see', () => {
   it('turns a signed-in user away from a client their groups do not allow', async () => {
     const browser = createBrowser(app.base);
     await signInForTokens(app, client, 'eve', 'openid', browser);
-    const limited = app.services.clients.create({
+    const limited = await app.services.clients.create({
       name: 'Family album',
       authMethod: ClientAuthMethod.SecretBasic,
       redirectUris: [REDIRECT_URI],
@@ -149,13 +150,13 @@ describe('who may sign in, and what clients see', () => {
     const admin = await signInAsAdmin(app);
     const setClaims = await adminGql(
       admin,
-      'mutation($id: ID!, $input: UserInput!) { updateUser(id: $id, input: $input) { claims { name value } } }',
+      'mutation($id: ID!, $input: UserInput!) { updateUser(id: $id, input: $input) { claims } }',
       {
         id: adaId,
         input: { username: 'ada', email: '', name: 'Ada', groups: ['family'], claims: [{ name: 'quota', value: '5' }] },
       },
     );
-    expect(setClaims.data.updateUser.claims).toEqual([{ name: 'quota', value: '5' }]);
+    expect(setClaims.data.updateUser.claims).toEqual({ quota: '5' });
     await adminGql(
       admin,
       'mutation($id: ID!, $input: ClientInput!) { updateClient(clientId: $id, input: $input) { groupsClaim } }',
@@ -187,7 +188,7 @@ describe('who may sign in, and what clients see', () => {
   });
 
   it('issues client credentials tokens that introspect as active', async () => {
-    const service = app.services.clients.create({
+    const service = await app.services.clients.create({
       name: 'Backup job',
       authMethod: ClientAuthMethod.SecretBasic,
       redirectUris: [],
@@ -207,7 +208,7 @@ describe('who may sign in, and what clients see', () => {
       body: new URLSearchParams({ token }),
     });
     expect(await introspect.json()).toMatchObject({ active: true, client_id: service.clientId });
-    expect(app.services.audit.list({ types: [AuditType.MachineTokenIssued] }).entries[0]).toMatchObject({
+    expect((await app.services.audit.list({ types: [AuditType.MachineTokenIssued] })).entries[0]).toMatchObject({
       actor: null,
       target: { id: service.clientId, name: 'Backup job' },
     });
@@ -215,7 +216,7 @@ describe('who may sign in, and what clients see', () => {
 
   it('gives a client the token lifetimes set for it, and the defaults to others', async () => {
     const lifetimes = { accessTokenSeconds: 300, idTokenSeconds: 600, refreshTokenSeconds: 2_419_200 };
-    const own = app.services.clients.update(client.clientId, { ...client, tokenLifetimes: lifetimes });
+    const own = await app.services.clients.update(client.clientId, { ...client, tokenLifetimes: lifetimes });
     const tokens = await signInForTokens(app, own, 'ada', 'openid offline_access');
     expect(tokens.expires_in).toBe(lifetimes.accessTokenSeconds);
     const idToken = payloadOf(tokens.id_token);
@@ -235,7 +236,7 @@ describe('who may sign in, and what clients see', () => {
     });
     expect((await refreshed.json()).expires_in).toBe(lifetimes.accessTokenSeconds);
 
-    const other = app.services.clients.create({
+    const other = await app.services.clients.create({
       name: 'Notes',
       authMethod: ClientAuthMethod.SecretBasic,
       redirectUris: [REDIRECT_URI],
@@ -245,7 +246,7 @@ describe('who may sign in, and what clients see', () => {
   });
 
   it('gives client credentials tokens the client’s access token lifetime', async () => {
-    const service = app.services.clients.create({
+    const service = await app.services.clients.create({
       name: 'Backup job',
       authMethod: ClientAuthMethod.SecretBasic,
       redirectUris: [],
@@ -262,7 +263,7 @@ describe('who may sign in, and what clients see', () => {
     };
     expect((await machineToken()).expires_in).toBe(TOKEN_LIFETIME_DEFAULTS.clientCredentialsSeconds);
     const accessTokenSeconds = 7200;
-    app.services.clients.update(service.clientId, {
+    await app.services.clients.update(service.clientId, {
       ...service,
       tokenLifetimes: { accessTokenSeconds, idTokenSeconds: null, refreshTokenSeconds: null },
     });
@@ -276,7 +277,7 @@ describe('who may sign in, and what clients see', () => {
       body: new URLSearchParams({ grant_type: 'client_credentials' }),
     });
     expect(tokenRes.status).toBe(HttpStatus.BadRequest);
-    expect(app.services.audit.list({ types: [AuditType.AppTokenRefused] }).entries[0]).toMatchObject({
+    expect((await app.services.audit.list({ types: [AuditType.AppTokenRefused] })).entries[0]).toMatchObject({
       target: { id: client.clientId },
       detail: { error: 'invalid_request', grantType: 'client_credentials' },
     });
@@ -285,7 +286,7 @@ describe('who may sign in, and what clients see', () => {
   it('lists and ends a user’s sessions', async () => {
     const tokens = await signInForTokens(app, client, 'ada');
     const admin = await signInAsAdmin(app);
-    const SESSIONS = 'query($id: ID!) { user(id: $id) { sessions { id clientNames } } }';
+    const SESSIONS = 'query($id: String!) { user(where: { id: { eq: $id } }) { sessions { id clientNames } } }';
     const listed = await adminGql(admin, SESSIONS, { id: adaId });
     const [session] = listed.data.user.sessions;
     expect(session.clientNames).toEqual(['Photos']);

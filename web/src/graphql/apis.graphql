@@ -4,7 +4,8 @@ fragment ApiFields on Api {
   scopes
   tokenFormat
   accessTokenSeconds
-  allowedClients {
+  # An API allows a few clients. A page of 50 keeps the APIs list within the server's cost limit.
+  allowedClients(limit: 50) {
     clientId
     name
   }

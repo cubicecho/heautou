@@ -113,7 +113,7 @@ export function createUpstreamRouter(deps: UpstreamRouteDeps): Router {
     });
   });
 
-  router.post(ACCOUNT_UPSTREAM_PATH.finish, ...json, (req, res) => {
+  router.post(ACCOUNT_UPSTREAM_PATH.finish, ...json, async (req, res) => {
     const user = userOf(req, res);
     if (user === null) {
       return;
@@ -131,7 +131,7 @@ export function createUpstreamRouter(deps: UpstreamRouteDeps): Router {
     }
     const { provider, identity } = outcome;
     try {
-      upstreams.link(
+      await upstreams.link(
         user.id,
         { providerId: provider.id, issuer: identity.issuer, subject: identity.subject },
         identity.label,
@@ -165,7 +165,7 @@ export function createUpstreamRouter(deps: UpstreamRouteDeps): Router {
     }
   });
 
-  router.post(ACCOUNT_UPSTREAM_PATH.unlink, ...json, (req, res) => {
+  router.post(ACCOUNT_UPSTREAM_PATH.unlink, ...json, async (req, res) => {
     const user = userOf(req, res);
     if (user === null) {
       return;
@@ -182,7 +182,7 @@ export function createUpstreamRouter(deps: UpstreamRouteDeps): Router {
     try {
       const providerId = String(req.params.id);
       const provider = upstreams.find(providerId);
-      const link = upstreams.unlink(user.id, providerId);
+      const link = await upstreams.unlink(user.id, providerId);
       audit.record({
         type: AuditType.UpstreamUnlinked,
         actor: actorOf(user),

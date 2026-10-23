@@ -68,8 +68,8 @@ describe('app', () => {
     expect(updated.data.updateClient.clientSecret).toBeNull();
 
     await gql('mutation { deleteClient(clientId: "grafana") { clientId } }');
-    const missing = await gql('{ client(clientId: "grafana") { clientId } }');
-    expect(missing.errors[0].extensions.code).toBe(ErrorCode.NotFound);
+    const missing = await gql('{ client(where: { clientId: { eq: "grafana" } }) { clientId } }');
+    expect(missing).toEqual({ data: { client: null } });
   });
 
   it('creates a user without ever returning a password', async () => {
@@ -99,7 +99,7 @@ describe('app', () => {
     expect(created.errors[0].message).toMatch(/too easy to guess/);
     expect(app.services.users.list().some((user) => user.username === 'cy')).toBe(false);
 
-    const { id } = app.services.users.create({ username: 'dee', email: '', name: '', groups: [] });
+    const { id } = await app.services.users.create({ username: 'dee', email: '', name: '', groups: [] });
     const set = await gql(SET_PASSWORD, { id, password: 'password1' });
     expect(set.errors[0].extensions.code).toBe(ErrorCode.BadUserInput);
     expect(app.services.users.find(id)?.hasPassword).toBe(false);
@@ -111,12 +111,12 @@ describe('app', () => {
       minScore: PASSWORD_RULE_DEFAULTS.minScore,
       checkBreaches: PASSWORD_RULE_DEFAULTS.checkBreaches,
     });
-    const { id } = app.services.users.create({ username: 'eve', email: '', name: '', groups: [] });
+    const { id } = await app.services.users.create({ username: 'eve', email: '', name: '', groups: [] });
     const changed = await gql(SET_RULES, { minScore: MAX_PASSWORD_SCORE });
     expect(changed.data.setPasswordRules).toEqual({ minScore: MAX_PASSWORD_SCORE, checkBreaches: false });
     expect((await gql(SET_PASSWORD, { id, password: HARD })).errors[0].extensions.code).toBe(ErrorCode.BadUserInput);
     expect(await (await fetch(`${app.base}/admin/password-rules`)).json()).toEqual({ minScore: MAX_PASSWORD_SCORE });
-    const [entry] = app.services.audit.list({ first: 1, types: [AuditType.PasswordRulesSet] }).entries;
+    const [entry] = (await app.services.audit.list({ first: 1, types: [AuditType.PasswordRulesSet] })).entries;
     expect(entry?.detail).toEqual({ minScore: String(MAX_PASSWORD_SCORE), breachCheck: 'off' });
 
     await gql(SET_RULES, { minScore: PASSWORD_RULE_DEFAULTS.minScore });

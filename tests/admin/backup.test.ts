@@ -70,7 +70,7 @@ describe('backup routes', () => {
     const archive = new Uint8Array(await res.arrayBuffer());
     expect(Object.keys(JSON.parse(gunzipSync(archive).toString('utf8')).files)).toContain('users.json');
 
-    app.services.users.create({ username: 'later', password: PASSWORD, email: '', name: '', groups: [] });
+    await app.services.users.create({ username: 'later', password: PASSWORD, email: '', name: '', groups: [] });
     const restored = await upload(admin, archive);
     expect(restored.status).toBe(HttpStatus.Ok);
     expect(await restored.json()).toMatchObject({ redirectTo: '/admin/login', restored: { includesSessions: false } });
@@ -79,9 +79,9 @@ describe('backup routes', () => {
     expect(app.services.users.list().map((user) => user.username)).toEqual(['root']);
     const after = await adminGql(admin, '{ users { username } }');
     expect(after.error).toBe('Sign in to the admin UI first.');
-    const [entry] = app.services.audit.list({ types: [AuditType.DataRestored] }).entries;
+    const [entry] = (await app.services.audit.list({ types: [AuditType.DataRestored] })).entries;
     expect(entry).toMatchObject({ actor: { username: 'root' }, detail: { via: 'web', sessions: 'left out' } });
-    expect(app.services.audit.list({ types: [AuditType.BackupDownloaded] }).entries).toHaveLength(0);
+    expect((await app.services.audit.list({ types: [AuditType.BackupDownloaded] })).entries).toHaveLength(0);
 
     // The provider was rebuilt on the restored data, and the admin signs in again.
     const again = await signInAsAdmin(app);
@@ -100,7 +100,7 @@ describe('backup routes', () => {
     const archive = new Uint8Array(await (await download(await signInAsAdmin(app))).arrayBuffer());
     expect((await upload(createBrowser(app.base), archive)).status).toBe(HttpStatus.Unauthorized);
 
-    app.services.users.create({ username: 'bob', password: PASSWORD, email: '', name: '', groups: [] });
+    await app.services.users.create({ username: 'bob', password: PASSWORD, email: '', name: '', groups: [] });
     const user = createBrowser(app.base);
     const callback = await signIn(app, '/admin/login', 'bob', PASSWORD, user, `${app.base}/admin/callback`);
     await user.send(callback.pathname + callback.search);
