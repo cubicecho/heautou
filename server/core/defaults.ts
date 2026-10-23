@@ -308,10 +308,6 @@ export interface AuditSettings {
   keptEntries: number;
   /** How many entries are recorded between two checks for ones past `keptEntries`. */
   pruneEveryEntries: number;
-  /** Entries in one page of the admin's activity list, unless the request asks for fewer. */
-  pageSize: number;
-  /** Most entries one page may ask for. */
-  maxPageSize: number;
   /** How many of their own sign-ins a user sees on their account page. */
   accountEntries: number;
 }
@@ -319,8 +315,6 @@ export interface AuditSettings {
 export const AUDIT_DEFAULTS: Readonly<AuditSettings> = Object.freeze({
   keptEntries: 20_000,
   pruneEveryEntries: 100,
-  pageSize: 50,
-  maxPageSize: 200,
   accountEntries: 20,
 });
 
