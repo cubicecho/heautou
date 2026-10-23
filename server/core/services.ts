@@ -10,7 +10,6 @@ import {
   APIS_DOCUMENT,
   BRANDING_DOCUMENT,
   CLIENTS_DOCUMENT,
-  DOCUMENT_FILES,
   FACTORS_DOCUMENT,
   KEYS_DOCUMENT,
   MAIL_DOCUMENT,
@@ -36,14 +35,7 @@ import { createSessionTools, type SessionTools } from '../oidc/sessions.ts';
 import { type AdminSessionStore, createAdminSessionStore } from '../store/admin-sessions.ts';
 import { type ApiStore, createApiStore } from '../store/apis.ts';
 import { type AuditLog, AuditType, KEYS_TARGET, openAuditLog } from '../store/audit.ts';
-import {
-  type BackupLayout,
-  type BackupOptions,
-  createBackup,
-  filesToRestore,
-  type RestoreSummary,
-  readBackup,
-} from '../store/backup.ts';
+import { type BackupOptions, exportArchive, type RestoreSummary, restoreArchive } from '../store/backup.ts';
 import { type BrandingStore, createBrandingStore } from '../store/branding.ts';
 import { type ClientStore, clientSecretsIn, createClientStore } from '../store/clients.ts';
 import { createFactorStore, type FactorStore, factorSecretsIn } from '../store/factors.ts';
@@ -63,16 +55,6 @@ import type { ObjectStorage } from './object-storage.ts';
 import { createPasswordPolicy, type FetchRange, type PasswordPolicy } from './password-policy.ts';
 import { createProfilePictures, type ProfilePictures } from './pictures.ts';
 import { createSecretBox, type SecretKeys } from './secret-box.ts';
-
-/**
- * What a backup leaves out or needs. Every other store's file is taken, so a new store is backed up without being
- * listed here.
- */
-export const BACKUP_LAYOUT: BackupLayout = Object.freeze({
-  /** The web app's sessions: a restore signs everyone out rather than bringing back sessions from the backup. */
-  skipped: Object.freeze([DOCUMENT_FILES.adminSessions, DOCUMENT_FILES.proxySessions]),
-  required: Object.freeze([DOCUMENT_FILES.keys]),
-});
 
 /** Backs the data up and puts a backup back, from the running server. */
 export interface DataBackup {
@@ -345,14 +327,9 @@ export async function openServices(settings: ServiceSettings): Promise<Services>
   const dataSet = createDataSet(store);
   const backup: DataBackup = {
     isSealed: box !== null,
-    create: async (options) => {
-      const files = await dataSet.exportFiles({ ...options, skipped: BACKUP_LAYOUT.skipped });
-      return createBackup(files, BACKUP_LAYOUT, options, settings.now);
-    },
+    create: (options) => exportArchive(dataSet, options, settings.now),
     restore: async (archive) => {
-      const checked = readBackup(archive, BACKUP_LAYOUT, box);
-      const { files, summary } = filesToRestore(BACKUP_LAYOUT, checked);
-      await dataSet.replaceAll(files);
+      const summary = await restoreArchive(dataSet, archive, box);
       for (const reload of reloads) {
         await reload();
       }

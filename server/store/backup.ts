@@ -4,6 +4,8 @@ import { gunzipSync, gzipSync } from 'node:zlib';
 import { z } from 'zod';
 import { BACKUP_DEFAULTS, type BackupSettings } from '../core/defaults.ts';
 import { isSealed, type SecretBox, SecretKeyError } from '../core/secret-box.ts';
+import type { DataSet } from '../db/data-set.ts';
+import { DOCUMENT_FILES } from '../db/documents.ts';
 
 /** What the `format` member of every archive says. */
 export const BACKUP_FORMAT = 'heautou-backup';
@@ -29,6 +31,20 @@ export interface BackupLayout {
   /** Files an archive must hold, without which the restored server could not start. */
   required: readonly string[];
 }
+
+/**
+ * What a backup leaves out or needs. Every other store's document is taken, so a new store is backed up without being
+ * listed here.
+ */
+export const BACKUP_LAYOUT: BackupLayout = Object.freeze({
+  /** The web app's sessions: a restore signs everyone out rather than bringing back sessions from the backup. */
+  skipped: Object.freeze([DOCUMENT_FILES.adminSessions, DOCUMENT_FILES.proxySessions]),
+  required: Object.freeze([DOCUMENT_FILES.keys]),
+});
+
+/** Where a restore was asked for, as its audit entry says. */
+export const RestoreVia = { Web: 'web', Cli: 'cli' } as const;
+export type RestoreVia = (typeof RestoreVia)[keyof typeof RestoreVia];
 
 /** What to take. */
 export interface BackupOptions {
@@ -330,4 +346,59 @@ export function filesToRestore(
     includesSessions: backup.includesSessions,
   };
   return { files, summary };
+}
+
+/**
+ * Makes an archive of the data as the tables hold it.
+ *
+ * @param dataSet - Everything kept, as files.
+ * @param options - Whether to take the provider's sessions and tokens.
+ * @param [now] - The clock, in epoch milliseconds.
+ * @returns The gzipped archive.
+ * @throws BackupError when a file every server has is missing.
+ */
+export async function exportArchive(
+  dataSet: DataSet,
+  options: BackupOptions,
+  now: () => number = Date.now,
+): Promise<Buffer> {
+  const files = await dataSet.exportFiles({ ...options, skipped: BACKUP_LAYOUT.skipped });
+  return createBackup(files, BACKUP_LAYOUT, options, now);
+}
+
+/**
+ * Checks an archive and puts its data in the tables in one transaction, emptying the skipped documents. Nothing is
+ * written when the archive is refused. A running server still has to read its stores again.
+ *
+ * @param dataSet - Everything kept, as files.
+ * @param archive - The gzipped archive.
+ * @param box - The keys the data is sealed with, or null when no `SECRET_KEY` is set.
+ * @returns What was put back.
+ * @throws BackupError when the archive is refused.
+ */
+export async function restoreArchive(
+  dataSet: DataSet,
+  archive: Buffer,
+  box: SecretBox | null,
+): Promise<RestoreSummary> {
+  const checked = readBackup(archive, BACKUP_LAYOUT, box);
+  const { files, summary } = filesToRestore(BACKUP_LAYOUT, checked);
+  await dataSet.replaceAll(files);
+  return summary;
+}
+
+/**
+ * Says what a restore put back, for its `DataRestored` entry.
+ *
+ * @param summary - What the restore put back.
+ * @param via - Where it was asked for.
+ * @returns The entry's detail.
+ */
+export function restoredDetail(summary: RestoreSummary, via: RestoreVia): Record<string, string> {
+  return {
+    madeAt: summary.createdAt,
+    files: String(summary.files),
+    sessions: summary.includesSessions ? 'included' : 'left out',
+    via,
+  };
 }

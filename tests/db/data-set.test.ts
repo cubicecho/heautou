@@ -1,12 +1,12 @@
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { BACKUP_LAYOUT } from '../../server/core/services.ts';
 import { createDataSet } from '../../server/db/data-set.ts';
 import { createWriteQueue } from '../../server/db/document.ts';
 import { DOCUMENT_FILES } from '../../server/db/documents.ts';
 import { IMPORTED_DIRECTORY, importDataDirectory, isUnstarted } from '../../server/db/import.ts';
 import { auditEntries, oidcModels, users } from '../../server/db/schema.ts';
 import { AUDIT_FILE, AuditType } from '../../server/store/audit.ts';
+import { BACKUP_LAYOUT } from '../../server/store/backup.ts';
 import { createTestDatabase } from '../db.ts';
 import { startTestApp, type TestApp, tempDir } from '../helpers.ts';
 import { adminGql, signInAsAdmin } from '../oidc/browser.ts';

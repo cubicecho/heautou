@@ -54,11 +54,11 @@ average 13); every failing file passes alone. See T5 and T6.
 | M3 | Model change | Makes the audit module the owner of audit targets and of "record what the signed-in admin did" | One place to look when an entry reads wrong | — | done |
 | R5 | Refactor [reuse] | Replaces four copies of the admin-change recorder in the GraphQL modules with one | M3; removes copies in the most-changed folder | M3 | done |
 | R6 | Refactor [pattern] | Moves the target builders (client, API, site, group, pairing, settings, branding, mail, cookie domain) beside `userTarget` | M3 | M3, R4 | done |
-| M4 | Model change | Makes backup and restore one operation of the backup module that the CLI and the server share; reading an older data directory moves to the import | Removes a copied restore and a CLI that imports all the services | — | approved |
+| M4 | Model change | Makes backup and restore one operation of the backup module that the CLI and the server share; reading an older data directory moves to the import | Removes a copied restore and a CLI that imports all the services | — | done |
 | T1 | Test [pin] | Pins that a restore brings back every store, not only the six checked today | Protects M4 and any services.ts change | — | done |
 | T3 | Test [pin] | Pins the backup CLI's `--sessions` flag and its refusals | Protects R8 | — | done |
 | R7 | Refactor [pattern] | Moves the older-data-directory reader from the backup module to the import module | M4 | M4 | done |
-| R8 | Refactor [reuse] | One export and one restore (check, pick files, replace, audit entry) used by both the CLI and the running server | M4; services.ts changes most of any file | M4, T1, T3 | approved |
+| R8 | Refactor [reuse] | One export and one restore (check, pick files, replace, audit entry) used by both the CLI and the running server | M4; services.ts changes most of any file | M4, T1, T3 | done |
 | M5 | Model change | Retires "file" as the code's word for a store's document; "file" then means only an archive file | One concept, one name (P25), and the JSON-era word stops misleading | — | approved |
 | R12 | Refactor [sweep] | Renames every store's `file` parameter to `document` (84 hits, 18 files) | M5 | M5 | approved |
 | R13 | Refactor [readability] | Renames the document mapping's `file` field and `DOCUMENT_FILES` to say they are the document's name; the stored values stay | M5 | M5, A2 | approved |
@@ -187,7 +187,7 @@ options)` and `restoreArchive(store, archive, box)`, which also builds the `Data
 detail; the server's restore adds reloading the stores and rebuilding the provider. The
 directory reader lives in `server/db/import.ts`. Why it is simpler: one restore to read and
 test; the CLI depends on the backup module, not on every service. Implemented by: T1, T3,
-R7, R8. Status: open.
+R7, R8. Status: done.
 
 ### M5 — Retire "file" as the code's word for a store's document
 

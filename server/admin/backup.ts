@@ -6,7 +6,7 @@ import { HttpStatus } from '../core/wire.ts';
 import { type PostBody, sameOriginJson, sameOriginPost, sendRefusal } from '../http/guards.ts';
 import type { AdminSessionStore } from '../store/admin-sessions.ts';
 import { type AuditLog, AuditType, actorOf } from '../store/audit.ts';
-import { BackupError } from '../store/backup.ts';
+import { BackupError, RestoreVia, restoredDetail } from '../store/backup.ts';
 import type { UserStore } from '../store/users.ts';
 import { ADMIN_PATH, adminUrls } from './admin-client.ts';
 import { COOKIE, requireAdmin, sessionCookieOptions, viewerOf } from './routes.ts';
@@ -143,12 +143,7 @@ export function createBackupRouter(deps: BackupDeps): Router {
         type: AuditType.DataRestored,
         actor: actorOf(viewer),
         ip: req.ip ?? null,
-        detail: {
-          madeAt: restored.createdAt,
-          files: String(restored.files),
-          sessions: restored.includesSessions ? 'included' : 'left out',
-          via: 'web',
-        },
+        detail: restoredDetail(restored, RestoreVia.Web),
       });
       res.clearCookie(COOKIE.session, sessionCookieOptions(issuer));
       res.json({ redirectTo: ADMIN_PATH.login, restored });

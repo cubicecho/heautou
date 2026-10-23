@@ -258,8 +258,9 @@ Owner: `server/store/audit.ts`.
   account changes, pairing and registration changes. Owner: `server/store/audit.ts`,
   `server/store/audit-vocabulary.ts` (`AuditType`, `AuditTargetKind`).
 - **Backup:** one gzipped file holding all of heautou's data, optionally with sessions, which
-  a restore puts back whole. Owner: `server/store/backup.ts`, `server/admin/backup.ts`,
-  `server/backup.ts` (CLI).
+  a restore puts back whole. Owner: `exportArchive` and `restoreArchive` in
+  `server/store/backup.ts`, which the server (`services.backup`, which then reloads the
+  stores and rebuilds the provider) and the CLI (`server/backup.ts`) both call.
 - **Secret key (`SECRET_KEY`):** the key secrets are sealed under in the database. Owner:
   `server/core/secret-box.ts`.
 
@@ -285,7 +286,7 @@ Owner: `server/store/audit.ts`.
   database named it (`users.json`, `audit.jsonl`, `oidc/Session.json`). Owner:
   `DOCUMENT_FILES` in `server/db/documents.ts`, `AUDIT_FILE` in `server/store/audit.ts`.
 - **Backup layout:** which archive files a backup skips and which it needs. Owner:
-  `BACKUP_LAYOUT` in `server/core/services.ts`.
+  `BACKUP_LAYOUT` in `server/store/backup.ts`.
 - **Import:** the first boot on an older JSON data directory, which puts its files in the
   tables and moves them to `imported-json/`. Owner: `server/db/import.ts`
   (`readDataDirectory`), checking each file as a restore does (`parseDataFile` in

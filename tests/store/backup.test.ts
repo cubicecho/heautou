@@ -4,13 +4,14 @@ import path from 'node:path';
 import { gunzipSync, gzipSync } from 'node:zlib';
 import { BACKUP_DEFAULTS } from '../../server/core/defaults.ts';
 import { createSecretBox, SECRET_KEY_BYTES, type SecretKeys } from '../../server/core/secret-box.ts';
-import { BACKUP_LAYOUT, openServices, type Services } from '../../server/core/services.ts';
+import { openServices, type Services } from '../../server/core/services.ts';
 import type { OpenDatabase } from '../../server/db/client.ts';
 import { readDataDirectory } from '../../server/db/import.ts';
 import { adminSessions, oidcModels, users } from '../../server/db/schema.ts';
 import { AuditType, userTarget } from '../../server/store/audit.ts';
 import {
   BACKUP_FORMAT,
+  BACKUP_LAYOUT,
   BACKUP_VERSION,
   type BackupArchive,
   BackupErrorCode,
