@@ -105,7 +105,7 @@ average 13); every failing file passes alone. See T5 and T6.
 | R26 | Refactor [reuse] | One "not saved" alert for the five form dialogs | Removes five copies | — | open |
 | R27 | Refactor [consistency] | Moves the five settings sections out of the settings route into concept folders, like mail and backup | Same shape as their siblings | — | open |
 | B1 | Bug (question) | Asks whether the generated activity list should wait for audit entries still queued, as the subscription does | The list shows a change just made | — | done |
-| B3 | Bug | Notes that nothing stops two servers sharing one Postgres, which the in-memory documents can't survive | Prevents silent data loss | — | open |
+| B3 | Bug | Notes that nothing stops two servers sharing one Postgres, which the in-memory documents can't survive | Prevents silent data loss | — | done |
 | B6 | Bug (question) | Asks whether edit dialogs should agree on keeping Save off until something changes | Consistency; may belong to the UX pass | — | open |
 | B7 | Bug | The overview page always warns that secrets are plain text, even when they are sealed | The warning means something | — | open |
 | D1 | Doc | Makes one project guide the source: AGENTS.md still describes flat JSON files and modules that are gone | Agents stop reading a wrong map | — | open |
@@ -703,6 +703,11 @@ memory, so a second process (a scaled compose service, a forgotten container, `n
 -- restore` against a running server) overwrites the first's rows from stale memory. Intended
 behavior: refuse to start while another holds the database, for instance with
 `pg_try_advisory_lock` held for the process's life. A `fix:` with a test.
+
+**Done:** `server/db/lock.ts`. `openDatabase` takes a session advisory lock on `DATABASE_LOCK_KEY`
+on a connection of its own, waiting up to `DATABASE_DEFAULTS.lockWaitMs`, and the server, the
+backup CLI and `db:migrate` refuse as `DATABASE_IN_USE`; a dropped lock connection exits as
+`DATABASE_LOCK_LOST`. CI's `postgres` job boots a second process and expects the refusal.
 
 ### B4 — The web's host check accepts hosts the server refuses · low value
 

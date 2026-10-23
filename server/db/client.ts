@@ -9,9 +9,12 @@ import type { PgAsyncDatabase, PgQueryResultHKT } from 'drizzle-orm/pg-core';
 import { drizzle as drizzlePglite } from 'drizzle-orm/pglite';
 import { migrate as migratePglite } from 'drizzle-orm/pglite/migrator';
 import pg from 'pg';
+import { type DatabaseSettings as ConnectSettings, DATABASE_DEFAULTS } from '../core/defaults.ts';
 import { DIR_MODE, FILE_MODE } from '../core/wire.ts';
+import { type DatabaseLockError, holdPostgresLock, type LockAttempt, takeLock } from './lock.ts';
 import { relations } from './relations.ts';
 import { requiresSsl } from './ssl.ts';
+import { waitForDatabase } from './wait.ts';
 
 /** The Drizzle client, whichever driver is under it. */
 export type Database = PgAsyncDatabase<PgQueryResultHKT, typeof relations>;
@@ -23,8 +26,10 @@ export type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0];
 export const MIGRATIONS_FOLDER = path.join(import.meta.dirname, '..', '..', 'drizzle');
 /** PGlite's directory under DATA_DIR. */
 export const PGLITE_DIRECTORY = 'pg';
-/** The file that says a process has PGlite's directory open. */
+/** The file that says which process has PGlite's directory open. */
 const LOCK_SUFFIX = '.lock';
+/** What heautou's connections call themselves in `pg_stat_activity`, so an operator can find them. */
+const APPLICATION_NAME = 'heautou';
 /** A PGlite store that lives only in memory, for tests. */
 export const IN_MEMORY = 'memory://';
 
@@ -32,7 +37,7 @@ export const IN_MEMORY = 'memory://';
 export const DatabaseKind = { Pglite: 'pglite', Postgres: 'postgres' } as const;
 export type DatabaseKind = (typeof DatabaseKind)[keyof typeof DatabaseKind];
 
-/** An open database. */
+/** An open database, locked to this process (except an in-memory one, which no other process can reach). */
 export interface OpenDatabase {
   db: Database;
   kind: DatabaseKind;
@@ -40,7 +45,7 @@ export interface OpenDatabase {
   label: string;
   /** Applies the committed migrations that have not run yet. */
   migrate: () => Promise<void>;
-  /** Closes it. PGlite flushes its directory and lets the next process open it. */
+  /** Closes it and lets the lock go. PGlite flushes its directory first. */
   close: () => Promise<void>;
 }
 
@@ -63,58 +68,96 @@ function isOtherProcessRunning(pid: number): boolean {
 }
 
 /**
- * Claims PGlite's directory for this process. PGlite has no server of its own, so two processes on one directory
- * would each write it and corrupt it.
+ * Tries to claim PGlite's directory for this process. PGlite has no server of its own, so two processes on one
+ * directory would each write it and corrupt it.
  *
  * @param directory - PGlite's directory.
- * @returns Lets the directory go.
- * @throws When another running process holds it, such as the server while `npm run backup` runs.
+ * @returns Taken, with what lets it go, or the process that has it.
  */
-function lockDirectory(directory: string): () => void {
+async function tryLockDirectory(directory: string): Promise<LockAttempt> {
   const lock = `${directory}${LOCK_SUFFIX}`;
   const holder = existsSync(lock) ? Number(readFileSync(lock, 'utf8').trim()) : Number.NaN;
   if (isOtherProcessRunning(holder)) {
-    throw new Error(`${directory} is open in process ${holder}. Stop it first: PGlite's data can't be shared.`);
+    return { isTaken: false, holder: `process ${holder} on this machine has it open` };
   }
   writeFileSync(lock, String(process.pid), { mode: FILE_MODE });
-  return () => rmSync(lock, { force: true });
+  return { isTaken: true, release: async () => rmSync(lock, { force: true }) };
 }
 
 /**
- * Opens a Postgres server with node-postgres. Nothing connects until the first query.
+ * Stops the process when Postgres's lock is lost. Going on would mean writing while another process may take the
+ * lock and its own copy of the data; exiting non-zero lets a container restart and take the lock again, and writes
+ * still queued are lost the same way as in a crash.
+ *
+ * @param error - The `DATABASE_LOCK_LOST` error.
+ */
+function exitOnLockLost(error: DatabaseLockError): never {
+  console.error(`[db] ${error.code}: ${error.message}`);
+  process.exit(1);
+}
+
+/**
+ * Opens a Postgres server with node-postgres: waits for it to answer, then takes the lock on a connection of its own.
  *
  * @param url - A postgres:// URL.
  * @param isProduction - Whether TLS is required for a host off the local network.
+ * @param overrides - Connect and lock settings that differ from `DATABASE_DEFAULTS`.
+ * @param onLockLost - Called if the lock's connection drops.
  * @returns The database.
  */
-function openPostgres(url: string, isProduction: boolean): OpenDatabase {
+async function openPostgres(
+  url: string,
+  isProduction: boolean,
+  overrides: Partial<ConnectSettings>,
+  onLockLost: (error: DatabaseLockError) => void,
+): Promise<OpenDatabase> {
   const mustForceSsl = isProduction && requiresSsl(url);
-  const pool = new pg.Pool({ connectionString: url, ...(mustForceSsl ? { ssl: true } : {}) });
+  const connection = {
+    connectionString: url,
+    application_name: APPLICATION_NAME,
+    ...(mustForceSsl ? { ssl: true } : {}),
+  };
+  const pool = new pg.Pool(connection);
   const db = drizzleNode({ client: pool, relations });
   const { host, port, pathname } = new URL(url);
+  const label = `postgres://${host}${port === '' ? '' : `:${port}`}${pathname}`;
+  const { lockKeepAliveDelayMs } = { ...DATABASE_DEFAULTS, ...overrides };
+  const session = new pg.Client({ ...connection, keepAlive: true, keepAliveInitialDelayMillis: lockKeepAliveDelayMs });
+  let unlock: () => Promise<void>;
+  try {
+    await waitForDatabase(db, overrides);
+    unlock = await holdPostgresLock(session, label, onLockLost, overrides);
+  } catch (error) {
+    await pool.end();
+    throw error;
+  }
   return {
     db,
     kind: DatabaseKind.Postgres,
-    label: `postgres://${host}${port === '' ? '' : `:${port}`}${pathname}`,
+    label,
     migrate: async () => {
       await migrateNode(db, { migrationsFolder: MIGRATIONS_FOLDER });
     },
-    close: () => pool.end(),
+    close: async () => {
+      await pool.end();
+      await unlock();
+    },
   };
 }
 
 /**
- * Opens PGlite in this process.
+ * Opens PGlite in this process, once its directory is this process's.
  *
  * @param store - Its directory, or `memory://`.
+ * @param overrides - Lock settings that differ from `DATABASE_DEFAULTS`.
  * @returns The database.
  */
-async function openPglite(store: string): Promise<OpenDatabase> {
+async function openPglite(store: string, overrides: Partial<ConnectSettings>): Promise<OpenDatabase> {
   const isDirectory = store !== IN_MEMORY;
-  let unlock = (): void => {};
+  let unlock = async (): Promise<void> => {};
   if (isDirectory) {
     mkdirSync(store, { recursive: true, mode: DIR_MODE });
-    unlock = lockDirectory(store);
+    unlock = await takeLock(store, () => tryLockDirectory(store), overrides);
   }
   const client = new PGlite(store);
   await client.waitReady;
@@ -129,7 +172,11 @@ async function openPglite(store: string): Promise<OpenDatabase> {
  * @param [onClose] - Runs after it closes.
  * @returns The database.
  */
-export function fromPglite(client: PGlite, label = 'memory', onClose: () => void = () => {}): OpenDatabase {
+export function fromPglite(
+  client: PGlite,
+  label = 'memory',
+  onClose: () => Promise<void> = async () => {},
+): OpenDatabase {
   const db = drizzlePglite({ client, relations });
   return {
     db,
@@ -140,7 +187,7 @@ export function fromPglite(client: PGlite, label = 'memory', onClose: () => void
     },
     close: async () => {
       await client.close();
-      onClose();
+      await onClose();
     },
   };
 }
@@ -156,16 +203,24 @@ export interface DatabaseSettings {
 }
 
 /**
- * Opens the database the settings name. Postgres is not reached until the first query; `waitForDatabase` waits for
- * it.
+ * Opens the database the settings name and takes its lock, so no other heautou uses it while this process runs. Waits
+ * for Postgres to answer first, and for another process to let go for up to `lockWaitMs`. Writes nothing.
  *
  * @param settings - The URL and the data directory.
+ * @param [overrides] - Connect and lock settings that differ from `DATABASE_DEFAULTS`; boot passes
+ * `DB_CONNECT_TIMEOUT_MS`.
+ * @param [onLockLost] - Called if Postgres's lock is lost while the database is open. By default the process exits 1.
  * @returns The database, not yet migrated.
- * @throws When PGlite's directory is open in another process.
+ * @throws DatabaseLockError `DATABASE_IN_USE` when another process keeps the database, or what `waitForDatabase`
+ * throws.
  */
-export async function openDatabase(settings: DatabaseSettings): Promise<OpenDatabase> {
+export async function openDatabase(
+  settings: DatabaseSettings,
+  overrides: Partial<ConnectSettings> = {},
+  onLockLost: (error: DatabaseLockError) => void = exitOnLockLost,
+): Promise<OpenDatabase> {
   if (settings.url !== '') {
-    return openPostgres(settings.url, settings.isProduction);
+    return openPostgres(settings.url, settings.isProduction, overrides, onLockLost);
   }
-  return openPglite(path.join(settings.dataDir, PGLITE_DIRECTORY));
+  return openPglite(path.join(settings.dataDir, PGLITE_DIRECTORY), overrides);
 }

@@ -30,3 +30,9 @@ export const BYTES_PER_MB = 1_048_576;
 export const FILE_MODE = 0o600;
 /** Owner only, for a directory made here. One that already exists is left as it is. */
 export const DIR_MODE = 0o700;
+/**
+ * The Postgres advisory lock a heautou process holds while it uses a database: "heautou" in ASCII, read as one 64-bit
+ * number, in the decimal form a `bigint` parameter takes. Every version uses it, so an old server and a new one refuse
+ * each other too.
+ */
+export const DATABASE_LOCK_KEY = '29384866834706293';
