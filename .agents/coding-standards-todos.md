@@ -74,8 +74,8 @@ average 13); every failing file passes alone. See T5 and T6.
 | R9 | Refactor [consistency] | Splits the 1,344-line resolver file by concept, each module holding its SDL and resolvers as mail and forward auth already do | Where a field lives stops being a search; the file changes most of any GraphQL module | T4 | open |
 | R10 | Refactor [simplify] | Drops the audit store's cursor paging, which only its own tests use since the activity list became a generated read | Removes dead code and two defaults | — | open |
 | R11 | Refactor [consistency] | Gives every store the same clock, epoch milliseconds, and reads it once in services.ts | Same job, same shape; fewer Date wrappers at the call sites | — | open |
-| T5 | Test [consistency] | Sets one timeout for tests that boot a server, so a busy machine stops failing them | A green baseline | — | approved |
-| T6 | Test [readability] | Makes the audit tests count only entries they made, so one failure no longer cascades | A failure points at its cause | — | approved |
+| T5 | Test [consistency] | Sets one timeout for tests that boot a server, so a busy machine stops failing them | A green baseline | — | done |
+| T6 | Test [readability] | Makes the audit tests count only entries they made, so one failure no longer cascades | A failure points at its cause | — | done |
 | T2 | Test [pin] | Pins that boot refuses a wrong key for factors and upstreams too | Covers two of five sealed stores left untested | — | open |
 | T7 | Test [reuse] | Moves the copied `withTotp` helper into the shared authenticator helper | Removes a copy | — | open |
 | T8 | Test [reuse] | One `signInToWebApp` helper in the browser helpers, used by `signInAsAdmin` too | Removes two copies | — | open |
