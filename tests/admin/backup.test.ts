@@ -1,6 +1,7 @@
 import { gunzipSync } from 'node:zlib';
 import { BACKUP_PATH } from '../../server/admin/backup.ts';
 import { HttpStatus } from '../../server/core/wire.ts';
+import { archivePathOf, DOCUMENT_NAMES } from '../../server/db/documents.ts';
 import { AuditType } from '../../server/store/audit.ts';
 import { newSecretKeys, startTestApp, type TestApp } from '../helpers.ts';
 import { adminGql, type Browser, createBrowser, PASSWORD, signIn, signInAsAdmin } from '../oidc/browser.ts';
@@ -66,7 +67,9 @@ describe('backup routes', () => {
     expect(res.headers.get('content-type')).toContain(ARCHIVE_TYPE);
     expect(res.headers.get('content-disposition')).toMatch(/attachment; filename="heautou-backup-.+\.json\.gz"/);
     const archive = new Uint8Array(await res.arrayBuffer());
-    expect(Object.keys(JSON.parse(gunzipSync(archive).toString('utf8')).files)).toContain('users.json');
+    expect(Object.keys(JSON.parse(gunzipSync(archive).toString('utf8')).files)).toContain(
+      archivePathOf(DOCUMENT_NAMES.users),
+    );
 
     await app.services.users.create({ username: 'later', password: PASSWORD, email: '', name: '', groups: [] });
     const restored = await upload(admin, archive);
