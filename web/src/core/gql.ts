@@ -1,17 +1,51 @@
 import type { TypedDocumentNode } from '@graphql-typed-document-node/core';
 import { HttpStatus, MS_PER_SECOND } from '@server/core/wire.ts';
 import { print } from 'graphql';
+import { z } from 'zod';
 import { SUBSCRIPTION_DEFAULTS } from '@/core/defaults';
 import { ACCOUNT_PAGE, signInPath } from '@/core/paths';
 
 /** The browser talks to its own origin; Vite proxies `/graphql` to the server in dev. */
 const ENDPOINT = '/graphql';
 
-interface GraphQLResponse<T> {
-  data?: T;
-  errors?: { message: string }[];
-  /** Set instead when the server refused the request before GraphQL saw it. */
-  error?: string;
+/**
+ * What `/graphql` answers for one operation.
+ *
+ * @typeParam TResult - The operation's result, as its document types it.
+ * @returns The schema.
+ */
+function replySchemaOf<TResult>() {
+  return z.object({
+    /**
+     * The operation's result. Codegen typed the document from the schema the server runs, so only that it is an
+     * object is checked here.
+     */
+    data: z.custom<TResult>((value) => typeof value === 'object' && value !== null).nullish(),
+    errors: z.array(z.object({ message: z.string() })).optional(),
+    /** Set instead when the server refused the request before GraphQL saw it. */
+    error: z.string().optional(),
+  });
+}
+
+/**
+ * Reads the body of a `/graphql` reply.
+ *
+ * @typeParam TResult - The operation's result, as its document types it.
+ * @param body - The parsed JSON.
+ * @param status - The reply's HTTP status, for the error.
+ * @returns The reply.
+ * @throws When the body is not a GraphQL reply.
+ */
+function readReply<TResult>(body: unknown, status: number) {
+  const reply = replySchemaOf<TResult>().safeParse(body);
+  const isMalformed = reply.success === false;
+  if (isMalformed) {
+    throw new Error(
+      `/graphql answered ${status} with something that is not a GraphQL reply (${reply.error.message}). ` +
+        'Check that the server, or the proxy in front of it, sends /graphql through.',
+    );
+  }
+  return reply.data;
 }
 
 /**
@@ -70,7 +104,7 @@ export async function request<TResult, TVariables>(
   if (refusal !== null) {
     throw refusal;
   }
-  const body = ((await response.json().catch(() => null)) ?? {}) as GraphQLResponse<TResult>;
+  const body = readReply<TResult>((await response.json().catch(() => null)) ?? {}, response.status);
   if (body.error !== undefined) {
     throw new Error(body.error);
   }
@@ -78,7 +112,7 @@ export async function request<TResult, TVariables>(
   if (body.errors?.length) {
     throw errorOf(body.errors);
   }
-  if (body.data === undefined) {
+  if (!body.data) {
     throw new Error(`GraphQL returned no data (HTTP ${response.status})`);
   }
   return body.data;
@@ -174,9 +208,10 @@ export function subscribe<TResult, TVariables>(
           return true;
         }
         if (event === 'next' && data !== '') {
-          const body: GraphQLResponse<TResult> = JSON.parse(data);
-          if (body.data !== undefined && body.data !== null) {
-            handlers.onData(body.data);
+          const reply = replySchemaOf<TResult>().safeParse(JSON.parse(data));
+          const result = reply.success ? reply.data.data : undefined;
+          if (result) {
+            handlers.onData(result);
           }
         }
       }
