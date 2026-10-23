@@ -1,4 +1,3 @@
-import { AUDIT_DEFAULTS } from '@server/core/defaults.ts';
 import { type InfiniteData, useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import {
@@ -8,6 +7,7 @@ import {
   type AuditEntryFilters,
   type AuditType,
 } from '@/__generated__/graphql';
+import { ACTIVITY_DEFAULTS } from '@/core/defaults';
 import { request, subscribe } from '@/core/gql';
 import { QUERY_KEYS } from '@/core/query-keys';
 
@@ -56,12 +56,12 @@ export function auditWhere({ type, userId }: AuditFilters): AuditEntryFilters | 
  */
 async function auditPage(filters: AuditFilters, after: string | null): Promise<AuditPage> {
   const { auditEntries } = await request(AuditEntriesDocument, {
-    limit: AUDIT_DEFAULTS.pageSize + 1,
+    limit: ACTIVITY_DEFAULTS.pageSize + 1,
     after,
     where: auditWhere(filters),
   });
-  const entries = auditEntries.slice(0, AUDIT_DEFAULTS.pageSize);
-  const hasMore = auditEntries.length > AUDIT_DEFAULTS.pageSize;
+  const entries = auditEntries.slice(0, ACTIVITY_DEFAULTS.pageSize);
+  const hasMore = auditEntries.length > ACTIVITY_DEFAULTS.pageSize;
   return { entries, nextCursor: hasMore ? (entries.at(-1)?.cursor ?? null) : null };
 }
 

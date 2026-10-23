@@ -30,3 +30,13 @@ export interface QrCodeSettings {
 export const QR_CODE_DEFAULTS: Readonly<QrCodeSettings> = Object.freeze({
   sizePixels: 192,
 });
+
+/** The Activity page's list of audit entries. */
+export interface ActivitySettings {
+  /** How many entries one page shows. */
+  pageSize: number;
+}
+
+export const ACTIVITY_DEFAULTS: Readonly<ActivitySettings> = Object.freeze({
+  pageSize: 50,
+});
