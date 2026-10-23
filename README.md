@@ -392,9 +392,14 @@ npm run backup -- export heautou-backup.json.gz              # add --sessions to
 npm run backup -- restore heautou-backup.json.gz
 ```
 
-In Docker, run it in the image against the stopped server's volume, for example
-`docker compose stop heautou && docker compose run --rm heautou npm run backup -- export /data/heautou-backup.json.gz`,
-then copy the file out of the volume.
+In Docker, stop the server, run it in the image against the same volume, then start the server and copy the file out:
+
+```sh
+docker compose stop heautou
+docker compose run --rm heautou npm run backup -- export /data/heautou-backup.json.gz
+docker compose start heautou
+docker compose cp heautou:/data/heautou-backup.json.gz .
+```
 
 A backup holds everything above except the browser sessions (for the admin UI, the account page and protected
 sites; a restore signs everyone out) and, unless you ask for them, the provider's sessions, codes and tokens
