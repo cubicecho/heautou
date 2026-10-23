@@ -40,8 +40,11 @@ function run(args: string[], env: Record<string, string>): { output: string; sta
     });
     return { output, status: 0 };
   } catch (error) {
-    const failed = error as { stderr: string; status: number };
-    return { output: failed.stderr, status: failed.status };
+    // execFileSync throws an Error carrying the child's exit code and output when it exits non-zero.
+    if (error instanceof Error && 'status' in error && 'stderr' in error) {
+      return { output: String(error.stderr), status: Number(error.status) };
+    }
+    throw error;
   }
 }
 

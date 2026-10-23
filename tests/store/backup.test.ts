@@ -14,6 +14,7 @@ import {
   BACKUP_LAYOUT,
   BACKUP_VERSION,
   type BackupArchive,
+  BackupError,
   BackupErrorCode,
   createBackup,
   readBackup,
@@ -138,7 +139,7 @@ async function refusal(run: () => unknown): Promise<string> {
   try {
     await run();
   } catch (error) {
-    return (error as { code?: string }).code ?? String(error);
+    return error instanceof BackupError ? error.code : String(error);
   }
   throw new Error('The archive was not refused.');
 }
