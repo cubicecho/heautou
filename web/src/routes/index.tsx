@@ -6,6 +6,7 @@ import { Section } from '@/components/section';
 import { Alert } from '@/components/ui/alert';
 import { CopyButton } from '@/components/ui/copy-button';
 import { useProviderInfo } from '@/core/admin';
+import { useBackupInfo } from '@/core/backup';
 
 export const Route = createFileRoute('/')({ component: OverviewPage });
 
@@ -42,6 +43,8 @@ function UrlRow({ label, url, hint }: { label: string; url: string; hint?: strin
 function OverviewPage() {
   const query = useProviderInfo();
   const info = query.data;
+  // Whether SECRET_KEY seals the secrets, which decides what the warning says. Undefined while it loads.
+  const isSealed = useBackupInfo().data?.isSealed;
 
   return (
     <PageLayout
@@ -52,11 +55,17 @@ function OverviewPage() {
       contentClassName="gap-6"
       contentSlot={
         <>
-          <Alert
-            variant="warning"
-            title="Keep this provider on a trusted network"
-            description="The data directory holds client secrets and signing keys in plain text, and the server has no TLS of its own: put it behind a proxy that does."
-          />
+          {isSealed === undefined ? null : (
+            <Alert
+              variant="warning"
+              title="Keep this provider on a trusted network"
+              description={
+                isSealed
+                  ? 'The server has no TLS of its own: put it behind a proxy that does.'
+                  : 'The database holds client secrets and signing keys in plain text, since SECRET_KEY is not set, and the server has no TLS of its own: put it behind a proxy that does.'
+              }
+            />
+          )}
           {query.isError ? <QueryError error={query.error} onRetry={query.refetch} what="the provider's URLs" /> : null}
           {info === undefined ? null : (
             <>

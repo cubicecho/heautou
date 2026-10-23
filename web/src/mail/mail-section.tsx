@@ -243,22 +243,35 @@ export function MailSection() {
             <ServerForm mail={current} />
           )}
           {current?.isConfigured ? <TestEmail /> : null}
-          {OPTIONS.map((option) => (
-            <SettingRow
-              key={option.key}
-              title={option.title}
-              description={option.description}
-              actionSlot={({ titleId }) => (
-                <Switch
-                  aria-labelledby={titleId}
-                  checked={current?.[option.key] ?? false}
-                  disabled={current?.isConfigured !== true || setOptions.isPending}
-                  hint={current?.isConfigured ? undefined : 'Set up a server first'}
-                  onCheckedChange={(checked) => setOptions.mutate({ [option.key]: checked })}
-                />
-              )}
-            />
-          ))}
+          <Section
+            level={3}
+            title="Emails to send"
+            description={
+              current?.isConfigured
+                ? 'Each is sent only while it is on.'
+                : 'Save an SMTP server above to turn these on. Until then none of them is sent.'
+            }
+            contentSlot={OPTIONS.map((option) => (
+              <SettingRow
+                key={option.key}
+                title={option.title}
+                description={option.description}
+                // No switch until there is a server: a switch that cannot move reads as broken, and the line above says why.
+                actionSlot={
+                  current?.isConfigured
+                    ? ({ titleId }) => (
+                        <Switch
+                          aria-labelledby={titleId}
+                          checked={current[option.key]}
+                          disabled={setOptions.isPending}
+                          onCheckedChange={(checked) => setOptions.mutate({ [option.key]: checked })}
+                        />
+                      )
+                    : undefined
+                }
+              />
+            ))}
+          />
           {setOptions.error === null ? null : (
             <Alert variant="destructive" title="Setting not saved" description={messageOf(setOptions.error)} />
           )}

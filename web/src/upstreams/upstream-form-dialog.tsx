@@ -11,6 +11,7 @@ import { CodeBlock } from '@/components/ui/code';
 import { CopyButton } from '@/components/ui/copy-button';
 import { FormElement } from '@/components/ui/form-element';
 import { useGroupOptions, useSaveUpstream, useUpstreamRedirectUri } from '@/core/admin';
+import { useBackupInfo } from '@/core/backup';
 import { commaListOf, linesOf, messageOf } from '@/core/lists';
 import {
   OTHER_UPSTREAM,
@@ -89,6 +90,8 @@ export function UpstreamFormDialog({ upstream, open, onOpenChange }: UpstreamFor
   const isEdit = upstream !== null;
   const save = useSaveUpstream();
   const groupOptions = useGroupOptions();
+  // Whether SECRET_KEY seals the client secret, so the field says what happens to it.
+  const isSealed = useBackupInfo().data?.isSealed;
   // The ID the name last made, so a typed-over ID stops following the name.
   const autoId = useRef('');
   const [isAdvancedOpen, setAdvancedOpen] = useState(() => hasAdvanced(upstream));
@@ -258,7 +261,7 @@ export function UpstreamFormDialog({ upstream, open, onOpenChange }: UpstreamFor
                   label="Client secret"
                   autoComplete="off"
                   placeholder={upstream?.hasClientSecret ? 'Saved. Leave blank to keep it.' : undefined}
-                  description="Kept sealed under SECRET_KEY and never shown again. Leave it blank for a public client."
+                  description={`${isSealed === false ? 'Kept in plain text until SECRET_KEY is set' : 'Kept sealed under SECRET_KEY'}, and never shown again. Leave it blank for a public client.`}
                 />
                 <InputField
                   form={form}
