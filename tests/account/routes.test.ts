@@ -2,7 +2,15 @@ import { createHash } from 'node:crypto';
 import { HttpStatus } from '../../server/core/wire.ts';
 import { ClientAuthMethod } from '../../server/store/clients.ts';
 import { startTestApp, type TestApp } from '../helpers.ts';
-import { adminGql, type Browser, createBrowser, PASSWORD, signInAsAdmin, signInToWebApp } from '../oidc/browser.ts';
+import {
+  adminGql,
+  type Browser,
+  createBrowser,
+  PASSWORD,
+  postJson,
+  signInAsAdmin,
+  signInToWebApp,
+} from '../oidc/browser.ts';
 
 /** How many hex characters of a password's SHA-1 go to Have I Been Pwned. */
 const HASH_PREFIX_LENGTH = 5;
@@ -10,19 +18,15 @@ const HASH_PREFIX_LENGTH = 5;
 const PIXEL_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
 
 /**
- * Posts JSON the way the web app does.
+ * Posts JSON the way the web app does, and reads the reply.
  *
  * @param browser - The browser.
  * @param url - The route.
  * @param body - What to send.
  * @returns The status and parsed body.
  */
-async function postJson(browser: Browser, url: string, body: unknown) {
-  const res = await browser.send(url, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+async function postAndRead(browser: Browser, url: string, body: unknown) {
+  const res = await postJson(browser, url, body);
   return { status: res.status, body: await res.json() };
 }
 
@@ -67,14 +71,14 @@ describe('the account page', () => {
 
   it('changes the password given the current one', async () => {
     const { browser } = await signInToWebApp(app, 'ada');
-    const wrong = await postJson(browser, '/api/account/password', {
+    const wrong = await postAndRead(browser, '/api/account/password', {
       currentPassword: 'nope',
       newPassword: 'a brand new one',
     });
     expect(wrong.status).toBe(HttpStatus.Forbidden);
-    const short = await postJson(browser, '/api/account/password', { currentPassword: PASSWORD, newPassword: 'x' });
+    const short = await postAndRead(browser, '/api/account/password', { currentPassword: PASSWORD, newPassword: 'x' });
     expect(short.status).toBe(HttpStatus.BadRequest);
-    const changed = await postJson(browser, '/api/account/password', {
+    const changed = await postAndRead(browser, '/api/account/password', {
       currentPassword: PASSWORD,
       newPassword: 'a brand new one',
     });
@@ -84,7 +88,7 @@ describe('the account page', () => {
 
   it('refuses a weak new password, saying why', async () => {
     const { browser } = await signInToWebApp(app, 'ada');
-    const weak = await postJson(browser, '/api/account/password', {
+    const weak = await postAndRead(browser, '/api/account/password', {
       currentPassword: PASSWORD,
       newPassword: 'password1',
     });
@@ -95,7 +99,7 @@ describe('the account page', () => {
 
   it('signs out everywhere', async () => {
     const { browser } = await signInToWebApp(app, 'ada');
-    const out = await postJson(browser, '/api/account/sign-out-everywhere', {});
+    const out = await postAndRead(browser, '/api/account/sign-out-everywhere', {});
     expect(out.body.redirectTo).toBe('/admin/login?return=%2Faccount');
     expect(app.services.sessions.sessionsOf(adaId)).toEqual([]);
     expect((await browser.send('/api/account')).status).toBe(HttpStatus.Unauthorized);
@@ -139,18 +143,18 @@ describe('password links', () => {
     expect(url.origin + url.pathname).toBe(`${app.base}/set-password`);
     const token = new URLSearchParams(url.hash.slice(1)).get('token');
     const visitor = createBrowser(app.base);
-    expect((await postJson(visitor, '/api/password-link', { token })).body).toEqual({
+    expect((await postAndRead(visitor, '/api/password-link', { token })).body).toEqual({
       username: 'bob',
       isInvite: true,
     });
-    expect((await postJson(visitor, '/api/password-link/set', { token, password: 'x' })).status).toBe(
+    expect((await postAndRead(visitor, '/api/password-link/set', { token, password: 'x' })).status).toBe(
       HttpStatus.BadRequest,
     );
-    const set = await postJson(visitor, '/api/password-link/set', { token, password: 'bob’s own password' });
+    const set = await postAndRead(visitor, '/api/password-link/set', { token, password: 'bob’s own password' });
     expect(set.body.redirectTo).toBe('/admin/login?return=%2Faccount');
     expect((await signInToWebApp(app, 'bob', 'bob’s own password')).landing).toBe('/account');
-    expect((await postJson(visitor, '/api/password-link', { token })).status).toBe(HttpStatus.NotFound);
-    expect((await postJson(visitor, '/api/password-link/set', { token, password: 'again and again' })).status).toBe(
+    expect((await postAndRead(visitor, '/api/password-link', { token })).status).toBe(HttpStatus.NotFound);
+    expect((await postAndRead(visitor, '/api/password-link/set', { token, password: 'again and again' })).status).toBe(
       HttpStatus.NotFound,
     );
   });
@@ -160,10 +164,10 @@ describe('password links', () => {
     const link = await adminGql(admin, 'mutation($id: ID!) { createPasswordLink(id: $id) { url } }', { id });
     const token = new URLSearchParams(new URL(link.data.createPasswordLink.url).hash.slice(1)).get('token');
     const visitor = createBrowser(app.base);
-    const weak = await postJson(visitor, '/api/password-link/set', { token, password: 'password1' });
+    const weak = await postAndRead(visitor, '/api/password-link/set', { token, password: 'password1' });
     expect(weak.status).toBe(HttpStatus.BadRequest);
     expect(weak.body.error).toMatch(/too easy to guess/);
-    expect((await postJson(visitor, '/api/password-link/set', { token, password: PASSWORD })).status).toBe(
+    expect((await postAndRead(visitor, '/api/password-link/set', { token, password: PASSWORD })).status).toBe(
       HttpStatus.Ok,
     );
   });
@@ -182,13 +186,13 @@ describe('password links', () => {
     const first = tokenOf(await adminGql(admin, MAKE, { id }));
     const second = tokenOf(await adminGql(admin, MAKE, { id }));
     const visitor = createBrowser(app.base);
-    expect((await postJson(visitor, '/api/password-link', { token: first })).status).toBe(HttpStatus.NotFound);
-    expect((await postJson(visitor, '/api/password-link', { token: second })).body.isInvite).toBe(false);
+    expect((await postAndRead(visitor, '/api/password-link', { token: first })).status).toBe(HttpStatus.NotFound);
+    expect((await postAndRead(visitor, '/api/password-link', { token: second })).body.isInvite).toBe(false);
     await adminGql(admin, 'mutation($id: ID!, $p: String!) { setUserPassword(id: $id, password: $p) { id } }', {
       id,
       p: 'set by the admin',
     });
-    expect((await postJson(visitor, '/api/password-link', { token: second })).status).toBe(HttpStatus.NotFound);
+    expect((await postAndRead(visitor, '/api/password-link', { token: second })).status).toBe(HttpStatus.NotFound);
   });
 });
 
@@ -334,7 +338,7 @@ describe('breached passwords', () => {
   it('refuses a password Have I Been Pwned knows, once the operator turns the check on', async () => {
     const { id } = await app.services.users.create({ username: 'dee', email: '', name: '', groups: [] });
     const { token } = await app.services.passwordLinks.issue(id);
-    const set = await postJson(createBrowser(app.base), '/api/password-link/set', { token, password: PASSWORD });
+    const set = await postAndRead(createBrowser(app.base), '/api/password-link/set', { token, password: PASSWORD });
     expect(set.status).toBe(HttpStatus.BadRequest);
     expect(set.body.error).toMatch(/data breach/);
     expect(asked).toHaveLength(1);
