@@ -4,7 +4,7 @@ import { HttpStatus } from '../../server/core/wire.ts';
 import { AuditType } from '../../server/store/audit.ts';
 import { ClientAuthMethod, type OidcClient } from '../../server/store/clients.ts';
 import { startTestApp, type TestApp } from '../helpers.ts';
-import { createSoftwareAuthenticator } from './authenticator.ts';
+import { createSoftwareAuthenticator, withTotp } from './authenticator.ts';
 import {
   adminGql,
   type Browser,
@@ -102,17 +102,6 @@ async function enrolTotp(browser: Browser): Promise<{ secret: string; recoveryCo
   const confirmed = await postJson(browser, '/api/account/totp/confirm', { code });
   expect(confirmed.status).toBe(HttpStatus.Ok);
   return { secret, recoveryCodes: (await confirmed.json()).recoveryCodes };
-}
-
-/**
- * Answers with the current authenticator code.
- *
- * @param secret - The app's secret.
- * @returns The answer.
- */
-function withTotp(secret: string): SecondFactorAnswer {
-  return (uid, browser) =>
-    postJson(browser, `/interaction/${uid}/second-factor`, { code: totpCode(secret, totpStepAt(Date.now())) });
 }
 
 describe('two-factor sign-in', () => {
