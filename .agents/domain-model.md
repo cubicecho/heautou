@@ -77,7 +77,7 @@ WAITING --expires | cancelled by an admin--> gone
 ```
 
 Owner: `server/store/pairings.ts`, `server/oidc/pairing.ts`; the view's state is
-`PAIRING_WAITING`/`PAIRING_PAIRED` in `server/graphql/resolvers.ts`.
+`PAIRING_WAITING`/`PAIRING_PAIRED` in `server/graphql/pairing.ts`.
 
 ### Keys
 
