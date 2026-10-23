@@ -1,3 +1,10 @@
+# [1.19.0](https://github.com/cubicecho/heautou/compare/v1.18.0...v1.19.0) (2026-10-23)
+
+
+### Features
+
+* **db:** keep the data in PGlite or Postgres, and generate the GraphQL reads ([f777117](https://github.com/cubicecho/heautou/commit/f777117e43c61898ce655382c6f7d836b136a956))
+
 # [1.18.0](https://github.com/cubicecho/heautou/compare/v1.17.0...v1.18.0) (2026-10-21)
 
 
