@@ -18,7 +18,7 @@ export type Branding = z.infer<typeof brandingSchema>;
 export function useBranding() {
   return useQuery({
     queryKey: QUERY_KEYS.branding,
-    queryFn: async () => jsonReply(await fetch('/admin/branding'), brandingSchema),
+    queryFn: async () => jsonReply(await fetch('/api/branding'), brandingSchema),
     staleTime: Number.POSITIVE_INFINITY,
   });
 }

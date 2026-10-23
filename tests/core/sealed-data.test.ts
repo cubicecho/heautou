@@ -14,8 +14,8 @@ import { clients, documents, totpFactors, upstreams } from '../../server/db/sche
 import { ClientAuthMethod } from '../../server/store/clients.ts';
 import { UpstreamKind } from '../../server/store/upstreams.ts';
 import { createTestDatabase } from '../db.ts';
-import { newSecretKey, newSecretKeys, startTestApp } from '../helpers.ts';
-import { PASSWORD, payloadOf, REDIRECT_URI, signInForTokens } from '../oidc/browser.ts';
+import { createTestUser, newSecretKey, newSecretKeys, startTestApp } from '../helpers.ts';
+import { payloadOf, REDIRECT_URI, signInForTokens } from '../oidc/browser.ts';
 
 const ISSUER = 'http://127.0.0.1:1/oidc';
 const TOTP_SECRET = 'JBSWY3DPEHPK3PXP';
@@ -175,7 +175,7 @@ describe('secrets at rest', () => {
   it('signs a user in with sealed keys and secrets, and writes new secrets sealed', async () => {
     const app = await startTestApp({ secretKeys: newSecretKeys() });
     try {
-      await app.services.users.create({ username: 'ada', password: PASSWORD, email: '', name: '', groups: [] });
+      await createTestUser(app, { username: 'ada' });
       const client = await app.services.clients.rotateSecret((await addClient(app.services)).clientId);
       await app.services.keys.rotate();
       app.services.host.refresh();

@@ -1,8 +1,15 @@
-import { COOKIE, FORMER_SESSION_COOKIE } from '../../server/account/session.ts';
 import { ADMIN_DEFAULTS } from '../../server/core/defaults.ts';
 import { HttpStatus, MS_PER_SECOND } from '../../server/core/wire.ts';
-import { startTestApp, type TestApp } from '../helpers.ts';
-import { adminGql, type Browser, createBrowser, PASSWORD, signIn, signInAsAdmin } from '../oidc/browser.ts';
+import { createTestUser, startTestApp, type TestApp } from '../helpers.ts';
+import {
+  adminGql,
+  type Browser,
+  createBrowser,
+  PASSWORD,
+  signIn,
+  signInAsAdmin,
+  signInToWebApp,
+} from '../oidc/browser.ts';
 
 const VIEWER = '{ viewer { username } }';
 
@@ -62,11 +69,9 @@ describe('admin sign-in', () => {
   });
 
   it('sends a user outside the admin group to their account, not the admin API', async () => {
-    await app.services.users.create({ username: 'ada', password: PASSWORD, email: '', name: '', groups: [] });
-    const browser = createBrowser(app.base);
-    const callback = await signIn(app, '/admin/login', 'ada', PASSWORD, browser, `${app.base}/admin/callback`);
-    const res = await browser.send(callback.pathname + callback.search);
-    expect(res.headers.get('location')).toBe('/account');
+    await createTestUser(app, { username: 'ada' });
+    const { browser, landing } = await signInToWebApp(app, 'ada');
+    expect(landing).toBe('/account');
     const gql = await browser.send('/graphql', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -78,13 +83,7 @@ describe('admin sign-in', () => {
 
   it('takes the admin API from an admin taken out of the group', async () => {
     const { users } = app.services;
-    const bob = await users.create({
-      username: 'bob',
-      password: PASSWORD,
-      email: '',
-      name: '',
-      groups: [ADMIN_DEFAULTS.group],
-    });
+    const bob = await createTestUser(app, { username: 'bob', groups: [ADMIN_DEFAULTS.group] });
     const browser = await signInAsAdmin(app, 'bob');
     expect((await adminGql(browser, VIEWER)).data.viewer.username).toBe('bob');
     await users.update(bob.id, { username: 'bob', email: '', name: '', groups: [] });
@@ -131,54 +130,6 @@ describe('admin sign-in', () => {
     expect(
       (await browser.send('/graphql', { method: 'POST', headers: { 'content-type': 'application/json' } })).status,
     ).toBe(HttpStatus.Unauthorized);
-  });
-
-  describe('the session cookie under its former name', () => {
-    /**
-     * Starts a session for the signed-in admin, as a browser from before the rename holds it.
-     *
-     * @returns The session's token.
-     */
-    const formerSession = async (): Promise<string> => {
-      const root = app.services.users.list().find((user) => user.username === 'root');
-      return app.services.webSessions.create(root?.id ?? '');
-    };
-    const send = (path: string, cookie: string, body?: string) =>
-      fetch(`${app.base}${path}`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', cookie },
-        body,
-      });
-
-    it('still signs the browser in, and is swapped for the new cookie', async () => {
-      const token = await formerSession();
-      const res = await send('/graphql', `${FORMER_SESSION_COOKIE}=${token}`, JSON.stringify({ query: VIEWER }));
-      expect((await res.json()).data.viewer).toEqual({ username: 'root' });
-      const cookies = res.headers.getSetCookie();
-      expect(cookies).toContainEqual(expect.stringMatching(new RegExp(`^${COOKIE.session}=${token};.*Max-Age=`)));
-      expect(cookies).toContainEqual(expect.stringMatching(new RegExp(`^${FORMER_SESSION_COOKIE}=;`)));
-
-      const moved = await send('/graphql', `${COOKIE.session}=${token}`, JSON.stringify({ query: VIEWER }));
-      expect((await moved.json()).data.viewer).toEqual({ username: 'root' });
-      expect(moved.headers.getSetCookie()).toEqual([]);
-    });
-
-    it('is only cleared once its session has ended', async () => {
-      const res = await send('/graphql', `${FORMER_SESSION_COOKIE}=ended`, JSON.stringify({ query: VIEWER }));
-      expect(res.status).toBe(HttpStatus.Unauthorized);
-      expect(res.headers.getSetCookie()).toEqual([expect.stringMatching(new RegExp(`^${FORMER_SESSION_COOKIE}=;`))]);
-    });
-
-    it('signs out, clearing both cookies', async () => {
-      const token = await formerSession();
-      const res = await send('/admin/logout', `${FORMER_SESSION_COOKIE}=${token}`);
-      expect(res.status).toBe(HttpStatus.Ok);
-      const cleared = res.headers.getSetCookie().filter((line) => /^[^=]+=;/.test(line));
-      expect(cleared.map((line) => line.slice(0, line.indexOf('=')))).toEqual(
-        expect.arrayContaining([COOKIE.session, FORMER_SESSION_COOKIE]),
-      );
-      expect(app.services.webSessions.find(token)).toBeNull();
-    });
   });
 
   it('keeps the admin client out of the client list and reserves its ID', async () => {
@@ -238,7 +189,7 @@ describe('first admin setup', () => {
 
   it('makes an existing user an admin only with their password', async () => {
     const { token } = app.services.setup;
-    await app.services.users.create({ username: 'ada', password: PASSWORD, email: '', name: '', groups: ['family'] });
+    await createTestUser(app, { username: 'ada', groups: ['family'] });
     const wrong = await postSetup({ token, username: 'ada', password: 'wrong horse' });
     expect(wrong.status).toBe(HttpStatus.Unauthorized);
     const right = await postSetup({ token, username: 'ada', password: PASSWORD });
@@ -287,7 +238,7 @@ describe('first admin setup without a token', () => {
   });
 
   it('never promotes an existing user without the token', async () => {
-    await app.services.users.create({ username: 'ada', password: PASSWORD, email: '', name: '', groups: [] });
+    await createTestUser(app, { username: 'ada' });
     const res = await postSetup({ username: 'ada', password: PASSWORD });
     expect(res.status).toBe(HttpStatus.Forbidden);
     expect(app.services.users.hasAdmin()).toBe(false);

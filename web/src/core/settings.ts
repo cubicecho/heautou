@@ -79,6 +79,6 @@ const passwordStrengthSchema = z.object({ minScore: z.number() });
 export function usePasswordStrengthRule() {
   return useQuery({
     queryKey: QUERY_KEYS.passwordStrength,
-    queryFn: async () => jsonReply(await fetch('/admin/password-rules'), passwordStrengthSchema),
+    queryFn: async () => jsonReply(await fetch('/api/password-rules'), passwordStrengthSchema),
   });
 }

@@ -221,9 +221,8 @@ Owner: `server/store/audit.ts`.
   after boot, then with the token the boot log prints. Owner: `server/admin/setup.ts`.
 - **Web session:** a browser signed in to heautou's own web app: the admin UI for an admin,
   the account page for anyone. Owner: `server/store/web-sessions.ts` (`services.webSessions`).
-  Its rows are in the `web_sessions` table and its cookie is `heautou_session`; the former
-  `heautou_admin` cookie is still read and swapped until the release after the rename
-  (`FORMER_SESSION_COOKIE`). Its document is `web-sessions`, never in a backup.
+  Its rows are in the `web_sessions` table and its cookie is `heautou_session`. Its document
+  is `web-sessions`, never in a backup.
 - **Account page:** where any user changes their own profile, password, second factors,
   picture, sessions and linked accounts. Owner: `server/account/` (`routes.ts`,
   `factors.ts`; the picture routes are in `server/admin/pictures.ts`),

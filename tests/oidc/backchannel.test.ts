@@ -3,17 +3,16 @@ import { createServer, type Server } from 'node:http';
 import { HttpStatus } from '../../server/core/wire.ts';
 import { AuditType } from '../../server/store/audit.ts';
 import { ClientAuthMethod, type OidcClient } from '../../server/store/clients.ts';
-import { portOf, startTestApp, type TestApp } from '../helpers.ts';
+import { createTestUser, portOf, startTestApp, type TestApp } from '../helpers.ts';
 import {
   adminGql,
   type Browser,
   createBrowser,
-  PASSWORD,
   payloadOf,
   REDIRECT_URI,
-  signIn,
   signInAsAdmin,
   signInForTokens,
+  signInToWebApp,
 } from './browser.ts';
 
 /** The event a logout token carries, as OpenID Connect Back-Channel Logout 1.0 names it. */
@@ -110,8 +109,7 @@ describe('back-channel logout', () => {
     app = await startTestApp();
     standIn = await startStandInApp();
     admin = await signInAsAdmin(app);
-    adaId = (await app.services.users.create({ username: 'ada', password: PASSWORD, email: '', name: '', groups: [] }))
-      .id;
+    adaId = (await createTestUser(app, { username: 'ada' })).id;
     client = await app.services.clients.create({
       name: 'Notes',
       authMethod: ClientAuthMethod.SecretBasic,
@@ -202,9 +200,7 @@ describe('back-channel logout', () => {
   });
 
   it('tells the app when the user signs out everywhere from their account page', async () => {
-    const browser = createBrowser(app.base);
-    const callback = await signIn(app, '/admin/login', 'ada', PASSWORD, browser, `${app.base}/admin/callback`);
-    await browser.send(callback.pathname + callback.search);
+    const { browser } = await signInToWebApp(app, 'ada');
     const sid = await signInAda(client, browser);
     const res = await browser.send('/api/account/sign-out-everywhere', {
       method: 'POST',

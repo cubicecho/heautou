@@ -1,18 +1,18 @@
 import { FORWARD_AUTH_DEFAULTS } from '../../server/core/defaults.ts';
-import { newTotpSecret, totpCode, totpStepAt } from '../../server/core/totp.ts';
+import { newTotpSecret, totpStepAt } from '../../server/core/totp.ts';
 import { HttpStatus } from '../../server/core/wire.ts';
 import { PROXY_COOKIE } from '../../server/forward-auth/client.ts';
 import { REMOTE_HEADER } from '../../server/forward-auth/routes.ts';
 import { PAGE_PARAM, WEB_PAGE } from '../../server/oidc/pages.ts';
 import { AuditType } from '../../server/store/audit.ts';
 import type { ProtectedSite } from '../../server/store/protected-sites.ts';
-import { startTestApp, type TestApp } from '../helpers.ts';
+import { createTestUser, startTestApp, type TestApp } from '../helpers.ts';
+import { withTotp } from '../oidc/authenticator.ts';
 import {
   adminGql,
   type Browser,
   createBrowser,
   PASSWORD,
-  postJson,
   type SecondFactorAnswer,
   signIn,
   signInAsAdmin,
@@ -69,17 +69,6 @@ async function signInToSites(
   return res.headers.get('location');
 }
 
-/**
- * Answers with the current authenticator code.
- *
- * @param secret - The app's secret.
- * @returns The answer.
- */
-function withTotp(secret: string): SecondFactorAnswer {
-  return (uid, browser) =>
-    postJson(browser, `/interaction/${uid}/second-factor`, { code: totpCode(secret, totpStepAt(Date.now())) });
-}
-
 describe('forward auth', () => {
   let app: TestApp;
   let site: ProtectedSite;
@@ -87,16 +76,15 @@ describe('forward auth', () => {
 
   beforeEach(async () => {
     app = await startTestApp();
-    const { users, protectedSites } = app.services;
-    const ada = await users.create({
+    const { protectedSites } = app.services;
+    const ada = await createTestUser(app, {
       username: 'ada',
-      password: PASSWORD,
       email: 'ada@home.lan',
       name: 'Ada Lovelace',
       groups: ['media', 'staff'],
     });
     adaId = ada.id;
-    await users.create({ username: 'bob', password: PASSWORD, email: '', name: '', groups: [] });
+    await createTestUser(app, { username: 'bob' });
     site = await protectedSites.create({ name: 'Sonarr', host: SITE_HOST, allowedGroups: ['media'] });
   });
 

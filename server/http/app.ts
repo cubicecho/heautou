@@ -4,7 +4,7 @@ import express, { type Express, type Request, type Response } from 'express';
 import { createYoga } from 'graphql-yoga';
 import { createFactorRouter } from '../account/factors.ts';
 import { createAccountRouter } from '../account/routes.ts';
-import { moveFormerSessionCookie, viewerOf } from '../account/session.ts';
+import { viewerOf } from '../account/session.ts';
 import { adminUrls } from '../admin/admin-client.ts';
 import { createBackupRouter } from '../admin/backup.ts';
 import { createPictureRouter } from '../admin/pictures.ts';
@@ -77,7 +77,6 @@ export function createApp(services: Services): Express {
   app.use(securityHeaders());
   app.get(HEALTH_ENDPOINT, healthHandler(services.db));
   app.use(LIMITED_ROUTES, limitRequests());
-  app.use(moveFormerSessionCookie(services, services.issuer));
   app.use(
     GRAPHQL_ENDPOINT,
     sameOriginJson(origin, { allowHtmlGet: isDev }),

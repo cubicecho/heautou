@@ -5,7 +5,7 @@ import { DOCUMENT_NAMES } from '../../server/db/documents.ts';
 import { documents } from '../../server/db/schema.ts';
 import { AuditType } from '../../server/store/audit.ts';
 import { BACKUP_LAYOUT, BackupErrorCode, readBackup } from '../../server/store/backup.ts';
-import { newSecretKeys, startTestApp, type TestApp } from '../helpers.ts';
+import { createTestUser, newSecretKeys, startTestApp, type TestApp } from '../helpers.ts';
 import { adminGql, type Browser, PASSWORD, signInAsAdmin } from '../oidc/browser.ts';
 import { createFakeTransport, type FakeTransport, TEST_SERVER, waitFor } from './fake-transport.ts';
 
@@ -48,12 +48,7 @@ describe('email', () => {
       name: 'Root',
       groups: ['heautou-admin'],
     });
-    const ada = await app.services.users.create({
-      username: 'ada',
-      email: 'ada@example.home',
-      name: 'Ada',
-      groups: [],
-    });
+    const ada = await createTestUser(app, { username: 'ada', email: 'ada@example.home', name: 'Ada', password: '' });
     adaId = ada.id;
   });
 
@@ -165,7 +160,7 @@ describe('email', () => {
 
   it('refuses a user with no address', async () => {
     await adminGql(admin, SET_SERVER, { input: TEST_SERVER });
-    const bob = await app.services.users.create({ username: 'bob', email: '', name: '', groups: [] });
+    const bob = await createTestUser(app, { username: 'bob', password: '' });
     const refused = await adminGql(admin, EMAIL_LINK, { id: bob.id });
     expect(refused.errors[0].message).toMatch(/no email address/);
   });
@@ -173,9 +168,8 @@ describe('email', () => {
   it('sends the notifications that are turned on, and only those', async () => {
     await adminGql(admin, SET_SERVER, { input: TEST_SERVER });
     const setPassword = 'mutation ($id: ID!, $p: String!) { setUserPassword(id: $id, password: $p) { id } }';
+    // Sends nothing: notices are sent in the order of their entries, so the one waited for below would follow it.
     await adminGql(admin, setPassword, { id: adaId, p: NEW_PASSWORD });
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(fake.sent).toEqual([]);
 
     const on = await adminGql(admin, SET_OPTIONS, { on: true });
     expect(on.data.setMailOptions).toEqual({
@@ -184,22 +178,20 @@ describe('email', () => {
       forgotPassword: false,
     });
     await adminGql(admin, setPassword, { id: adaId, p: PASSWORD });
-    await waitFor(() => fake.sent.length === 1);
+    await waitFor(() => fake.sent.length >= 1);
+    expect(fake.sent).toHaveLength(1);
     expect(fake.sent[0]).toMatchObject({ to: 'ada@example.home', subject: 'Your Heautou password was changed' });
 
     await adminGql(admin, 'mutation ($id: ID!) { resetSecondFactors(id: $id) { id } }', { id: adaId });
     await waitFor(() => fake.sent.length === 2);
     expect(fake.sent[1]?.subject).toMatch(/^Every second factor .* was removed from your Heautou account$/);
 
-    // A factor added sends nothing: that option is still off.
-    app.services.audit.record({
-      type: AuditType.PasskeyAdded,
-      actor: { userId: adaId, username: 'ada' },
-      ip: null,
-      detail: { name: 'Laptop' },
-    });
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(fake.sent).toHaveLength(2);
+    // A factor added sends nothing: that option is still off. The removal after it does, and is the only one.
+    const actor = { userId: adaId, username: 'ada' };
+    app.services.audit.record({ type: AuditType.PasskeyAdded, actor, ip: null, detail: { name: 'Laptop' } });
+    app.services.audit.record({ type: AuditType.PasskeyRemoved, actor, ip: null, detail: { name: 'Laptop' } });
+    await waitFor(() => fake.sent.length >= 3);
+    expect(fake.sent.slice(2).map((mail) => mail.subject)).toEqual([expect.stringMatching(/Laptop.* was removed/)]);
   });
 
   it('lets the environment set the server, and locks it under Settings', async () => {
