@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { gunzipSync, gzipSync } from 'node:zlib';
 import { BACKUP_DEFAULTS } from '../../server/core/defaults.ts';
-import { createSecretBox, type SecretKeys } from '../../server/core/secret-box.ts';
+import { createSecretBox, isSealed, type SecretKeys } from '../../server/core/secret-box.ts';
 import { openServices, type Services } from '../../server/core/services.ts';
 import type { OpenDatabase } from '../../server/db/client.ts';
 import { readDataDirectory } from '../../server/db/import.ts';
@@ -148,9 +148,9 @@ describe('backups', () => {
     expect(Object.keys(without.files)).not.toContain('web-sessions.json');
     expect(Object.keys(without.files)).not.toContain('proxy-sessions.json');
     expect(Object.keys(without.files).some((name) => name.startsWith('oidc/'))).toBe(false);
-    expect(without.files['clients.json']).toContain('enc:v1:');
+    expect(isSealed(JSON.parse(without.files['clients.json'] ?? '[]')[0]?.clientSecret ?? '')).toBe(true);
     expect(without.files['clients.json']).not.toContain(client.clientSecret ?? 'no secret');
-    expect(without.files['keys.json']).toContain('enc:v1:');
+    expect(isSealed(JSON.parse(without.files['keys.json'] ?? '{}').jwks?.[0]?.d ?? '')).toBe(true);
     expect(without.files['audit.jsonl']).toContain(AuditType.UserCreated);
 
     const withSessions = unzip(await services.backup.create({ includeSessions: true }));

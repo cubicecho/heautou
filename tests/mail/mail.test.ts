@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm';
-import { SecretKeyError } from '../../server/core/secret-box.ts';
+import { isSealed, SecretKeyError } from '../../server/core/secret-box.ts';
 import { openServices } from '../../server/core/services.ts';
 import { DOCUMENT_NAMES } from '../../server/db/documents.ts';
 import { documents } from '../../server/db/schema.ts';
@@ -85,7 +85,7 @@ describe('email', () => {
     await app.services.settled();
     const stored = await storedMail(app);
     expect(JSON.stringify(stored)).not.toContain(TEST_SERVER.password);
-    expect(stored?.server?.password).toMatch(/^enc:v1:/);
+    expect(isSealed(stored?.server?.password ?? '')).toBe(true);
     expect(JSON.stringify(await adminGql(admin, MAIL))).not.toContain(TEST_SERVER.password);
 
     // A blank password keeps the saved one.

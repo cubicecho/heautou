@@ -1,8 +1,9 @@
 import { eq } from 'drizzle-orm';
-import { SecretKeyErrorCode, type SecretKeys } from '../../server/core/secret-box.ts';
+import { isSealed, SecretKeyErrorCode, type SecretKeys } from '../../server/core/secret-box.ts';
 import { openServices, type Services } from '../../server/core/services.ts';
 import type { Database, OpenDatabase } from '../../server/db/client.ts';
-import { DOCUMENT_NAMES } from '../../server/db/documents.ts';
+import { createWriteQueue, openDocument } from '../../server/db/document.ts';
+import { DOCUMENT_NAMES, KEYS_DOCUMENT } from '../../server/db/documents.ts';
 import { clients, documents } from '../../server/db/schema.ts';
 import { ClientAuthMethod } from '../../server/store/clients.ts';
 import { createTestDatabase } from '../db.ts';
@@ -10,8 +11,6 @@ import { newSecretKey, newSecretKeys, startTestApp } from '../helpers.ts';
 import { PASSWORD, payloadOf, REDIRECT_URI, signInForTokens } from '../oidc/browser.ts';
 
 const ISSUER = 'http://127.0.0.1:1/oidc';
-/** What every sealed value starts with. */
-const SEALED = 'enc:v1:';
 
 /**
  * Opens the services on a database, as a boot does, and waits for what the boot writes.
@@ -38,6 +37,23 @@ async function storedSecrets(db: Database): Promise<string> {
   const clientRows = await db.select().from(clients);
   const keyRows = await db.select().from(documents).where(eq(documents.name, DOCUMENT_NAMES.keys));
   return JSON.stringify({ clientRows, keyRows });
+}
+
+/**
+ * Reads the secrets the clients and keys hold, as the database has them: client secrets, private halves and cookie
+ * keys.
+ *
+ * @param db - The database.
+ * @returns The values, sealed or plain.
+ */
+async function storedSecretValues(db: Database): Promise<string[]> {
+  const clientRows = await db.select().from(clients);
+  const keys = (await openDocument({ db, queue: createWriteQueue() }, KEYS_DOCUMENT)).read();
+  return [
+    ...clientRows.map((row) => row.clientSecret ?? ''),
+    ...(keys?.jwks.map((jwk) => jwk.d ?? '') ?? []),
+    ...(keys?.cookieKeys ?? []),
+  ];
 }
 
 /**
@@ -73,16 +89,14 @@ describe('secrets at rest', () => {
     const privateHalf = plain.keys.current().jwks[0]?.d ?? '';
     const cookieKey = plain.keys.current().cookieKeys[0] ?? '';
     expect(await storedSecrets(db)).toContain(secret);
-    expect(await storedSecrets(db)).not.toContain(SEALED);
+    expect((await storedSecretValues(db)).some(isSealed)).toBe(false);
 
     const sealed = await boot(db, newSecretKey());
     const stored = await storedSecrets(db);
     for (const value of [secret, privateHalf, cookieKey]) {
       expect(stored).not.toContain(value);
     }
-    expect(stored).toContain(SEALED);
-    const [row] = await db.select().from(clients);
-    expect(row?.clientSecret).toMatch(/^enc:v1:/);
+    expect((await storedSecretValues(db)).every(isSealed)).toBe(true);
     expect(sealed.clients.list()[0]?.clientSecret).toBe(secret);
     expect(sealed.keys.current().jwks[0]?.d).toBe(privateHalf);
     expect(sealed.keys.current().cookieKeys[0]).toBe(cookieKey);
