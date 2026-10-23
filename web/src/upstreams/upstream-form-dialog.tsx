@@ -15,6 +15,7 @@ import { useGroupOptions } from '@/core/groups';
 import { commaListOf, linesOf, pairsOf } from '@/core/lists';
 import { SaveFailure } from '@/core/save-failure';
 import { useCreateUpstream, useUpdateUpstream, useUpstreamRedirectUri } from '@/core/upstreams';
+import { UPSTREAM_KIND_OPTIONS, UPSTREAM_KINDS, upstreamKindOf } from '@/upstreams/kinds';
 import {
   OTHER_UPSTREAM,
   UPSTREAM_PRESET_OPTIONS,
@@ -23,10 +24,6 @@ import {
   upstreamPresetById,
 } from '@/upstreams/presets';
 
-const KIND_OPTIONS: { value: UpstreamKind; label: string }[] = [
-  { value: 'OIDC', label: 'OpenID Connect (Google, Microsoft, GitLab, Authentik…)' },
-  { value: 'GITHUB', label: 'GitHub' },
-];
 const UNKNOWN_OPTIONS: { value: UnknownIdentity; label: string }[] = [
   { value: 'REFUSE', label: 'Turn them away until a user links the account' },
   { value: 'CREATE', label: 'Make a user for them' },
@@ -36,16 +33,6 @@ const MAPPING_ROWS = 3;
 const ADVANCED_FIELDS = ['createDomains', 'groupsClaim', 'groupMappings'] as const;
 /** What separates the upstream group from the local one in a mapping line. */
 const MAPPING_SEPARATOR = '=';
-
-/**
- * Reads a kind from the select.
- *
- * @param value - The select's value.
- * @returns The kind.
- */
-function kindOf(value: string): UpstreamKind {
-  return value === 'GITHUB' ? 'GITHUB' : 'OIDC';
-}
 
 /**
  * Reads the mapping lines, `upstream = local` each.
@@ -114,13 +101,13 @@ export function UpstreamFormDialog({ upstream, open, onOpenChange }: UpstreamFor
       groupMappings: upstream?.groupMappings.map((each) => `${each.upstream} = ${each.local}`).join('\n') ?? '',
     },
     onSubmit: async ({ value }) => {
-      const kind = kindOf(value.kind);
+      const kind = upstreamKindOf(value.kind);
       const vars: { id: string; input: UpstreamInput } = {
         id: value.id.trim(),
         input: {
           name: value.name.trim(),
           kind,
-          issuer: kind === 'OIDC' ? value.issuer.trim() : null,
+          issuer: UPSTREAM_KINDS[kind].hasIssuer ? value.issuer.trim() : null,
           clientId: value.clientId.trim(),
           clientSecret: value.clientSecret.trim() || null,
           scopes: value.scopes.split(/\s+/).filter((scope) => scope !== ''),
@@ -167,7 +154,7 @@ export function UpstreamFormDialog({ upstream, open, onOpenChange }: UpstreamFor
       contentSlot={
         <FormElement onSubmit={() => form.handleSubmit()} className="grid gap-4">
           {isEdit ? (
-            <SelectField form={form} name="kind" label="Kind" options={KIND_OPTIONS} />
+            <SelectField form={form} name="kind" label="Kind" options={UPSTREAM_KIND_OPTIONS} />
           ) : (
             <SelectField
               form={form}
@@ -205,7 +192,7 @@ export function UpstreamFormDialog({ upstream, open, onOpenChange }: UpstreamFor
             selector={(state) => ({
               id: state.values.id.trim(),
               presetId: state.values.preset,
-              kind: kindOf(state.values.kind),
+              kind: upstreamKindOf(state.values.kind),
             })}
           >
             {({ id, presetId, kind }) => (
@@ -224,12 +211,12 @@ export function UpstreamFormDialog({ upstream, open, onOpenChange }: UpstreamFor
               <div className="grid gap-4">
                 <form.Subscribe
                   selector={(state) => ({
-                    kind: kindOf(state.values.kind),
+                    kind: upstreamKindOf(state.values.kind),
                     issuerExample: upstreamPresetById(state.values.preset).issuerExample,
                   })}
                 >
                   {({ kind, issuerExample }) =>
-                    kind === 'OIDC' ? (
+                    UPSTREAM_KINDS[kind].hasIssuer ? (
                       <InputField
                         form={form}
                         name="issuer"
@@ -239,7 +226,8 @@ export function UpstreamFormDialog({ upstream, open, onOpenChange }: UpstreamFor
                         description="Its discovery document is read from here, under /.well-known/openid-configuration."
                         validators={{
                           onChange: ({ value, fieldApi }) =>
-                            kindOf(fieldApi.form.getFieldValue('kind')) === 'GITHUB' || URL.canParse(value.trim())
+                            UPSTREAM_KINDS[upstreamKindOf(fieldApi.form.getFieldValue('kind'))].hasIssuer === false ||
+                            URL.canParse(value.trim())
                               ? undefined
                               : 'Give the issuer’s https URL.',
                         }}
@@ -413,8 +401,8 @@ function hasAdvanced(upstream: UpstreamFieldsFragment | null): boolean {
  * Finds what step 1 says for a provider being edited, which has no preset.
  *
  * @param kind - The provider's kind.
- * @returns The GitHub preset for GitHub, else the generic one.
+ * @returns The kind's preset: GitHub's, or the generic one.
  */
 function presetOfKind(kind: UpstreamKind): UpstreamPreset {
-  return upstreamPresetById(kind === 'GITHUB' ? 'github' : OTHER_UPSTREAM);
+  return upstreamPresetById(UPSTREAM_KINDS[kind].presetId);
 }

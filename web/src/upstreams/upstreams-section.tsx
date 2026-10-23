@@ -12,6 +12,7 @@ import { Pencil, Plus, Trash2 } from '@/components/ui/icons';
 import { messageOf } from '@/core/errors';
 import { useDeleteUpstream, useUpstreams } from '@/core/upstreams';
 import { joinStats } from '@/lib/format';
+import { UPSTREAM_KINDS } from '@/upstreams/kinds';
 import { UpstreamFormDialog } from '@/upstreams/upstream-form-dialog';
 
 /** Which provider the dialog is open on: none, a new one, or one to edit. */
@@ -55,7 +56,7 @@ export function UpstreamsSection() {
                 key={upstream.id}
                 title={upstream.name}
                 description={joinStats(
-                  upstream.kind === 'GITHUB' ? 'GitHub' : upstream.issuer,
+                  UPSTREAM_KINDS[upstream.kind].summaryOf(upstream.issuer),
                   upstream.unknownIdentity === 'CREATE' ? 'makes users' : 'linked accounts only',
                   upstream.countsAsBothFactors && 'counts as both factors',
                 )}
