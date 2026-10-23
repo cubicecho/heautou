@@ -1,7 +1,7 @@
 import { createHash, generateKeyPairSync, type KeyObject, randomBytes, sign } from 'node:crypto';
 import { isoCBOR } from '@simplewebauthn/server/helpers';
 import { totpCode, totpStepAt } from '../../server/core/totp.ts';
-import { postJson, type SecondFactorAnswer } from './browser.ts';
+import { postJson, type SecondFactorAnswer } from '../browser.ts';
 
 /** WebAuthn authenticator data flags. */
 const FLAG = { userPresent: 0x01, userVerified: 0x04, attestedCredential: 0x40 } as const;

@@ -2,8 +2,8 @@ import { CLIENT_TOKEN_LIFETIME_DEFAULTS, TOKEN_LIFETIME_DEFAULTS } from '../../s
 import { ErrorCode } from '../../server/core/errors.ts';
 import { AuditTargetKind, AuditType } from '../../server/store/audit.ts';
 import { ClientAuthMethod } from '../../server/store/clients.ts';
+import { adminGql, type Browser, signInAsAdmin } from '../browser.ts';
 import { startTestApp, type TestApp } from '../helpers.ts';
-import { adminGql, type Browser, signInAsAdmin } from '../oidc/browser.ts';
 
 const ROTATE = 'mutation ($clientId: ID!) { rotateClientSecret(clientId: $clientId) { clientId clientSecret } }';
 

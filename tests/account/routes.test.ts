@@ -1,7 +1,6 @@
 import { createHash } from 'node:crypto';
 import { HttpStatus } from '../../server/core/wire.ts';
 import { ClientAuthMethod } from '../../server/store/clients.ts';
-import { createTestUser, startTestApp, type TestApp } from '../helpers.ts';
 import {
   adminGql,
   type Browser,
@@ -10,7 +9,8 @@ import {
   postJson,
   signInAsAdmin,
   signInToWebApp,
-} from '../oidc/browser.ts';
+} from '../browser.ts';
+import { createTestUser, startTestApp, type TestApp } from '../helpers.ts';
 
 /** How many hex characters of a password's SHA-1 go to Have I Been Pwned. */
 const HASH_PREFIX_LENGTH = 5;

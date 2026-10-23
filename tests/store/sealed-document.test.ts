@@ -13,9 +13,9 @@ import { DOCUMENT_NAMES, KEYS_DOCUMENT } from '../../server/db/documents.ts';
 import { clients, documents, totpFactors, upstreams } from '../../server/db/schema.ts';
 import { ClientAuthMethod } from '../../server/store/clients.ts';
 import { UpstreamKind } from '../../server/store/upstreams.ts';
+import { payloadOf, REDIRECT_URI, signInForTokens } from '../browser.ts';
 import { createTestDatabase } from '../db.ts';
 import { createTestUser, newSecretKey, newSecretKeys, startTestApp } from '../helpers.ts';
-import { payloadOf, REDIRECT_URI, signInForTokens } from '../oidc/browser.ts';
 
 const ISSUER = 'http://127.0.0.1:1/oidc';
 const TOTP_SECRET = 'JBSWY3DPEHPK3PXP';

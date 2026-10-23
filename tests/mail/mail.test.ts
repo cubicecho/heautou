@@ -5,8 +5,8 @@ import { DOCUMENT_NAMES } from '../../server/db/documents.ts';
 import { documents } from '../../server/db/schema.ts';
 import { AuditType } from '../../server/store/audit.ts';
 import { BACKUP_LAYOUT, BackupErrorCode, readBackup } from '../../server/store/backup.ts';
+import { adminGql, type Browser, PASSWORD, signInAsAdmin } from '../browser.ts';
 import { createTestUser, newSecretKeys, startTestApp, type TestApp } from '../helpers.ts';
-import { adminGql, type Browser, PASSWORD, signInAsAdmin } from '../oidc/browser.ts';
 import { createFakeTransport, type FakeTransport, TEST_SERVER, waitFor } from './fake-transport.ts';
 
 const MAIL = `{ mail { source isConfigured server { host port secure user hasPassword from } forgotPassword

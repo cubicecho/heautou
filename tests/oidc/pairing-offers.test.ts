@@ -5,8 +5,8 @@ import { DEVICE_CODE_GRANT } from '../../server/oidc/adapter.ts';
 import { SETUP_URL_TOKEN } from '../../server/oidc/pairing.ts';
 import { metadataUrlFor } from '../../server/oidc/pairing-offers.ts';
 import { AuditType } from '../../server/store/audit.ts';
+import { adminGql, type Browser, REDIRECT_URI, signInAsAdmin } from '../browser.ts';
 import { startTestApp, type TestApp } from '../helpers.ts';
-import { adminGql, type Browser, REDIRECT_URI, signInAsAdmin } from './browser.ts';
 
 // The second step of pairing: what an app offers besides its sign-in (a device client it registered with the setup
 // URL, an API its protected resource metadata describes), which waits for the operator to turn it on.

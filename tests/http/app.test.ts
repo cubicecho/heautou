@@ -3,8 +3,8 @@ import { ErrorCode } from '../../server/core/errors.ts';
 import { HttpStatus } from '../../server/core/wire.ts';
 import { AuditType } from '../../server/store/audit.ts';
 import { MAX_PASSWORD_SCORE } from '../../server/store/settings.ts';
+import { adminGql, type Browser, signInAsAdmin } from '../browser.ts';
 import { createTestUser, startTestApp, type TestApp } from '../helpers.ts';
-import { adminGql, type Browser, signInAsAdmin } from '../oidc/browser.ts';
 
 const CLIENT_FIELDS = '{ clientId name clientSecret authMethod redirectUris }';
 const CREATE_USER = 'mutation ($input: NewUserInput!) { createUser(input: $input) { id } }';

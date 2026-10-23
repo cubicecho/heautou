@@ -2,8 +2,8 @@ import { HttpStatus } from '../../server/core/wire.ts';
 import { PAGE_PARAM, WEB_PAGE } from '../../server/oidc/pages.ts';
 import { AuditType } from '../../server/store/audit.ts';
 import { ClientAuthMethod, type OidcClient } from '../../server/store/clients.ts';
+import { createBrowser, locationOf, PASSWORD, REDIRECT_URI, signIn } from '../browser.ts';
 import { createTestUser, startTestApp, type TestApp } from '../helpers.ts';
-import { createBrowser, locationOf, PASSWORD, REDIRECT_URI, signIn } from './browser.ts';
 
 /** What a browser sends when it navigates, so the provider answers with a page rather than JSON. */
 const NAVIGATION = { accept: 'text/html' };

@@ -1,8 +1,8 @@
 import { MAIL_DEFAULTS } from '../../server/core/defaults.ts';
 import { HttpStatus } from '../../server/core/wire.ts';
 import { AuditType } from '../../server/store/audit.ts';
+import { type Browser, createBrowser, postJson } from '../browser.ts';
 import { createTestUser, startTestApp, type TestApp } from '../helpers.ts';
-import { type Browser, createBrowser, postJson } from '../oidc/browser.ts';
 import { createFakeTransport, type FakeTransport, TEST_SERVER, waitFor } from './fake-transport.ts';
 
 /** More redirects than reaching the sign-in page takes. */

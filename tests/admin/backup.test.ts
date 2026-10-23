@@ -3,8 +3,8 @@ import { BACKUP_PATH } from '../../server/admin/backup.ts';
 import { HttpStatus } from '../../server/core/wire.ts';
 import { archivePathOf, DOCUMENT_NAMES } from '../../server/db/documents.ts';
 import { AuditType } from '../../server/store/audit.ts';
+import { adminGql, type Browser, createBrowser, PASSWORD, signIn, signInAsAdmin } from '../browser.ts';
 import { newSecretKeys, startTestApp, type TestApp } from '../helpers.ts';
-import { adminGql, type Browser, createBrowser, PASSWORD, signIn, signInAsAdmin } from '../oidc/browser.ts';
 
 const ARCHIVE_TYPE = 'application/gzip';
 

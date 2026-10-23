@@ -1,15 +1,7 @@
 import { ADMIN_DEFAULTS } from '../../server/core/defaults.ts';
 import { HttpStatus, MS_PER_SECOND } from '../../server/core/wire.ts';
+import { adminGql, type Browser, createBrowser, PASSWORD, signIn, signInAsAdmin, signInToWebApp } from '../browser.ts';
 import { createTestUser, startTestApp, type TestApp } from '../helpers.ts';
-import {
-  adminGql,
-  type Browser,
-  createBrowser,
-  PASSWORD,
-  signIn,
-  signInAsAdmin,
-  signInToWebApp,
-} from '../oidc/browser.ts';
 
 const VIEWER = '{ viewer { username } }';
 

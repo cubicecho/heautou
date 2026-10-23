@@ -1,7 +1,7 @@
-import { ADMIN_DEFAULTS } from '../../server/core/defaults.ts';
-import { HttpStatus } from '../../server/core/wire.ts';
-import type { TestApp } from '../helpers.ts';
-import { createTestUser } from '../helpers.ts';
+import { ADMIN_DEFAULTS } from '../server/core/defaults.ts';
+import { HttpStatus } from '../server/core/wire.ts';
+import type { TestApp } from './helpers.ts';
+import { createTestUser } from './helpers.ts';
 
 export const REDIRECT_URI = 'http://app.example/callback';
 export const PASSWORD = 'correct horse';

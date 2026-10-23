@@ -6,8 +6,6 @@ import { REMOTE_HEADER } from '../../server/forward-auth/routes.ts';
 import { PAGE_PARAM, WEB_PAGE } from '../../server/oidc/pages.ts';
 import { AuditType } from '../../server/store/audit.ts';
 import type { ProtectedSite } from '../../server/store/protected-sites.ts';
-import { createTestUser, startTestApp, type TestApp } from '../helpers.ts';
-import { withTotp } from '../oidc/authenticator.ts';
 import {
   adminGql,
   type Browser,
@@ -16,7 +14,9 @@ import {
   type SecondFactorAnswer,
   signIn,
   signInAsAdmin,
-} from '../oidc/browser.ts';
+} from '../browser.ts';
+import { createTestUser, startTestApp, type TestApp } from '../helpers.ts';
+import { withTotp } from '../oidc/authenticator.ts';
 
 const SITE_HOST = 'sonarr.home.lan';
 const SITE_URL = `https://${SITE_HOST}/series?sort=new`;

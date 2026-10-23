@@ -3,9 +3,9 @@ import { type GraphQLSchema, graphql, isInputObjectType, isObjectType } from 'gr
 import { OPERATION_LIMIT_DEFAULTS } from '../../server/core/defaults.ts';
 import { createSchema } from '../../server/graphql/build-schema.ts';
 import { AuditType, openAuditLog } from '../../server/store/audit.ts';
+import { adminGql, signInAsAdmin } from '../browser.ts';
 import { createTestDatabase, createTestStore } from '../db.ts';
 import { startTestApp, type TestApp } from '../helpers.ts';
-import { adminGql, signInAsAdmin } from '../oidc/browser.ts';
 
 /**
  * Lists a type's fields, or an input's.

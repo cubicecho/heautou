@@ -7,8 +7,8 @@ import type { SecretKeys } from '../server/core/secret-box.ts';
 import { openServices, type Services } from '../server/core/services.ts';
 import { openDatabase } from '../server/db/client.ts';
 import { AuditType } from '../server/store/audit.ts';
+import { PASSWORD } from './browser.ts';
 import { newSecretKey, newSecretKeys, tempDir } from './helpers.ts';
-import { PASSWORD } from './oidc/browser.ts';
 
 const ISSUER = 'http://127.0.0.1:1/oidc';
 const CLI = fileURLToPath(new URL('../server/backup.ts', import.meta.url));

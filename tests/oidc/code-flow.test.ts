@@ -1,8 +1,8 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { HttpStatus } from '../../server/core/wire.ts';
 import { ClientAuthMethod } from '../../server/store/clients.ts';
+import { PASSWORD, REDIRECT_URI, signIn } from '../browser.ts';
 import { createTestUser, startTestApp, type TestApp } from '../helpers.ts';
-import { PASSWORD, REDIRECT_URI, signIn } from './browser.ts';
 
 describe('authorization code flow', () => {
   let app: TestApp;

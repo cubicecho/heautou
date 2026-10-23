@@ -3,8 +3,6 @@ import { PROFILE_DEFAULTS } from '../../server/core/defaults.ts';
 import { HttpStatus } from '../../server/core/wire.ts';
 import { AuditType } from '../../server/store/audit.ts';
 import { ClientAuthMethod } from '../../server/store/clients.ts';
-import { createFakeS3, type FakeS3 } from '../fake-s3.ts';
-import { createTestUser, startTestApp, type TestApp } from '../helpers.ts';
 import {
   adminGql,
   type Browser,
@@ -13,7 +11,9 @@ import {
   signInAsAdmin,
   signInForTokens,
   signInToWebApp,
-} from '../oidc/browser.ts';
+} from '../browser.ts';
+import { createFakeS3, type FakeS3 } from '../fake-s3.ts';
+import { createTestUser, startTestApp, type TestApp } from '../helpers.ts';
 
 /**
  * Makes a test image.

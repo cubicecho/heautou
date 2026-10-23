@@ -3,8 +3,6 @@ import { totpCode, totpStepAt } from '../../server/core/totp.ts';
 import { HttpStatus } from '../../server/core/wire.ts';
 import { AuditType } from '../../server/store/audit.ts';
 import { ClientAuthMethod, type OidcClient } from '../../server/store/clients.ts';
-import { createTestUser, startTestApp, type TestApp } from '../helpers.ts';
-import { createSoftwareAuthenticator, withTotp } from './authenticator.ts';
 import {
   adminGql,
   type Browser,
@@ -18,7 +16,9 @@ import {
   signIn,
   signInAsAdmin,
   signInToWebApp,
-} from './browser.ts';
+} from '../browser.ts';
+import { createTestUser, startTestApp, type TestApp } from '../helpers.ts';
+import { createSoftwareAuthenticator, withTotp } from './authenticator.ts';
 
 /**
  * Signs a user in to a client and swaps the code for an ID token.

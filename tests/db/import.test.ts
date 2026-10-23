@@ -8,9 +8,9 @@ import { IMPORTED_DIRECTORY, importDataDirectory, isUnstarted, readDataDirectory
 import { auditEntries, oidcModels, users } from '../../server/db/schema.ts';
 import { AUDIT_FILE, AuditType } from '../../server/store/audit.ts';
 import { BackupErrorCode } from '../../server/store/backup.ts';
+import { adminGql, signInAsAdmin } from '../browser.ts';
 import { createTestDatabase } from '../db.ts';
 import { startTestApp, tempDir } from '../helpers.ts';
-import { adminGql, signInAsAdmin } from '../oidc/browser.ts';
 
 /** A users file as a version before the database wrote it: the claims, disabled and picture fields came later. */
 const OLDER_USERS = [

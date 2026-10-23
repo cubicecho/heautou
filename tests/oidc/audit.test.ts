@@ -2,7 +2,6 @@ import { KEY_DEFAULTS } from '../../server/core/defaults.ts';
 import { HttpStatus } from '../../server/core/wire.ts';
 import { AuditType, actorOf } from '../../server/store/audit.ts';
 import { ClientAuthMethod } from '../../server/store/clients.ts';
-import { createTestUser, startTestApp, type TestApp } from '../helpers.ts';
 import {
   adminGql,
   adminSubscribe,
@@ -14,7 +13,8 @@ import {
   signIn,
   signInAsAdmin,
   signInForTokens,
-} from './browser.ts';
+} from '../browser.ts';
+import { createTestUser, startTestApp, type TestApp } from '../helpers.ts';
 
 /** One day, in milliseconds. */
 const DAY_MS = 86_400_000;

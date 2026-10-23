@@ -3,7 +3,6 @@ import { createServer, type Server } from 'node:http';
 import { HttpStatus } from '../../server/core/wire.ts';
 import { AuditType } from '../../server/store/audit.ts';
 import { ClientAuthMethod, type OidcClient } from '../../server/store/clients.ts';
-import { createTestUser, portOf, startTestApp, type TestApp } from '../helpers.ts';
 import {
   adminGql,
   type Browser,
@@ -13,7 +12,8 @@ import {
   signInAsAdmin,
   signInForTokens,
   signInToWebApp,
-} from './browser.ts';
+} from '../browser.ts';
+import { createTestUser, portOf, startTestApp, type TestApp } from '../helpers.ts';
 
 /** The event a logout token carries, as OpenID Connect Back-Channel Logout 1.0 names it. */
 const BACKCHANNEL_LOGOUT_EVENT = 'http://schemas.openid.net/event/backchannel-logout';

@@ -4,9 +4,9 @@ import { archivePathOf, DOCUMENT_NAMES } from '../../server/db/documents.ts';
 import { users } from '../../server/db/schema.ts';
 import { AUDIT_FILE } from '../../server/store/audit.ts';
 import { BACKUP_LAYOUT } from '../../server/store/backup.ts';
+import { signInAsAdmin } from '../browser.ts';
 import { createTestDatabase } from '../db.ts';
 import { startTestApp, type TestApp } from '../helpers.ts';
-import { signInAsAdmin } from '../oidc/browser.ts';
 
 describe('data set', () => {
   let app: TestApp;

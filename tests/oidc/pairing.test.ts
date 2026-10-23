@@ -3,7 +3,6 @@ import { HttpStatus, MS_PER_SECOND } from '../../server/core/wire.ts';
 import { SETUP_URL_NAME, SETUP_URL_TOKEN } from '../../server/oidc/pairing.ts';
 import { AuditType } from '../../server/store/audit.ts';
 import { CLIENT_SOURCE_PAIRED, ClientAuthMethod } from '../../server/store/clients.ts';
-import { createTestUser, startTestApp, type TestApp } from '../helpers.ts';
 import {
   adminGql,
   adminSubscribe,
@@ -12,7 +11,8 @@ import {
   REDIRECT_URI,
   signInAsAdmin,
   signInForTokens,
-} from './browser.ts';
+} from '../browser.ts';
+import { createTestUser, startTestApp, type TestApp } from '../helpers.ts';
 
 const START_PAIRING = /* GraphQL */ `
   mutation ($input: PairingInput!) {

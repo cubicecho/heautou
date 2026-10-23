@@ -5,8 +5,8 @@ import { DEVICE_CODE_GRANT } from '../../server/oidc/adapter.ts';
 import { AuditType, SIGN_IN_TYPES } from '../../server/store/audit.ts';
 import { ClientAuthMethod, type OidcClient } from '../../server/store/clients.ts';
 import type { PublicUser } from '../../server/store/users.ts';
+import { type Browser, createBrowser, locationOf, PASSWORD, payloadOf } from '../browser.ts';
 import { createTestUser, startTestApp, type TestApp } from '../helpers.ts';
-import { type Browser, createBrowser, locationOf, PASSWORD, payloadOf } from './browser.ts';
 
 const TELOS_API = 'https://telos.home.lan/api';
 /** An access token lifetime the API sets, unlike any default. */

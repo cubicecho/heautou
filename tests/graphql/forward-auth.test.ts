@@ -1,6 +1,6 @@
 import { FORWARD_AUTH_DEFAULTS } from '../../server/core/defaults.ts';
+import { adminGql, type Browser, signInAsAdmin } from '../browser.ts';
 import { startTestApp, type TestApp } from '../helpers.ts';
-import { adminGql, type Browser, signInAsAdmin } from '../oidc/browser.ts';
 
 describe('the forward auth part of the admin API', () => {
   let app: TestApp;

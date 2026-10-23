@@ -8,8 +8,8 @@ import { openServices, type ServiceSettings, type Services } from '../server/cor
 import type { OpenDatabase } from '../server/db/client.ts';
 import { createApp } from '../server/http/app.ts';
 import type { NewUser, PublicUser } from '../server/store/users.ts';
+import { PASSWORD } from './browser.ts';
 import { createTestDatabase } from './db.ts';
-import { PASSWORD } from './oidc/browser.ts';
 
 /**
  * Reads the port a test server was given.

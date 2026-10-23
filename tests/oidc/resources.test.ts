@@ -4,8 +4,8 @@ import { HttpStatus } from '../../server/core/wire.ts';
 import { TOKEN_FORMAT_OPAQUE } from '../../server/store/apis.ts';
 import { AuditType } from '../../server/store/audit.ts';
 import { ClientAuthMethod, type OidcClient } from '../../server/store/clients.ts';
+import { adminGql, basicAuth, PASSWORD, payloadOf, REDIRECT_URI, signIn, signInAsAdmin } from '../browser.ts';
 import { createTestUser, startTestApp, type TestApp } from '../helpers.ts';
-import { adminGql, basicAuth, PASSWORD, payloadOf, REDIRECT_URI, signIn, signInAsAdmin } from './browser.ts';
 
 const PHOTOS_API = 'https://photos-api.home.lan';
 const NOTES_API = 'https://notes-api.home.lan';

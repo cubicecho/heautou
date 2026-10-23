@@ -18,9 +18,9 @@ import {
 } from '../../server/store/backup.ts';
 import { ClientAuthMethod } from '../../server/store/clients.ts';
 import { UpstreamKind } from '../../server/store/upstreams.ts';
+import { PASSWORD, REDIRECT_URI } from '../browser.ts';
 import { createTestDatabase } from '../db.ts';
 import { newSecretKey, newSecretKeys } from '../helpers.ts';
-import { PASSWORD, REDIRECT_URI } from '../oidc/browser.ts';
 
 const ISSUER = 'http://127.0.0.1:1/oidc';
 /** The provider session each populated database starts with, standing in for its sessions and tokens. */

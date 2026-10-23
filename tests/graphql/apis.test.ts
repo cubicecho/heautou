@@ -1,6 +1,6 @@
 import { API_DEFAULTS } from '../../server/core/defaults.ts';
+import { adminGql, signInAsAdmin } from '../browser.ts';
 import { startTestApp, type TestApp } from '../helpers.ts';
-import { adminGql, signInAsAdmin } from '../oidc/browser.ts';
 
 describe('the APIs part of the admin API', () => {
   let app: TestApp;

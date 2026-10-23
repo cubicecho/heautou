@@ -1,8 +1,8 @@
 import { HttpStatus } from '../../server/core/wire.ts';
 import { ClientAuthMethod, type OidcClient } from '../../server/store/clients.ts';
 import { UnknownIdentity, UpstreamKind } from '../../server/store/upstreams.ts';
+import { createBrowser, REDIRECT_URI } from '../browser.ts';
 import { startTestApp, type TestApp } from '../helpers.ts';
-import { createBrowser, REDIRECT_URI } from '../oidc/browser.ts';
 
 const GITHUB_USER = { id: 583231, login: 'octocat', name: 'The Octocat' };
 

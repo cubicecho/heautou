@@ -2,7 +2,6 @@ import { ADMIN_DEFAULTS, TOKEN_LIFETIME_DEFAULTS } from '../../server/core/defau
 import { HttpStatus } from '../../server/core/wire.ts';
 import { AuditType } from '../../server/store/audit.ts';
 import { ClientAuthMethod, type OidcClient } from '../../server/store/clients.ts';
-import { createTestUser, startTestApp, type TestApp } from '../helpers.ts';
 import {
   adminGql,
   basicAuth,
@@ -12,7 +11,8 @@ import {
   REDIRECT_URI,
   signInAsAdmin,
   signInForTokens,
-} from './browser.ts';
+} from '../browser.ts';
+import { createTestUser, startTestApp, type TestApp } from '../helpers.ts';
 
 /**
  * Tries a sign-in and returns the login POST's reply.

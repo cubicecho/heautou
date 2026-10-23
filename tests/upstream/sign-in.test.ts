@@ -4,8 +4,8 @@ import { HttpStatus } from '../../server/core/wire.ts';
 import { AuditType } from '../../server/store/audit.ts';
 import { ClientAuthMethod, type OidcClient } from '../../server/store/clients.ts';
 import { UnknownIdentity, type UpstreamFields, UpstreamKind } from '../../server/store/upstreams.ts';
+import { basicAuth, PASSWORD, payloadOf, REDIRECT_URI } from '../browser.ts';
 import { createTestUser, startTestApp, type TestApp } from '../helpers.ts';
-import { basicAuth, PASSWORD, payloadOf, REDIRECT_URI } from '../oidc/browser.ts';
 
 /** More hops than a sign-in through an upstream provider takes. */
 const MAX_HOPS = 20;

@@ -1,8 +1,8 @@
 import { ErrorCode } from '../../server/core/errors.ts';
 import { AuditTargetKind, AuditType } from '../../server/store/audit.ts';
 import { UpstreamKind } from '../../server/store/upstreams.ts';
+import { adminGql, type Browser, signInAsAdmin } from '../browser.ts';
 import { startTestApp, type TestApp } from '../helpers.ts';
-import { adminGql, type Browser, signInAsAdmin } from '../oidc/browser.ts';
 
 const UNLINK = `mutation ($id: ID!, $providerId: ID!) {
   unlinkUserUpstream(id: $id, providerId: $providerId) { username upstreamLinks { label } }

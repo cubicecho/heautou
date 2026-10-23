@@ -109,7 +109,7 @@ browser to `/admin/login`, which starts a PKCE flow back to `/admin/callback`. T
 (`provider.AuthorizationCode.find`), sets the `heautou_session` session cookie. Any enabled user may sign in this way: `requireAdmin` gives a
 non-admin a 403 on `/graphql`, and the web app sends them on to `/account`. An invite or reset link is
 `/set-password#token=…`; setting the password through it signs nobody in, the page then sends the browser to the
-sign-in. Tests sign in with `signInAsAdmin` in `tests/oidc/browser.ts`.
+sign-in. Tests sign in with `signInAsAdmin` in `tests/browser.ts`.
 
 ## How pairing goes
 
