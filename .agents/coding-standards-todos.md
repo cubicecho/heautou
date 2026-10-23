@@ -11,7 +11,9 @@ green baseline. Everything else stays open, not approved. Decisions:
 
 - **A1, A2:** every persisted and public name stays: the tables, cookie names, the
   `documents.name` values (`keys.json`, …), archive paths and the `/admin/*` URLs. Code
-  names and comments change; stored and wire names don't.
+  names and comments change; stored and wire names don't. **Reversed 2026-10-23** (P28): the
+  user approved renaming them, with fallbacks so existing installs keep working. The
+  `admin_sessions` table is `web_sessions` (a migration renames it).
 - **B1:** the generated activity list waits for queued entries, as the subscription does
   (`fix:` with a regression test).
 - **B2:** a paired app's registration entries name the client the way every other entry does
