@@ -65,12 +65,12 @@ function digest(token: string): string {
 /**
  * Opens the proxy session store on its file.
  *
- * @param file - The file holding the sessions.
+ * @param document - The document holding the sessions.
  * @param [now] - The clock, in epoch milliseconds.
  * @returns The store. Dead sessions are dropped whenever it writes.
  */
 export function createProxySessionStore(
-  file: DataDocument<ProxySessionDocument>,
+  document: DataDocument<ProxySessionDocument>,
   now: () => number = Date.now,
 ): ProxySessionStore {
   const { sessionSeconds, idleSeconds, touchSeconds, tokenBytes } = FORWARD_AUTH_DEFAULTS;
@@ -88,25 +88,25 @@ export function createProxySessionStore(
       const token = randomBytes(tokenBytes).toString('base64url');
       const at = now();
       const stored: ProxySession = { ...session, expiresAt: at + sessionSeconds * MS_PER_SECOND, lastSeenAt: at };
-      await file.update((sessions) => ({ ...liveExcept(sessions, null), [digest(token)]: stored }));
+      await document.update((sessions) => ({ ...liveExcept(sessions, null), [digest(token)]: stored }));
       return token;
     },
     use: async (token) => {
       const key = digest(token);
-      const session = file.read()[key];
+      const session = document.read()[key];
       const at = now();
       if (session === undefined || isAlive(session, at) === false) {
         return null;
       }
       const isStale = at - session.lastSeenAt >= touchSeconds * MS_PER_SECOND;
       if (isStale) {
-        await file.update((sessions) => ({ ...liveExcept(sessions, null), [key]: { ...session, lastSeenAt: at } }));
+        await document.update((sessions) => ({ ...liveExcept(sessions, null), [key]: { ...session, lastSeenAt: at } }));
       }
       return session;
     },
     remove: async (token) => {
       const key = digest(token);
-      await file.update((sessions) => liveExcept(sessions, key));
+      await document.update((sessions) => liveExcept(sessions, key));
     },
   };
 }

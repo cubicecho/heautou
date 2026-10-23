@@ -180,16 +180,16 @@ function infoOf({ id, name, createdAt, lastUsedAt }: Passkey): PasskeyInfo {
 /**
  * Builds the factor store over a JSON file.
  *
- * @param file - The file holding every user's factors.
+ * @param document - The document holding every user's factors.
  * @param [now] - The clock, in epoch milliseconds.
  * @returns The store.
  */
-export function createFactorStore(file: DataDocument<FactorsDocument>, now: () => number = Date.now): FactorStore {
-  const of = (userId: string): UserFactors => file.read()[userId] ?? NO_FACTORS;
+export function createFactorStore(document: DataDocument<FactorsDocument>, now: () => number = Date.now): FactorStore {
+  const of = (userId: string): UserFactors => document.read()[userId] ?? NO_FACTORS;
   const change = async (userId: string, update: (factors: UserFactors) => UserFactors): Promise<void> => {
-    await file.update((document) => {
-      const next = update(document[userId] ?? NO_FACTORS);
-      const { [userId]: _replaced, ...others } = document;
+    await document.update((byUser) => {
+      const next = update(byUser[userId] ?? NO_FACTORS);
+      const { [userId]: _replaced, ...others } = byUser;
       // Recovery codes stand in for a factor, so they go with the last one.
       const isEmpty = next.totp === null && next.passkeys.length === 0;
       return isEmpty ? others : { ...others, [userId]: next };
@@ -246,7 +246,7 @@ export function createFactorStore(file: DataDocument<FactorsDocument>, now: () =
     },
     passkeysOf: (userId) => of(userId).passkeys,
     findPasskey: (credentialId) => {
-      for (const [userId, factors] of Object.entries(file.read())) {
+      for (const [userId, factors] of Object.entries(document.read())) {
         const passkey = factors.passkeys.find((each) => each.id === credentialId);
         if (passkey !== undefined) {
           return { userId, passkey };
@@ -264,9 +264,9 @@ export function createFactorStore(file: DataDocument<FactorsDocument>, now: () =
       return infoOf(passkey);
     },
     usedPasskey: async (credentialId, counter) => {
-      await file.update((document) =>
+      await document.update((byUser) =>
         Object.fromEntries(
-          Object.entries(document).map(([userId, factors]) => [
+          Object.entries(byUser).map(([userId, factors]) => [
             userId,
             {
               ...factors,
@@ -287,7 +287,7 @@ export function createFactorStore(file: DataDocument<FactorsDocument>, now: () =
       return infoOf(passkey);
     },
     removeAll: async (userId) => {
-      const hadAny = file.read()[userId] !== undefined;
+      const hadAny = document.read()[userId] !== undefined;
       if (hadAny) {
         await change(userId, () => NO_FACTORS);
       }

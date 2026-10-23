@@ -275,7 +275,7 @@ Owner: `server/store/audit.ts`.
 - **Store:** the module that owns one concept's data and its rules; reads are synchronous
   from memory, writes resolve once the tables hold them. Owner: `server/store/*.ts`.
 - **Document:** a store's data in memory, written through to its tables as row differences.
-  Owner: `server/db/document.ts` (`DataDocument`); stores name their parameter `file`.
+  Owner: `server/db/document.ts` (`DataDocument`); each store takes its own as `document`.
 - **Document mapping:** how one document is laid out as rows and read back, including an
   older version's JSON file. Owner: `server/db/documents.ts` (`DocumentMapping`; its `file`
   is both the `documents.name` row key and the archive path, such as `keys.json`).

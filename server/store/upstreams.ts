@@ -293,17 +293,17 @@ function isSameIdentity(link: IdentityKey, key: IdentityKey): boolean {
  * Builds the upstream store over a JSON file. An issuer is held to the https rule redirect URIs are
  * (`redirect-uris.ts`) when a provider is saved.
  *
- * @param file - The file holding the providers and the links.
+ * @param document - The document holding the providers and the links.
  * @param [options] - The clock and whether plain http issuers are allowed.
  * @returns The store.
  */
 export function createUpstreamStore(
-  file: DataDocument<UpstreamsDocument>,
+  document: DataDocument<UpstreamsDocument>,
   options: UpstreamStoreOptions = {},
 ): UpstreamStore {
   const { now = () => new Date(), allowsHttp = () => false } = options;
   const read = (): UpstreamsDocument => {
-    const { providers = [], links = [] } = file.read();
+    const { providers = [], links = [] } = document.read();
     return { providers, links };
   };
   const find = (id: string): UpstreamProvider | null => read().providers.find((provider) => provider.id === id) ?? null;
@@ -315,7 +315,7 @@ export function createUpstreamStore(
     return provider;
   };
   const write = async (change: (document: UpstreamsDocument) => UpstreamsDocument): Promise<void> => {
-    await file.update(() => change(read()));
+    await document.update(() => change(read()));
   };
 
   /**

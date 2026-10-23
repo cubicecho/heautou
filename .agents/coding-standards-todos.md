@@ -60,7 +60,7 @@ average 13); every failing file passes alone. See T5 and T6.
 | R7 | Refactor [pattern] | Moves the older-data-directory reader from the backup module to the import module | M4 | M4 | done |
 | R8 | Refactor [reuse] | One export and one restore (check, pick files, replace, audit entry) used by both the CLI and the running server | M4; services.ts changes most of any file | M4, T1, T3 | done |
 | M5 | Model change | Retires "file" as the code's word for a store's document; "file" then means only an archive file | One concept, one name (P25), and the JSON-era word stops misleading | — | approved |
-| R12 | Refactor [sweep] | Renames every store's `file` parameter to `document` (84 hits, 18 files) | M5 | M5 | approved |
+| R12 | Refactor [sweep] | Renames every store's `file` parameter to `document` (84 hits, 18 files) | M5 | M5 | done |
 | R13 | Refactor [readability] | Renames the document mapping's `file` field and `DOCUMENT_FILES` to say they are the document's name; the stored values stay | M5 | M5, A2 | approved |
 | D6 | Doc [sweep] | Rewrites comments that say "the file" or "model files" where they mean the document or its tables | M5 | M5 | approved |
 | A2 | API change | Asks whether the stored document names and archive paths (`keys.json`, …) keep their JSON-era values | Decides R13's scope | — | approved |

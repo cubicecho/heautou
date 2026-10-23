@@ -65,19 +65,21 @@ function digest(token: string): string {
 /**
  * Opens the password link store on its file.
  *
- * @param file - The file holding the links.
+ * @param document - The document holding the links.
  * @param [now] - The clock, in epoch milliseconds.
  * @returns The store. Expired links are dropped whenever it writes.
  */
 export function createPasswordLinkStore(
-  file: DataDocument<PasswordLinkDocument>,
+  document: DataDocument<PasswordLinkDocument>,
   now: () => number = Date.now,
 ): PasswordLinkStore {
   const live = (keep: (link: PasswordLink, key: string) => boolean): PasswordLinkDocument =>
-    Object.fromEntries(Object.entries(file.read()).filter(([key, link]) => link.expiresAt > now() && keep(link, key)));
+    Object.fromEntries(
+      Object.entries(document.read()).filter(([key, link]) => link.expiresAt > now() && keep(link, key)),
+    );
 
   const find = (token: string): string | null => {
-    const link = file.read()[digest(token)];
+    const link = document.read()[digest(token)];
     return link !== undefined && link.expiresAt > now() ? link.userId : null;
   };
 
@@ -85,7 +87,10 @@ export function createPasswordLinkStore(
     issue: async (userId) => {
       const token = randomBytes(CREDENTIAL_DEFAULTS.passwordLinkBytes).toString('base64url');
       const expiresAt = now() + CREDENTIAL_DEFAULTS.passwordLinkSeconds * MS_PER_SECOND;
-      await file.update(() => ({ ...live((link) => link.userId !== userId), [digest(token)]: { userId, expiresAt } }));
+      await document.update(() => ({
+        ...live((link) => link.userId !== userId),
+        [digest(token)]: { userId, expiresAt },
+      }));
       return { token, expiresAt };
     },
     find,
@@ -93,14 +98,14 @@ export function createPasswordLinkStore(
       const userId = find(token);
       if (userId !== null) {
         const key = digest(token);
-        await file.update(() => live((_link, other) => other !== key));
+        await document.update(() => live((_link, other) => other !== key));
       }
       return userId;
     },
     cancelFor: async (userId) => {
-      const hasLink = Object.values(file.read()).some((link) => link.userId === userId);
+      const hasLink = Object.values(document.read()).some((link) => link.userId === userId);
       if (hasLink) {
-        await file.update(() => live((link) => link.userId !== userId));
+        await document.update(() => live((link) => link.userId !== userId));
       }
     },
   };

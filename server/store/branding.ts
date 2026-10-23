@@ -45,28 +45,28 @@ export interface BrandingStore {
 /**
  * Opens the branding store on its file.
  *
- * @param file - The file. Missing, the defaults apply.
+ * @param document - The document. Missing, the defaults apply.
  * @param [now] - The clock.
  * @returns The store.
  */
 export function createBrandingStore(
-  file: DataDocument<Partial<Branding>>,
+  document: DataDocument<Partial<Branding>>,
   now: () => Date = () => new Date(),
 ): BrandingStore {
   const read = (): Branding => {
-    const { name = BRANDING_DEFAULTS.name, logo = null } = file.read();
+    const { name = BRANDING_DEFAULTS.name, logo = null } = document.read();
     return { name, logo };
   };
   return {
     read,
     setName: async (name) => {
       const parsed = parseInput(nameSchema, name);
-      await file.update(() => ({ ...read(), name: parsed }));
+      await document.update(() => ({ ...read(), name: parsed }));
       return read();
     },
     setLogo: async (dataUrl) => {
       if (dataUrl === null) {
-        await file.update(() => ({ ...read(), logo: null }));
+        await document.update(() => ({ ...read(), logo: null }));
         return read();
       }
       const [, type = '', data = ''] = DATA_URL_PATTERN.exec(dataUrl) ?? [];
@@ -77,7 +77,10 @@ export function createBrandingStore(
       if (Buffer.byteLength(data, 'base64') > BRANDING_DEFAULTS.maxLogoBytes) {
         throw badInput(`logo: use an image under ${BRANDING_DEFAULTS.maxLogoBytes / BYTES_PER_KB} KB.`);
       }
-      await file.update(() => ({ ...read(), logo: { type: type as LogoType, data, updatedAt: now().toISOString() } }));
+      await document.update(() => ({
+        ...read(),
+        logo: { type: type as LogoType, data, updatedAt: now().toISOString() },
+      }));
       return read();
     },
   };

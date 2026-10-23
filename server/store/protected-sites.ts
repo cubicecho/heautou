@@ -165,17 +165,17 @@ export interface ProtectedSiteStore {
 /**
  * Opens the protected site store on its file.
  *
- * @param file - The file.
+ * @param document - The document.
  * @param options - Where Heautou is, to check the cookie domain against, and the clock.
  * @param options.issuerHost - The issuer's host.
  * @param [options.now] - The clock, in epoch milliseconds.
  * @returns The store.
  */
 export function createProtectedSiteStore(
-  file: DataDocument<ProtectedSitesDocument>,
+  document: DataDocument<ProtectedSitesDocument>,
   { issuerHost, now = Date.now }: { issuerHost: string; now?: () => number },
 ): ProtectedSiteStore {
-  const sites = (): ProtectedSite[] => file.read().sites ?? [];
+  const sites = (): ProtectedSite[] => document.read().sites ?? [];
   const find = (id: string): ProtectedSite | null => sites().find((site) => site.id === id) ?? null;
   const load = (id: string): ProtectedSite => {
     const site = find(id);
@@ -195,7 +195,7 @@ export function createProtectedSiteStore(
     return fields;
   };
   const write = async (next: ProtectedSite[]): Promise<void> => {
-    await file.update((current) => ({ ...current, sites: next }));
+    await document.update((current) => ({ ...current, sites: next }));
   };
 
   return {
@@ -235,18 +235,18 @@ export function createProtectedSiteStore(
         await write(sites().map((site) => ({ ...site, allowedGroups: replaceGroupIn(site.allowedGroups, from, to) })));
       }
     },
-    cookieDomain: () => file.read().cookieDomain ?? null,
+    cookieDomain: () => document.read().cookieDomain ?? null,
     setCookieDomain: async (input) => {
       const domain = input === null ? '' : input.trim().toLowerCase().replace(/^\.+/, '');
       if (domain === '') {
-        await file.update(({ cookieDomain: _previous, ...rest }) => rest);
+        await document.update(({ cookieDomain: _previous, ...rest }) => rest);
         return null;
       }
       const problem = cookieDomainProblem(domain, issuerHost);
       if (problem !== null) {
         throw badInput(`cookieDomain: ${problem}.`);
       }
-      await file.update((current) => ({ ...current, cookieDomain: domain }));
+      await document.update((current) => ({ ...current, cookieDomain: domain }));
       return domain;
     },
   };

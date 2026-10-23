@@ -139,20 +139,20 @@ export interface MailStore {
 /**
  * Opens the mail store on its file.
  *
- * @param file - The file, sealed so the password is plain in memory only. Missing, there is no server and every
+ * @param document - The document, sealed so the password is plain in memory only. Missing, there is no server and every
  * option is off.
  * @returns The store.
  */
-export function createMailStore(file: DataDocument<MailDocument>): MailStore {
-  const options = (): MailOptions => ({ ...MAIL_OPTIONS_OFF, ...file.read().options });
+export function createMailStore(document: DataDocument<MailDocument>): MailStore {
+  const options = (): MailOptions => ({ ...MAIL_OPTIONS_OFF, ...document.read().options });
   return {
-    server: () => file.read().server ?? null,
+    server: () => document.read().server ?? null,
     setServer: async (input) => {
       const parsed = parseInput(serverSchema, input);
       const secure = parsed.secure ?? parsed.port === MAIL_DEFAULTS.implicitTlsPort;
       const port = parsed.port ?? (secure ? MAIL_DEFAULTS.implicitTlsPort : MAIL_DEFAULTS.port);
       const typed = parsed.password ?? '';
-      const saved = file.read().server?.password ?? null;
+      const saved = document.read().server?.password ?? null;
       const server: MailServer = {
         host: parsed.host,
         port,
@@ -161,17 +161,17 @@ export function createMailStore(file: DataDocument<MailDocument>): MailStore {
         password: typed === '' ? saved : typed,
         from: parsed.from,
       };
-      await file.update((current) => ({ ...current, server }));
+      await document.update((current) => ({ ...current, server }));
       return server;
     },
     removeServer: async () => {
-      await file.update(({ server: _removed, ...rest }) => rest);
+      await document.update(({ server: _removed, ...rest }) => rest);
     },
     options,
     setOptions: async (changes) => {
       const parsed = parseInput(optionsSchema, changes);
       const given = Object.fromEntries(Object.entries(parsed).filter(([, value]) => value !== undefined));
-      await file.update((current) => ({ ...current, options: { ...current.options, ...given } }));
+      await document.update((current) => ({ ...current, options: { ...current.options, ...given } }));
       return options();
     },
   };

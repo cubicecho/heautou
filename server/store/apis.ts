@@ -122,14 +122,14 @@ export interface ApiStoreOptions {
 /**
  * Builds the API store over a JSON file.
  *
- * @param file - The file holding every API.
+ * @param document - The document holding every API.
  * @param options - Which clients exist, the provider's own scopes and the clock.
  * @returns The store.
  */
-export function createApiStore(file: DataDocument<Api[]>, options: ApiStoreOptions): ApiStore {
+export function createApiStore(document: DataDocument<Api[]>, options: ApiStoreOptions): ApiStore {
   const { clientExists, reservedScopes, now = () => new Date() } = options;
   const fieldsSchema = apiFieldsSchemaFor(reservedScopes);
-  const find = (identifier: string): Api | null => file.read().find((api) => api.identifier === identifier) ?? null;
+  const find = (identifier: string): Api | null => document.read().find((api) => api.identifier === identifier) ?? null;
 
   const load = (identifier: string): Api => {
     const api = find(identifier);
@@ -147,7 +147,7 @@ export function createApiStore(file: DataDocument<Api[]>, options: ApiStoreOptio
   };
 
   return {
-    list: () => file.read(),
+    list: () => document.read(),
     find,
     create: async ({ identifier: raw, ...input }) => {
       const identifier = raw.trim();
@@ -161,7 +161,7 @@ export function createApiStore(file: DataDocument<Api[]>, options: ApiStoreOptio
       const fields = parseInput(fieldsSchema, withoutBlanks(input));
       checkClients(fields.allowedClientIds);
       const api: Api = { identifier, ...fields, createdAt: now().toISOString() };
-      await file.update((apis) => [...apis, api]);
+      await document.update((apis) => [...apis, api]);
       return api;
     },
     update: async (identifier, input) => {
@@ -172,18 +172,18 @@ export function createApiStore(file: DataDocument<Api[]>, options: ApiStoreOptio
       const fields = parseInput(fieldsSchema, { ...current, ...withoutBlanks(input), ...lifetime });
       checkClients(fields.allowedClientIds);
       const next: Api = { ...fields, identifier, createdAt };
-      await file.update((apis) => apis.map((api) => (api.identifier === identifier ? next : api)));
+      await document.update((apis) => apis.map((api) => (api.identifier === identifier ? next : api)));
       return next;
     },
     remove: async (identifier) => {
       const api = load(identifier);
-      await file.update((apis) => apis.filter((other) => other.identifier !== identifier));
+      await document.update((apis) => apis.filter((other) => other.identifier !== identifier));
       return api;
     },
     removeClient: async (clientId) => {
-      const isUsed = file.read().some((api) => api.allowedClientIds.includes(clientId));
+      const isUsed = document.read().some((api) => api.allowedClientIds.includes(clientId));
       if (isUsed) {
-        await file.update((apis) =>
+        await document.update((apis) =>
           apis.map((api) => ({ ...api, allowedClientIds: api.allowedClientIds.filter((id) => id !== clientId) })),
         );
       }

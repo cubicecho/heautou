@@ -59,12 +59,12 @@ function digest(token: string): string {
 /**
  * Opens the web session store on its document.
  *
- * @param file - The file holding the sessions.
+ * @param document - The document holding the sessions.
  * @param [now] - The clock, in epoch milliseconds.
  * @returns The store. Expired sessions are dropped whenever it writes.
  */
 export function createWebSessionStore(
-  file: DataDocument<WebSessionDocument>,
+  document: DataDocument<WebSessionDocument>,
   now: () => number = Date.now,
 ): WebSessionStore {
   const live = (sessions: WebSessionDocument): WebSessionDocument =>
@@ -74,22 +74,22 @@ export function createWebSessionStore(
     create: async (userId) => {
       const token = randomBytes(ADMIN_DEFAULTS.tokenBytes).toString('base64url');
       const expiresAt = now() + ADMIN_DEFAULTS.sessionSeconds * MS_PER_SECOND;
-      await file.update((sessions) => ({ ...live(sessions), [digest(token)]: { userId, expiresAt } }));
+      await document.update((sessions) => ({ ...live(sessions), [digest(token)]: { userId, expiresAt } }));
       return token;
     },
     find: (token) => {
-      const session = file.read()[digest(token)];
+      const session = document.read()[digest(token)];
       const isLive = session !== undefined && session.expiresAt > now();
       return isLive ? session.userId : null;
     },
     remove: async (token) => {
       const key = digest(token);
-      await file.update((sessions) =>
+      await document.update((sessions) =>
         Object.fromEntries(Object.entries(live(sessions)).filter(([other]) => other !== key)),
       );
     },
     removeUser: async (userId) => {
-      await file.update((sessions) =>
+      await document.update((sessions) =>
         Object.fromEntries(Object.entries(live(sessions)).filter(([, session]) => session.userId !== userId)),
       );
     },

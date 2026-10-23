@@ -150,12 +150,12 @@ function withDefaults(user: User): User {
 /**
  * Builds the user store over its document.
  *
- * @param file - The document holding every user.
+ * @param document - The document holding every user.
  * @param [now] - The clock, for `createdAt`.
  * @returns The store.
  */
-export function createUserStore(file: DataDocument<User[]>, now: () => Date = () => new Date()): UserStore {
-  const stored = (): User[] => file.read().map(withDefaults);
+export function createUserStore(document: DataDocument<User[]>, now: () => Date = () => new Date()): UserStore {
+  const stored = (): User[] => document.read().map(withDefaults);
   const findStored = (id: string): User | null => stored().find((user) => user.id === id) ?? null;
 
   const load = (id: string): User => {
@@ -189,7 +189,7 @@ export function createUserStore(file: DataDocument<User[]>, now: () => Date = ()
   const write = async (change: (users: User[]) => User[]): Promise<void> => {
     const next = change(stored());
     assertAdminRemains(next);
-    await file.update(() => next);
+    await document.update(() => next);
   };
 
   const replace = async (next: User): Promise<PublicUser> => {

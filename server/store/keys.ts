@@ -92,24 +92,28 @@ export const privateKeysIn: SecretMapper<ProviderKeys | null> = (keys, change) =
 /**
  * Opens the provider's keys, making and saving them on first boot.
  *
- * @param file - The file holding them. Its private halves are sealed when `SECRET_KEY` is set.
+ * @param document - The document holding them. Its private halves are sealed when `SECRET_KEY` is set.
  * @param [now] - The clock.
  * @returns The store.
  */
 export async function openKeyStore(
-  file: DataDocument<ProviderKeys | null>,
+  document: DataDocument<ProviderKeys | null>,
   now: () => Date = () => new Date(),
 ): Promise<KeyStore> {
   const stamp = (): string => now().toISOString();
-  const stored = file.read();
+  const stored = document.read();
   if (stored === null) {
-    await file.update(() => ({ jwks: [generateSigningKey()], cookieKeys: [generateCookieKey()], rotatedAt: stamp() }));
+    await document.update(() => ({
+      jwks: [generateSigningKey()],
+      cookieKeys: [generateCookieKey()],
+      rotatedAt: stamp(),
+    }));
   } else if (stored.rotatedAt === undefined) {
     // Count the age of keys made before rotation existed from this boot.
-    await file.update(() => ({ ...stored, rotatedAt: stamp() }));
+    await document.update(() => ({ ...stored, rotatedAt: stamp() }));
   }
   const current = (): ProviderKeys => {
-    const keys = file.read();
+    const keys = document.read();
     if (keys === null) {
       throw new Error('The key file was emptied while the server ran.');
     }
@@ -125,7 +129,7 @@ export async function openKeyStore(
         cookieKeys: [generateCookieKey(), ...cookieKeys].slice(0, keptKeys),
         rotatedAt: stamp(),
       };
-      await file.update(() => next);
+      await document.update(() => next);
       return next;
     },
     isDue: () => {
