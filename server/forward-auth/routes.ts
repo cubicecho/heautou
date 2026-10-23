@@ -196,7 +196,7 @@ export function createForwardAuthRouter(deps: ForwardAuthDeps): Router {
    */
   const liveSessionOf = async (req: Request): Promise<{ session: ProxySession; user: PublicUser } | null> => {
     const token = readCookie(req, PROXY_COOKIE.session);
-    const session = token === null ? null : proxySessions.use(token);
+    const session = token === null ? null : await proxySessions.use(token);
     if (token === null || session === null) {
       return null;
     }
@@ -204,7 +204,7 @@ export function createForwardAuthRouter(deps: ForwardAuthDeps): Router {
     const user = users.find(session.userId);
     const isUsable = grant?.accountId === session.userId && user !== null && user.disabled === false;
     if (isUsable === false || user === null) {
-      proxySessions.remove(token);
+      await proxySessions.remove(token);
       return null;
     }
     return { session, user };
@@ -377,10 +377,10 @@ export function createForwardAuthRouter(deps: ForwardAuthDeps): Router {
       }
       const previous = readCookie(req, PROXY_COOKIE.session);
       if (previous !== null) {
-        proxySessions.remove(previous);
+        await proxySessions.remove(previous);
       }
       const acr = code.acr ?? AuthLevel.Password;
-      const token = proxySessions.create({ userId: user.id, grantId: code.grantId, amr: code.amr ?? [], acr });
+      const token = await proxySessions.create({ userId: user.id, grantId: code.grantId, amr: code.amr ?? [], acr });
       // The address was checked when the sign-in began; checking again catches a site removed since.
       const returnTo = login.data.returnTo === null ? null : checkedReturn(login.data.returnTo);
       const site = returnTo === null ? null : protectedSites.match(returnTo.hostname, returnTo.pathname);
@@ -405,7 +405,7 @@ export function createForwardAuthRouter(deps: ForwardAuthDeps): Router {
     const live = await liveSessionOf(req);
     const token = readCookie(req, PROXY_COOKIE.session);
     if (token !== null) {
-      proxySessions.remove(token);
+      await proxySessions.remove(token);
     }
     if (live !== null) {
       audit.record({ type: AuditType.ProxySignedOut, actor: actorOf(live.user), ip: req.ip ?? null });

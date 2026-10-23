@@ -1,5 +1,8 @@
-import type { GraphQLSchema } from 'graphql';
-import { createSchema, Repeater } from 'graphql-yoga';
+// The hand-written fields of the admin API (`type-defs.ts`): what the generated reads can't give, and every change.
+// A field whose type is a generated one (User, Client, Api, Upstream, AuditEntry) answers with the row drizzle-graphql
+// reads for it (`rows.ts`), after the store has saved, so the result carries whatever the request selected.
+import type { GraphQLResolveInfo } from 'graphql';
+import { Repeater } from 'graphql-yoga';
 import { adminUrls, type BrandingView, brandingView, sessionClientName, WEB_APP_PAGE } from '../admin/admin-client.ts';
 import type { Context } from '../core/context.ts';
 import { CLIENT_TOKEN_LIFETIME_DEFAULTS, PROFILE_DEFAULTS, TOKEN_LIFETIME_DEFAULTS } from '../core/defaults.ts';
@@ -8,9 +11,8 @@ import { type StartedPairing, startPairing } from '../oidc/pairing.ts';
 import type { OfferedApi } from '../oidc/pairing-offers.ts';
 import { SCOPES } from '../oidc/provider.ts';
 import type { SessionInfo } from '../oidc/sessions.ts';
-import { type Api, TOKEN_FORMAT_JWT } from '../store/apis.ts';
+import { TOKEN_FORMAT_JWT } from '../store/apis.ts';
 import {
-  AUDIT_TYPES,
   type AuditEntry,
   type AuditEvent,
   type AuditTarget,
@@ -21,9 +23,8 @@ import {
   matchesQuery,
   userTarget,
 } from '../store/audit.ts';
-import { type ClaimEntry, claimEntries, withoutBlanks } from '../store/claims.ts';
+import { withoutBlanks } from '../store/claims.ts';
 import {
-  CLIENT_SOURCE_ADMIN,
   CLIENT_SOURCE_PAIRED,
   ClientAuthMethod,
   type ClientFields,
@@ -35,20 +36,10 @@ import type { ProviderKeys } from '../store/keys.ts';
 import type { Pairing, PairingInput } from '../store/pairings.ts';
 import { refusedRedirectUris } from '../store/redirect-uris.ts';
 import type { HttpRedirectSetting, PasswordRules } from '../store/settings.ts';
-import {
-  type GroupMapping,
-  UnknownIdentity,
-  type UpstreamFields,
-  UpstreamKind,
-  type UpstreamLink,
-  type UpstreamProvider,
-} from '../store/upstreams.ts';
+import type { GroupMapping, UnknownIdentity, UpstreamFields, UpstreamKind } from '../store/upstreams.ts';
 import type { NewUser, PublicUser, UserFields } from '../store/users.ts';
 import { upstreamTarget } from '../upstream/accounts.ts';
-import { apiResolvers } from './apis.ts';
-import { FORWARD_AUTH_TYPE_DEFS, forwardAuthResolvers } from './forward-auth.ts';
-import { MAIL_TYPE_DEFS, mailResolvers } from './mail.ts';
-import { TYPE_DEFS } from './type-defs.ts';
+import { type GeneratedRow, GeneratedTable, requiredRow, rowsWhere, rowWhere } from './rows.ts';
 
 /** Where discovery lives under the issuer. */
 const DISCOVERY_PATH = '/.well-known/openid-configuration';
@@ -74,14 +65,6 @@ interface KeysView {
   signingKeys: { kid: string; isCurrent: boolean }[];
 }
 
-/** What `Group` resolves from. */
-interface GroupView {
-  name: string;
-  members: PublicUser[];
-  clients: OidcClient[];
-  isProtected: boolean;
-}
-
 /** Where a pairing is, as `PairingStatus` names it. */
 const PAIRING_WAITING = 'WAITING' as const;
 const PAIRING_PAIRED = 'PAIRED' as const;
@@ -96,9 +79,8 @@ interface PairingView {
   expiresAt: string;
   allowedGroups: string[];
   groupsClaim: string;
-  client: OidcClient | null;
   finished: boolean;
-  /** The stored pairing, for `offers`. */
+  /** The stored pairing, for `client` and `offers`. */
   pairing: Pairing;
 }
 
@@ -113,6 +95,51 @@ interface ClientApp {
   id: string;
   uri: string | null;
 }
+
+/** The part of a generated `User` row the hand-written fields read. */
+interface UserRow {
+  id: string;
+}
+
+/** The part of a generated `Client` row the hand-written fields read. */
+interface ClientRow {
+  clientId: string;
+}
+
+/** The part of a generated `Upstream` row the hand-written fields read. */
+interface UpstreamRow {
+  id: string;
+}
+
+/** What the operator chose to set up for a paired app. */
+interface FinishPairingInput {
+  deviceFlow: boolean;
+  api: boolean;
+}
+
+/**
+ * Picks a user's row out by id.
+ *
+ * @param id - The user.
+ * @returns The filter.
+ */
+const userById = (id: string) => ({ id: { eq: id } });
+
+/**
+ * Picks a client's row out by its client ID.
+ *
+ * @param clientId - The client.
+ * @returns The filter.
+ */
+const clientById = (clientId: string) => ({ clientId: { eq: clientId } });
+
+/**
+ * Picks an upstream provider's row out by id.
+ *
+ * @param id - The provider.
+ * @returns The filter.
+ */
+const upstreamById = (id: string) => ({ id: { eq: id } });
 
 /**
  * Finds the app a client belongs to. A client paired since pairings were recorded on clients has its pairing. One
@@ -142,25 +169,13 @@ function clientAppOf(client: OidcClient, ctx: Pick<Context, 'apis'>): ClientApp 
   return isOneSite ? { id: `api:${origin}`, uri: origin } : null;
 }
 
-/** What `OfferedApi` resolves from. */
-interface OfferedApiView extends OfferedApi {
-  existing: Api | null;
-}
-
-/** What the operator chose to set up for a paired app. */
-interface FinishPairingInput {
-  deviceFlow: boolean;
-  api: boolean;
-}
-
 /**
  * Describes a pairing for the admin UI.
  *
- * @param ctx - Request context.
  * @param pairing - The stored pairing.
  * @returns What `Pairing` resolves from.
  */
-function pairingView(ctx: Context, pairing: Pairing): PairingView {
+function pairingView(pairing: Pairing): PairingView {
   const { id, allowedGroups, groupsClaim, clientId } = pairing;
   return {
     id,
@@ -168,7 +183,6 @@ function pairingView(ctx: Context, pairing: Pairing): PairingView {
     expiresAt: new Date(pairing.expiresAt).toISOString(),
     allowedGroups,
     groupsClaim,
-    client: clientId === null ? null : ctx.clients.find(clientId),
     finished: pairing.isFinished,
     pairing,
   };
@@ -213,7 +227,7 @@ async function setUpOffers(ctx: Context, pairing: Pairing, input: FinishPairingI
   const deviceClient = waitingDeviceClientOf(ctx, pairing);
   if (deviceClient !== null && input.deviceFlow) {
     const { name, authMethod, redirectUris, postLogoutRedirectUris } = deviceClient;
-    ctx.clients.update(deviceClient.clientId, {
+    await ctx.clients.update(deviceClient.clientId, {
       name,
       authMethod,
       redirectUris,
@@ -223,7 +237,7 @@ async function setUpOffers(ctx: Context, pairing: Pairing, input: FinishPairingI
     appClientIds.push(deviceClient.clientId);
     done.deviceFlow = 'on';
   } else if (deviceClient !== null && deviceClient.clientId !== pairing.clientId) {
-    ctx.clients.remove(deviceClient.clientId);
+    await ctx.clients.remove(deviceClient.clientId);
     done.deviceFlow = 'removed';
   }
   const offered = input.api ? await offeredApiOf(ctx, pairing) : null;
@@ -232,8 +246,8 @@ async function setUpOffers(ctx: Context, pairing: Pairing, input: FinishPairingI
     const allowedClientIds = [...new Set([...(existing?.allowedClientIds ?? []), ...appClientIds])];
     const api =
       existing === null
-        ? ctx.apis.create({ ...offered, tokenFormat: TOKEN_FORMAT_JWT, allowedClientIds })
-        : ctx.apis.update(offered.identifier, { allowedClientIds });
+        ? await ctx.apis.create({ ...offered, tokenFormat: TOKEN_FORMAT_JWT, allowedClientIds })
+        : await ctx.apis.update(offered.identifier, { allowedClientIds });
     const type = existing === null ? AuditType.ApiCreated : AuditType.ApiUpdated;
     ctx.audit.record({
       type,
@@ -247,30 +261,15 @@ async function setUpOffers(ctx: Context, pairing: Pairing, input: FinishPairingI
 }
 
 /**
- * Builds the provider again when a change touched its claim names or keys.
- *
- * @param ctx - Request context.
- * @param value - What the resolver returns.
- * @returns The value.
- */
-function refreshed<T>(ctx: Context, value: T): T {
-  ctx.host.refresh();
-  return value;
-}
-
-/**
- * Records what the signed-in admin did, and passes the resolver's value on. Only changes that worked get here.
+ * Records what the signed-in admin did. Only changes that worked get here.
  *
  * @param ctx - Request context.
  * @param type - What they did.
  * @param target - What they did it to.
- * @param value - What the resolver returns.
  * @param [detail] - What else to keep. Never a password, token, secret or setup URL.
- * @returns The value.
  */
-function audited<T>(ctx: Context, type: AuditType, target: AuditTarget, value: T, detail?: AuditEvent['detail']): T {
+function audit(ctx: Context, type: AuditType, target: AuditTarget, detail?: AuditEvent['detail']): void {
   ctx.audit.record({ type, actor: actorOf(ctx.viewer), ip: ctx.ip, target, detail });
-  return value;
 }
 
 /**
@@ -320,38 +319,6 @@ const BRANDING_TARGET: AuditTarget = Object.freeze({
   name: 'Branding',
 });
 
-/**
- * Maps a vocabulary's GraphQL enum names, the values in capitals, to the values the files use.
- *
- * @param values - The vocabulary.
- * @returns The enum's resolver.
- */
-function enumOf(values: readonly string[]): Record<string, string> {
-  return Object.fromEntries(values.map((value) => [value.toUpperCase(), value]));
-}
-
-/** What `AuditEntry` resolves from. */
-interface AuditEntryView extends Omit<AuditEntry, 'detail'> {
-  detail: { name: string; value: string }[];
-}
-
-/** What `AuditPage` resolves from. */
-interface AuditPageView {
-  entries: AuditEntryView[];
-  nextCursor: string | null;
-}
-
-/**
- * Describes an entry for the admin UI: its detail as name and value pairs.
- *
- * @param entry - The stored entry.
- * @returns What `AuditEntry` resolves from.
- */
-function auditEntryView(entry: AuditEntry): AuditEntryView {
-  const { detail, ...rest } = entry;
-  return { ...rest, detail: Object.entries(detail ?? {}).map(([name, value]) => ({ name, value })) };
-}
-
 /** The entries after which a pairing may read differently. */
 const PAIRING_CHANGES: readonly AuditType[] = [
   AuditType.PairingCompleted,
@@ -363,18 +330,18 @@ const PAIRING_CHANGES: readonly AuditType[] = [
  * Streams the entries recorded while a subscription is open.
  *
  * @param ctx - Request context.
- * @param args - The filters, as `Query.auditLog` takes them.
+ * @param args - The filters.
  * @returns The entries, each wrapped as the `auditEntryAdded` payload.
  */
 function auditEntriesAdded(
   ctx: Context,
   args: { type?: AuditType | null; userId?: string | null },
-): Repeater<{ auditEntryAdded: AuditEntryView }> {
+): Repeater<{ auditEntryAdded: AuditEntry }> {
   const query = { types: args.type === null || args.type === undefined ? null : [args.type], userId: args.userId };
   return new Repeater(async (push, stop) => {
     const off = ctx.audit.onRecord((entry) => {
       if (matchesQuery(entry, query)) {
-        void push({ auditEntryAdded: auditEntryView(entry) });
+        void push({ auditEntryAdded: entry });
       }
     });
     await stop;
@@ -399,7 +366,7 @@ function pairingChanges(ctx: Context, id: string): Repeater<{ pairingChanged: Pa
      */
     const send = (): boolean => {
       const pairing = ctx.pairings.find(id);
-      void push({ pairingChanged: pairing === null ? null : pairingView(ctx, pairing) });
+      void push({ pairingChanged: pairing === null ? null : pairingView(pairing) });
       if (pairing === null) {
         stop();
         return false;
@@ -430,7 +397,7 @@ function pairingChanges(ctx: Context, id: string): Repeater<{ pairingChanged: Pa
  * @returns Once the apps with a back-channel logout URI have been told.
  */
 async function signOutEverywhere(ctx: Context, userId: string): Promise<void> {
-  ctx.adminSessions.removeUser(userId);
+  await ctx.adminSessions.removeUser(userId);
   await ctx.sessions.revokeAccount(userId, ctx.ip);
 }
 
@@ -448,38 +415,6 @@ function keysView(keys: ProviderKeys): KeysView {
 }
 
 /**
- * Fills a group in with its users and clients.
- *
- * @param ctx - Request context.
- * @param group - The group.
- * @returns What `Group` resolves from.
- */
-function groupView(ctx: Context, group: Group): GroupView {
-  return {
-    name: group.name,
-    members: group.memberIds.flatMap((id) => ctx.users.find(id) ?? []),
-    clients: group.clientIds.flatMap((clientId) => ctx.clients.find(clientId) ?? []),
-    isProtected: group.isProtected,
-  };
-}
-
-/**
- * Loads a client by id.
- *
- * @param ctx - Request context.
- * @param clientId - The client's ID.
- * @returns The client.
- * @throws NOT_FOUND when there is none.
- */
-function loadClient(ctx: Context, clientId: string): OidcClient {
-  const client = ctx.clients.find(clientId);
-  if (client === null) {
-    throw notFound(`No client has the ID "${clientId}".`);
-  }
-  return client;
-}
-
-/**
  * Loads a user by id.
  *
  * @param ctx - Request context.
@@ -493,6 +428,22 @@ function loadUser(ctx: Context, id: string): PublicUser {
     throw notFound(`No user has the ID "${id}".`);
   }
   return user;
+}
+
+/**
+ * Loads a client by its row.
+ *
+ * @param ctx - Request context.
+ * @param row - The client's row.
+ * @returns The client, as its store keeps it.
+ * @throws NOT_FOUND when it has been removed since the row was read.
+ */
+function clientOfRow(ctx: Context, row: ClientRow): OidcClient {
+  const client = ctx.clients.find(row.clientId);
+  if (client === null) {
+    throw notFound(`No client has the ID "${row.clientId}".`);
+  }
+  return client;
 }
 
 /** What `UpstreamInput` arrives as: GraphQL sends null for a list or a flag left out. */
@@ -521,57 +472,57 @@ function upstreamFieldsOf(input: UpstreamInputArgs): UpstreamFields {
   return withoutBlanks(input) as UpstreamFields;
 }
 
-/** What `UpstreamLink` resolves from. */
-interface UpstreamLinkView extends Pick<UpstreamLink, 'providerId' | 'label' | 'linkedAt' | 'lastUsedAt'> {
-  providerName: string;
-}
-
-const resolvers = {
-  // The enum's GraphQL names, as the wire values the provider and the files use.
-  ClientAuthMethod: {
-    CLIENT_SECRET_BASIC: ClientAuthMethod.SecretBasic,
-    CLIENT_SECRET_POST: ClientAuthMethod.SecretPost,
-    NONE: ClientAuthMethod.None,
-  },
-  ClientSource: {
-    ADMIN: CLIENT_SOURCE_ADMIN,
-    PAIRED: CLIENT_SOURCE_PAIRED,
-  },
+/** The hand-written resolvers, merged with the generated schema in `build-schema.ts`. */
+export const resolvers = {
   Client: {
+    /**
+     * Resolves `Client.clientSecret`, opened: the table holds it sealed.
+     *
+     * @param row - The client's row.
+     * @param _args - Unused.
+     * @param ctx - Request context.
+     * @returns The secret, or null for a public client.
+     */
+    clientSecret: (row: ClientRow, _args: unknown, ctx: Context): string | null => clientOfRow(ctx, row).clientSecret,
     /**
      * Resolves `Client.app`.
      *
-     * @param client - The client.
+     * @param row - The client's row.
      * @param _args - Unused.
      * @param ctx - Request context.
      * @returns The app it belongs to, or null.
      */
-    app: (client: OidcClient, _args: unknown, ctx: Context): ClientApp | null => clientAppOf(client, ctx),
-    /**
-     * Resolves `Client.apis`.
-     *
-     * @param client - The client.
-     * @param _args - Unused.
-     * @param ctx - Request context.
-     * @returns The APIs that allow it, the only ones it can get access tokens to.
-     */
-    apis: (client: OidcClient, _args: unknown, ctx: Context): Api[] =>
-      ctx.apis.list().filter((api) => api.allowedClientIds.includes(client.clientId)),
+    app: (row: ClientRow, _args: unknown, ctx: Context): ClientApp | null => clientAppOf(clientOfRow(ctx, row), ctx),
     /**
      * Resolves `Client.refusedRedirectUris`.
      *
-     * @param client - The client.
+     * @param row - The client's row.
      * @param _args - Unused.
      * @param ctx - Request context.
      * @returns Its URIs the redirect rule refuses now, for a client saved before the rule or the setting changed.
      */
-    refusedRedirectUris: (client: OidcClient, _args: unknown, ctx: Context): string[] =>
-      refusedRedirectUris(client, {
+    refusedRedirectUris: (row: ClientRow, _args: unknown, ctx: Context): string[] => {
+      const client = clientOfRow(ctx, row);
+      return refusedRedirectUris(client, {
         allowsHttp: ctx.settings.httpRedirects().isAllowed,
         isPublic: client.authMethod === ClientAuthMethod.None,
-      }),
+      });
+    },
   },
   Pairing: {
+    /**
+     * Resolves `Pairing.client`.
+     *
+     * @param view - The pairing.
+     * @param _args - Unused.
+     * @param ctx - Request context.
+     * @param info - The field, for the row's selection.
+     * @returns The client the app registered as, or null while it waits.
+     */
+    client: (view: PairingView, _args: unknown, ctx: Context, info: GraphQLResolveInfo) => {
+      const { clientId } = view.pairing;
+      return clientId === null ? null : rowWhere(ctx, info, GeneratedTable.Clients, clientById(clientId));
+    },
     /**
      * Resolves `Pairing.offers`.
      *
@@ -587,6 +538,21 @@ const resolvers = {
       return { deviceClient: waitingDeviceClientOf(ctx, view.pairing), api: await offeredApiOf(ctx, view.pairing) };
     },
   },
+  PairingOffers: {
+    /**
+     * Resolves `PairingOffers.deviceClient`.
+     *
+     * @param offers - What the app offers.
+     * @param _args - Unused.
+     * @param ctx - Request context.
+     * @param info - The field, for the row's selection.
+     * @returns The device client waiting for its device flow, or null.
+     */
+    deviceClient: (offers: PairingOffersView, _args: unknown, ctx: Context, info: GraphQLResolveInfo) =>
+      offers.deviceClient === null
+        ? null
+        : rowWhere(ctx, info, GeneratedTable.Clients, clientById(offers.deviceClient.clientId)),
+  },
   OfferedApi: {
     /**
      * Resolves `OfferedApi.existing`.
@@ -594,101 +560,104 @@ const resolvers = {
      * @param api - The offered API.
      * @param _args - Unused.
      * @param ctx - Request context.
+     * @param info - The field, for the row's selection.
      * @returns The API with its identifier, or null.
      */
-    existing: (api: OfferedApiView, _args: unknown, ctx: Context): Api | null => ctx.apis.find(api.identifier),
+    existing: (api: OfferedApi, _args: unknown, ctx: Context, info: GraphQLResolveInfo) =>
+      rowWhere(ctx, info, GeneratedTable.Apis, { identifier: { eq: api.identifier } }),
   },
-  AuditType: enumOf(AUDIT_TYPES),
-  UpstreamKind: enumOf(Object.values(UpstreamKind)),
-  UnknownIdentity: enumOf(Object.values(UnknownIdentity)),
   Upstream: {
     /**
      * Resolves `Upstream.hasClientSecret`.
      *
-     * @param upstream - The provider.
+     * @param row - The provider's row.
+     * @param _args - Unused.
+     * @param ctx - Request context.
      * @returns Whether a secret is saved; the secret itself never leaves the server.
      */
-    hasClientSecret: (upstream: UpstreamProvider): boolean => upstream.clientSecret !== null,
+    hasClientSecret: (row: UpstreamRow, _args: unknown, ctx: Context): boolean =>
+      (ctx.upstreams.find(row.id)?.clientSecret ?? null) !== null,
     /**
      * Resolves `Upstream.redirectUri`.
      *
-     * @param upstream - The provider.
+     * @param row - The provider's row.
      * @param _args - Unused.
      * @param ctx - Request context.
      * @returns The URI to register there.
      */
-    redirectUri: (upstream: UpstreamProvider, _args: unknown, ctx: Context): string =>
-      ctx.upstreamFlows.redirectUriOf(upstream.id),
+    redirectUri: (row: UpstreamRow, _args: unknown, ctx: Context): string => ctx.upstreamFlows.redirectUriOf(row.id),
+  },
+  User: {
     /**
-     * Resolves `Upstream.linkCount`.
+     * Resolves `User.hasPassword`.
      *
-     * @param upstream - The provider.
+     * @param row - The user's row.
      * @param _args - Unused.
      * @param ctx - Request context.
-     * @returns How many identities are linked through it.
+     * @returns False for an invited user who has not set one.
      */
-    linkCount: (upstream: UpstreamProvider, _args: unknown, ctx: Context): number =>
-      ctx.upstreams.linkCount(upstream.id),
-  },
-  AuditTargetKind: enumOf(Object.values(AuditTargetKind)),
-  User: {
+    hasPassword: (row: UserRow, _args: unknown, ctx: Context): boolean => ctx.users.find(row.id)?.hasPassword ?? false,
     /**
      * Resolves `User.pictureUrl`.
      *
-     * @param user - The user.
+     * @param row - The user's row.
      * @param _args - Unused.
      * @param ctx - Request context.
      * @returns The URL the picture claim holds, or null.
      */
-    pictureUrl: (user: PublicUser, _args: unknown, ctx: Context): string | null => ctx.pictures.urlOf(user),
-    /**
-     * Resolves `User.claims`.
-     *
-     * @param user - The user.
-     * @returns Their custom claims, by name.
-     */
-    claims: (user: PublicUser): ClaimEntry[] => claimEntries(user.claims),
+    pictureUrl: (row: UserRow, _args: unknown, ctx: Context): string | null => {
+      const user = ctx.users.find(row.id);
+      return user === null ? null : ctx.pictures.urlOf(user);
+    },
     /**
      * Resolves `User.sessions`.
      *
-     * @param user - The user.
+     * @param row - The user's row.
      * @param _args - Unused.
      * @param ctx - Request context.
      * @returns Their provider sessions, with client names.
      */
-    sessions: (user: PublicUser, _args: unknown, ctx: Context): SessionView[] =>
-      ctx.sessions.sessionsOf(user.id).map(({ clientIds, ...session }) => ({
+    sessions: (row: UserRow, _args: unknown, ctx: Context): SessionView[] =>
+      ctx.sessions.sessionsOf(row.id).map(({ clientIds, ...session }) => ({
         ...session,
         clientNames: clientIds.map((clientId) => sessionClientName(clientId, ctx.clients, ctx.branding.read())),
       })),
     /**
      * Resolves `User.secondFactors`.
      *
-     * @param user - The user.
+     * @param row - The user's row.
      * @param _args - Unused.
      * @param ctx - Request context.
      * @returns What they have set up.
      */
-    secondFactors: (user: PublicUser, _args: unknown, ctx: Context) => {
-      const { hasTotp, recoveryCodesLeft, passkeys } = ctx.factors.summary(user.id);
+    secondFactors: (row: UserRow, _args: unknown, ctx: Context) => {
+      const { hasTotp, recoveryCodesLeft, passkeys } = ctx.factors.summary(row.id);
       return { hasTotp, recoveryCodesLeft, passkeyCount: passkeys.length };
     },
+  },
+  Group: {
     /**
-     * Resolves `User.upstreamLinks`.
+     * Resolves `Group.members`.
      *
-     * @param user - The user.
+     * @param group - The group.
      * @param _args - Unused.
      * @param ctx - Request context.
-     * @returns Their linked identities, with the providers' names.
+     * @param info - The field, for the rows' selection.
+     * @returns Its users.
      */
-    upstreamLinks: (user: PublicUser, _args: unknown, ctx: Context): UpstreamLinkView[] =>
-      ctx.upstreams.linksOf(user.id).map(({ providerId, label, linkedAt, lastUsedAt }) => ({
-        providerId,
-        providerName: ctx.upstreams.find(providerId)?.name ?? providerId,
-        label,
-        linkedAt,
-        lastUsedAt,
-      })),
+    members: (group: Group, _args: unknown, ctx: Context, info: GraphQLResolveInfo): Promise<GeneratedRow[]> =>
+      rowsWhere(ctx, info, GeneratedTable.Users, { id: { inArray: group.memberIds } }),
+    /**
+     * Resolves `Group.clients`.
+     *
+     * @param group - The group.
+     * @param _args - Unused.
+     * @param ctx - Request context.
+     * @param info - The field, for the rows' selection.
+     * @returns The clients limited to it.
+     */
+    clients: (group: Group, _args: unknown, ctx: Context, info: GraphQLResolveInfo): Promise<GeneratedRow[]> =>
+      rowsWhere(ctx, info, GeneratedTable.Clients, { clientId: { inArray: group.clientIds } }),
   },
   Query: {
     /**
@@ -739,45 +708,11 @@ const resolvers = {
      * @param _parent - Unused.
      * @param _args - Unused.
      * @param ctx - Request context.
+     * @param info - The field, for the row's selection.
      * @returns The signed-in admin.
      */
-    viewer: (_parent: unknown, _args: unknown, ctx: Context): PublicUser => ctx.viewer,
-    /**
-     * Resolves `Query.clients`.
-     *
-     * @param _parent - Unused.
-     * @param _args - Unused.
-     * @param ctx - Request context.
-     * @returns Every client.
-     */
-    clients: (_parent: unknown, _args: unknown, ctx: Context): OidcClient[] => ctx.clients.list(),
-    /**
-     * Resolves `Query.client`.
-     *
-     * @param _parent - Unused.
-     * @param args - The client's ID.
-     * @param ctx - Request context.
-     * @returns The client.
-     */
-    client: (_parent: unknown, args: { clientId: string }, ctx: Context): OidcClient => loadClient(ctx, args.clientId),
-    /**
-     * Resolves `Query.users`.
-     *
-     * @param _parent - Unused.
-     * @param _args - Unused.
-     * @param ctx - Request context.
-     * @returns Every user.
-     */
-    users: (_parent: unknown, _args: unknown, ctx: Context): PublicUser[] => ctx.users.list(),
-    /**
-     * Resolves `Query.user`.
-     *
-     * @param _parent - Unused.
-     * @param args - The user's id.
-     * @param ctx - Request context.
-     * @returns The user.
-     */
-    user: (_parent: unknown, args: { id: string }, ctx: Context): PublicUser => loadUser(ctx, args.id),
+    viewer: (_parent: unknown, _args: unknown, ctx: Context, info: GraphQLResolveInfo): Promise<GeneratedRow> =>
+      requiredRow(ctx, info, GeneratedTable.Users, userById(ctx.viewer.id)),
     /**
      * Resolves `Query.groups`.
      *
@@ -786,8 +721,7 @@ const resolvers = {
      * @param ctx - Request context.
      * @returns Every group.
      */
-    groups: (_parent: unknown, _args: unknown, ctx: Context): GroupView[] =>
-      listGroups(ctx).map((group) => groupView(ctx, group)),
+    groups: (_parent: unknown, _args: unknown, ctx: Context): Group[] => listGroups(ctx),
     /**
      * Resolves `Query.keys`.
      *
@@ -826,15 +760,6 @@ const resolvers = {
      */
     passwordRules: (_parent: unknown, _args: unknown, ctx: Context): PasswordRules => ctx.settings.passwordRules(),
     /**
-     * Resolves `Query.upstreams`.
-     *
-     * @param _parent - Unused.
-     * @param _args - Unused.
-     * @param ctx - Request context.
-     * @returns The upstream providers, oldest first.
-     */
-    upstreams: (_parent: unknown, _args: unknown, ctx: Context): UpstreamProvider[] => ctx.upstreams.list(),
-    /**
      * Resolves `Query.upstreamRedirectUri`.
      *
      * @param _parent - Unused.
@@ -854,28 +779,7 @@ const resolvers = {
      */
     pairing: (_parent: unknown, args: { id: string }, ctx: Context): PairingView | null => {
       const pairing = ctx.pairings.find(args.id);
-      return pairing === null ? null : pairingView(ctx, pairing);
-    },
-    /**
-     * Resolves `Query.auditLog`.
-     *
-     * @param _parent - Unused.
-     * @param args - The page and the filters.
-     * @param ctx - Request context.
-     * @returns A page of entries, newest first.
-     */
-    auditLog: (
-      _parent: unknown,
-      args: { first?: number | null; after?: string | null; type?: AuditType | null; userId?: string | null },
-      ctx: Context,
-    ): AuditPageView => {
-      const page = ctx.audit.list({
-        first: args.first ?? undefined,
-        after: args.after,
-        types: args.type === null || args.type === undefined ? null : [args.type],
-        userId: args.userId,
-      });
-      return { entries: page.entries.map(auditEntryView), nextCursor: page.nextCursor };
+      return pairing === null ? null : pairingView(pairing);
     },
   },
   Subscription: {
@@ -890,6 +794,25 @@ const resolvers = {
        */
       subscribe: (_parent: unknown, args: { type?: AuditType | null; userId?: string | null }, ctx: Context) =>
         auditEntriesAdded(ctx, args),
+      /**
+       * Reads each entry's row once it is saved, so it carries whatever the subscription selected.
+       *
+       * @param payload - The entry, as it was recorded.
+       * @param payload.auditEntryAdded - The entry.
+       * @param _args - Unused.
+       * @param ctx - Request context.
+       * @param info - The field, for the row's selection.
+       * @returns The entry's row.
+       */
+      resolve: async (
+        { auditEntryAdded: entry }: { auditEntryAdded: AuditEntry },
+        _args: unknown,
+        ctx: Context,
+        info: GraphQLResolveInfo,
+      ): Promise<GeneratedRow> => {
+        await ctx.audit.settled();
+        return requiredRow(ctx, info, GeneratedTable.AuditEntries, { id: { eq: entry.id } });
+      },
     },
     pairingChanged: {
       /**
@@ -910,11 +833,14 @@ const resolvers = {
      * @param _parent - Unused.
      * @param args - The client to add.
      * @param ctx - Request context.
+     * @param info - The field, for the row's selection.
      * @returns The new client, with its secret.
      */
-    createClient: (_parent: unknown, args: { input: NewClient }, ctx: Context): OidcClient => {
-      const client = ctx.clients.create(args.input);
-      return audited(ctx, AuditType.ClientCreated, clientTarget(client), refreshed(ctx, client));
+    createClient: async (_parent: unknown, args: { input: NewClient }, ctx: Context, info: GraphQLResolveInfo) => {
+      const client = await ctx.clients.create(args.input);
+      ctx.host.refresh();
+      audit(ctx, AuditType.ClientCreated, clientTarget(client));
+      return requiredRow(ctx, info, GeneratedTable.Clients, clientById(client.clientId));
     },
     /**
      * Resolves `Mutation.updateClient`.
@@ -922,11 +848,19 @@ const resolvers = {
      * @param _parent - Unused.
      * @param args - The client's ID and its new settings.
      * @param ctx - Request context.
+     * @param info - The field, for the row's selection.
      * @returns The changed client.
      */
-    updateClient: (_parent: unknown, args: { clientId: string; input: ClientFields }, ctx: Context): OidcClient => {
-      const client = ctx.clients.update(args.clientId, args.input);
-      return audited(ctx, AuditType.ClientUpdated, clientTarget(client), refreshed(ctx, client));
+    updateClient: async (
+      _parent: unknown,
+      args: { clientId: string; input: ClientFields },
+      ctx: Context,
+      info: GraphQLResolveInfo,
+    ) => {
+      const client = await ctx.clients.update(args.clientId, args.input);
+      ctx.host.refresh();
+      audit(ctx, AuditType.ClientUpdated, clientTarget(client));
+      return requiredRow(ctx, info, GeneratedTable.Clients, clientById(client.clientId));
     },
     /**
      * Resolves `Mutation.rotateClientSecret`.
@@ -934,11 +868,18 @@ const resolvers = {
      * @param _parent - Unused.
      * @param args - The client's ID.
      * @param ctx - Request context.
+     * @param info - The field, for the row's selection.
      * @returns The client, with its new secret.
      */
-    rotateClientSecret: (_parent: unknown, args: { clientId: string }, ctx: Context): OidcClient => {
-      const client = ctx.clients.rotateSecret(args.clientId);
-      return audited(ctx, AuditType.ClientSecretRotated, clientTarget(client), client);
+    rotateClientSecret: async (
+      _parent: unknown,
+      args: { clientId: string },
+      ctx: Context,
+      info: GraphQLResolveInfo,
+    ) => {
+      const client = await ctx.clients.rotateSecret(args.clientId);
+      audit(ctx, AuditType.ClientSecretRotated, clientTarget(client));
+      return requiredRow(ctx, info, GeneratedTable.Clients, clientById(client.clientId));
     },
     /**
      * Resolves `Mutation.deleteClient`.
@@ -946,11 +887,15 @@ const resolvers = {
      * @param _parent - Unused.
      * @param args - The client's ID.
      * @param ctx - Request context.
-     * @returns The removed client.
+     * @param info - The field, for the row's selection.
+     * @returns The removed client, as it was.
      */
-    deleteClient: (_parent: unknown, args: { clientId: string }, ctx: Context): OidcClient => {
-      const client = ctx.clients.remove(args.clientId);
-      return audited(ctx, AuditType.ClientDeleted, clientTarget(client), refreshed(ctx, client));
+    deleteClient: async (_parent: unknown, args: { clientId: string }, ctx: Context, info: GraphQLResolveInfo) => {
+      const row = await rowWhere(ctx, info, GeneratedTable.Clients, clientById(args.clientId));
+      const client = await ctx.clients.remove(args.clientId);
+      ctx.host.refresh();
+      audit(ctx, AuditType.ClientDeleted, clientTarget(client));
+      return row;
     },
     /**
      * Resolves `Mutation.startPairing`.
@@ -971,12 +916,12 @@ const resolvers = {
         withoutBlanks(args.input),
         ctx.branding.read().name,
       );
-      const view = { pairing: pairingView(ctx, started), setupUrl: started.setupUrl };
       // The setup URL holds the token, so only who may sign in is kept.
-      return audited(ctx, AuditType.PairingStarted, pairingTarget(started), view, {
+      audit(ctx, AuditType.PairingStarted, pairingTarget(started), {
         allowedGroups: started.allowedGroups.join(', '),
         groupsClaim: started.groupsClaim,
       });
+      return { pairing: pairingView(started), setupUrl: started.setupUrl };
     },
     /**
      * Resolves `Mutation.finishPairing`.
@@ -1002,15 +947,11 @@ const resolvers = {
         throw badInput('That pairing is finished already.');
       }
       const done = await setUpOffers(ctx, pairing, args.input);
-      ctx.pairings.finish(pairing.id);
+      await ctx.pairings.finish(pairing.id);
       const finished = ctx.pairings.find(pairing.id) ?? { ...pairing, isFinished: true };
-      return audited(
-        ctx,
-        AuditType.PairingFinished,
-        pairingTarget(pairing),
-        refreshed(ctx, pairingView(ctx, finished)),
-        done,
-      );
+      ctx.host.refresh();
+      audit(ctx, AuditType.PairingFinished, pairingTarget(pairing), done);
+      return pairingView(finished);
     },
     /**
      * Resolves `Mutation.cancelPairing`.
@@ -1020,12 +961,13 @@ const resolvers = {
      * @param ctx - Request context.
      * @returns Whether it was still there to cancel.
      */
-    cancelPairing: (_parent: unknown, args: { id: string }, ctx: Context): boolean => {
+    cancelPairing: async (_parent: unknown, args: { id: string }, ctx: Context): Promise<boolean> => {
       const pairing = ctx.pairings.find(args.id);
-      const wasCancelled = ctx.pairings.cancel(args.id);
-      return pairing === null || wasCancelled === false
-        ? wasCancelled
-        : audited(ctx, AuditType.PairingCancelled, pairingTarget(pairing), wasCancelled);
+      const wasCancelled = await ctx.pairings.cancel(args.id);
+      if (pairing !== null && wasCancelled) {
+        audit(ctx, AuditType.PairingCancelled, pairingTarget(pairing));
+      }
+      return wasCancelled;
     },
     /**
      * Resolves `Mutation.createUser`.
@@ -1033,16 +975,19 @@ const resolvers = {
      * @param _parent - Unused.
      * @param args - The user to add.
      * @param ctx - Request context.
+     * @param info - The field, for the row's selection.
      * @returns The new user.
      */
-    createUser: async (_parent: unknown, args: { input: NewUser }, ctx: Context): Promise<PublicUser> => {
+    createUser: async (_parent: unknown, args: { input: NewUser }, ctx: Context, info: GraphQLResolveInfo) => {
       const { password, username, name, email } = args.input;
       const hasPassword = password !== undefined && password !== null && password !== '';
       if (hasPassword) {
         await ctx.passwordPolicy.check(password, { username, name, email });
       }
-      const user = ctx.users.create(args.input);
-      return audited(ctx, AuditType.UserCreated, userTarget(user), refreshed(ctx, user));
+      const user = await ctx.users.create(args.input);
+      ctx.host.refresh();
+      audit(ctx, AuditType.UserCreated, userTarget(user));
+      return requiredRow(ctx, info, GeneratedTable.Users, userById(user.id));
     },
     /**
      * Resolves `Mutation.updateUser`.
@@ -1050,11 +995,19 @@ const resolvers = {
      * @param _parent - Unused.
      * @param args - The user's id and new details.
      * @param ctx - Request context.
+     * @param info - The field, for the row's selection.
      * @returns The changed user.
      */
-    updateUser: (_parent: unknown, args: { id: string; input: UserFields }, ctx: Context): PublicUser => {
-      const user = ctx.users.update(args.id, args.input);
-      return audited(ctx, AuditType.UserUpdated, userTarget(user), refreshed(ctx, user));
+    updateUser: async (
+      _parent: unknown,
+      args: { id: string; input: UserFields },
+      ctx: Context,
+      info: GraphQLResolveInfo,
+    ) => {
+      const user = await ctx.users.update(args.id, args.input);
+      ctx.host.refresh();
+      audit(ctx, AuditType.UserUpdated, userTarget(user));
+      return requiredRow(ctx, info, GeneratedTable.Users, userById(user.id));
     },
     /**
      * Resolves `Mutation.setUserPassword`.
@@ -1062,21 +1015,21 @@ const resolvers = {
      * @param _parent - Unused.
      * @param args - The user's id and new password.
      * @param ctx - Request context.
+     * @param info - The field, for the row's selection.
      * @returns The user.
      */
     setUserPassword: async (
       _parent: unknown,
       args: { id: string; password: string },
       ctx: Context,
-    ): Promise<PublicUser> => {
-      const owner = ctx.users.find(args.id);
-      if (owner === null) {
-        throw notFound(`No user has the ID "${args.id}".`);
-      }
+      info: GraphQLResolveInfo,
+    ) => {
+      const owner = loadUser(ctx, args.id);
       await ctx.passwordPolicy.check(args.password, owner);
-      const user = ctx.users.setPassword(args.id, args.password);
-      ctx.passwordLinks.cancelFor(user.id);
-      return audited(ctx, AuditType.UserPasswordSet, userTarget(user), user);
+      const user = await ctx.users.setPassword(args.id, args.password);
+      await ctx.passwordLinks.cancelFor(user.id);
+      audit(ctx, AuditType.UserPasswordSet, userTarget(user));
+      return requiredRow(ctx, info, GeneratedTable.Users, userById(user.id));
     },
     /**
      * Resolves `Mutation.deleteUser`.
@@ -1084,16 +1037,20 @@ const resolvers = {
      * @param _parent - Unused.
      * @param args - The user's id.
      * @param ctx - Request context.
-     * @returns The removed user.
+     * @param info - The field, for the row's selection.
+     * @returns The removed user, as they were.
      */
-    deleteUser: async (_parent: unknown, args: { id: string }, ctx: Context): Promise<PublicUser> => {
-      const user = ctx.users.remove(args.id);
+    deleteUser: async (_parent: unknown, args: { id: string }, ctx: Context, info: GraphQLResolveInfo) => {
+      const row = await rowWhere(ctx, info, GeneratedTable.Users, userById(args.id));
+      const user = await ctx.users.remove(args.id);
       await signOutEverywhere(ctx, user.id);
-      ctx.passwordLinks.cancelFor(user.id);
-      ctx.factors.removeAll(user.id);
-      ctx.upstreams.removeUser(user.id);
+      await ctx.passwordLinks.cancelFor(user.id);
+      await ctx.factors.removeAll(user.id);
+      await ctx.upstreams.removeUser(user.id);
       await ctx.pictures.discard(user);
-      return audited(ctx, AuditType.UserDeleted, userTarget(user), refreshed(ctx, user));
+      ctx.host.refresh();
+      audit(ctx, AuditType.UserDeleted, userTarget(user));
+      return row;
     },
     /**
      * Resolves `Mutation.setUserDisabled`.
@@ -1101,18 +1058,21 @@ const resolvers = {
      * @param _parent - Unused.
      * @param args - The user's id and whether to disable them.
      * @param ctx - Request context.
+     * @param info - The field, for the row's selection.
      * @returns The user.
      */
     setUserDisabled: async (
       _parent: unknown,
       args: { id: string; disabled: boolean },
       ctx: Context,
-    ): Promise<PublicUser> => {
-      const user = ctx.users.setDisabled(args.id, args.disabled);
+      info: GraphQLResolveInfo,
+    ) => {
+      const user = await ctx.users.setDisabled(args.id, args.disabled);
       if (user.disabled) {
         await signOutEverywhere(ctx, user.id);
       }
-      return audited(ctx, user.disabled ? AuditType.UserDisabled : AuditType.UserEnabled, userTarget(user), user);
+      audit(ctx, user.disabled ? AuditType.UserDisabled : AuditType.UserEnabled, userTarget(user));
+      return requiredRow(ctx, info, GeneratedTable.Users, userById(user.id));
     },
     /**
      * Resolves `Mutation.endUserSession`.
@@ -1120,6 +1080,7 @@ const resolvers = {
      * @param _parent - Unused.
      * @param args - The user's id and the session's.
      * @param ctx - Request context.
+     * @param info - The field, for the row's selection.
      * @returns The user.
      * @throws NOT_FOUND when the user has no such session.
      */
@@ -1127,13 +1088,15 @@ const resolvers = {
       _parent: unknown,
       args: { id: string; sessionId: string },
       ctx: Context,
-    ): Promise<PublicUser> => {
+      info: GraphQLResolveInfo,
+    ) => {
       const user = loadUser(ctx, args.id);
       const isEnded = await ctx.sessions.endSession(user.id, args.sessionId, ctx.ip);
       if (isEnded === false) {
         throw notFound(`"${user.username}" has no session "${args.sessionId}".`);
       }
-      return audited(ctx, AuditType.UserSessionEnded, userTarget(user), user, { sessionId: args.sessionId });
+      audit(ctx, AuditType.UserSessionEnded, userTarget(user), { sessionId: args.sessionId });
+      return requiredRow(ctx, info, GeneratedTable.Users, userById(user.id));
     },
     /**
      * Resolves `Mutation.signOutUser`.
@@ -1141,12 +1104,14 @@ const resolvers = {
      * @param _parent - Unused.
      * @param args - The user's id.
      * @param ctx - Request context.
+     * @param info - The field, for the row's selection.
      * @returns The user.
      */
-    signOutUser: async (_parent: unknown, args: { id: string }, ctx: Context): Promise<PublicUser> => {
+    signOutUser: async (_parent: unknown, args: { id: string }, ctx: Context, info: GraphQLResolveInfo) => {
       const user = loadUser(ctx, args.id);
       await signOutEverywhere(ctx, user.id);
-      return audited(ctx, AuditType.UserSignedOut, userTarget(user), user);
+      audit(ctx, AuditType.UserSignedOut, userTarget(user));
+      return requiredRow(ctx, info, GeneratedTable.Users, userById(user.id));
     },
     /**
      * Resolves `Mutation.resetSecondFactors`.
@@ -1154,12 +1119,14 @@ const resolvers = {
      * @param _parent - Unused.
      * @param args - The user's id.
      * @param ctx - Request context.
+     * @param info - The field, for the row's selection.
      * @returns The user.
      */
-    resetSecondFactors: (_parent: unknown, args: { id: string }, ctx: Context): PublicUser => {
+    resetSecondFactors: async (_parent: unknown, args: { id: string }, ctx: Context, info: GraphQLResolveInfo) => {
       const user = loadUser(ctx, args.id);
-      ctx.factors.removeAll(user.id);
-      return audited(ctx, AuditType.UserSecondFactorsReset, userTarget(user), user);
+      await ctx.factors.removeAll(user.id);
+      audit(ctx, AuditType.UserSecondFactorsReset, userTarget(user));
+      return requiredRow(ctx, info, GeneratedTable.Users, userById(user.id));
     },
     /**
      * Resolves `Mutation.createPasswordLink`.
@@ -1169,15 +1136,17 @@ const resolvers = {
      * @param ctx - Request context.
      * @returns The link and when it expires.
      */
-    createPasswordLink: (_parent: unknown, args: { id: string }, ctx: Context): { url: string; expiresAt: string } => {
+    createPasswordLink: async (
+      _parent: unknown,
+      args: { id: string },
+      ctx: Context,
+    ): Promise<{ url: string; expiresAt: string }> => {
       const user = loadUser(ctx, args.id);
-      const { token, expiresAt } = ctx.passwordLinks.issue(user.id);
+      const { token, expiresAt } = await ctx.passwordLinks.issue(user.id);
       const url = `${adminUrls(ctx.issuer).base}${WEB_APP_PAGE.setPassword}#token=${token}`;
       // The URL holds the token, so only that a link was made is kept.
-      return audited(ctx, AuditType.PasswordLinkCreated, userTarget(user), {
-        url,
-        expiresAt: new Date(expiresAt).toISOString(),
-      });
+      audit(ctx, AuditType.PasswordLinkCreated, userTarget(user));
+      return { url, expiresAt: new Date(expiresAt).toISOString() };
     },
     /**
      * Resolves `Mutation.renameGroup`.
@@ -1187,9 +1156,10 @@ const resolvers = {
      * @param ctx - Request context.
      * @returns The renamed group.
      */
-    renameGroup: (_parent: unknown, args: { name: string; newName: string }, ctx: Context): GroupView => {
-      const group = groupView(ctx, renameGroup(ctx, args.name, args.newName));
-      return audited(ctx, AuditType.GroupRenamed, groupTarget(group.name), group, { from: args.name });
+    renameGroup: async (_parent: unknown, args: { name: string; newName: string }, ctx: Context): Promise<Group> => {
+      const group = await renameGroup(ctx, args.name, args.newName);
+      audit(ctx, AuditType.GroupRenamed, groupTarget(group.name), { from: args.name });
+      return group;
     },
     /**
      * Resolves `Mutation.deleteGroup`.
@@ -1199,9 +1169,10 @@ const resolvers = {
      * @param ctx - Request context.
      * @returns How many users were in it.
      */
-    deleteGroup: (_parent: unknown, args: { name: string }, ctx: Context): number => {
-      const members = deleteGroup(ctx, args.name);
-      return audited(ctx, AuditType.GroupDeleted, groupTarget(args.name), members, { members: String(members) });
+    deleteGroup: async (_parent: unknown, args: { name: string }, ctx: Context): Promise<number> => {
+      const members = await deleteGroup(ctx, args.name);
+      audit(ctx, AuditType.GroupDeleted, groupTarget(args.name), { members: String(members) });
+      return members;
     },
     /**
      * Resolves `Mutation.rotateKeys`.
@@ -1211,9 +1182,11 @@ const resolvers = {
      * @param ctx - Request context.
      * @returns The keys after the rotation.
      */
-    rotateKeys: (_parent: unknown, _args: unknown, ctx: Context): KeysView => {
-      const keys = refreshed(ctx, keysView(ctx.keys.rotate()));
-      return audited(ctx, AuditType.KeysRotated, KEYS_TARGET, keys, { kid: keys.signingKeys[0]?.kid ?? '' });
+    rotateKeys: async (_parent: unknown, _args: unknown, ctx: Context): Promise<KeysView> => {
+      const keys = keysView(await ctx.keys.rotate());
+      ctx.host.refresh();
+      audit(ctx, AuditType.KeysRotated, KEYS_TARGET, { kid: keys.signingKeys[0]?.kid ?? '' });
+      return keys;
     },
     /**
      * Resolves `Mutation.setBrandingName`.
@@ -1223,9 +1196,10 @@ const resolvers = {
      * @param ctx - Request context.
      * @returns The branding.
      */
-    setBrandingName: (_parent: unknown, args: { name: string }, ctx: Context): BrandingView => {
-      const branding = ctx.branding.setName(args.name);
-      return audited(ctx, AuditType.BrandingNameSet, BRANDING_TARGET, brandingView(branding), { name: branding.name });
+    setBrandingName: async (_parent: unknown, args: { name: string }, ctx: Context): Promise<BrandingView> => {
+      const branding = await ctx.branding.setName(args.name);
+      audit(ctx, AuditType.BrandingNameSet, BRANDING_TARGET, { name: branding.name });
+      return brandingView(branding);
     },
     /**
      * Resolves `Mutation.setBrandingLogo`.
@@ -1235,11 +1209,14 @@ const resolvers = {
      * @param ctx - Request context.
      * @returns The branding.
      */
-    setBrandingLogo: (_parent: unknown, args: { dataUrl?: string | null }, ctx: Context): BrandingView => {
-      const branding = ctx.branding.setLogo(args.dataUrl ?? null);
-      return audited(ctx, AuditType.BrandingLogoSet, BRANDING_TARGET, brandingView(branding), {
-        logo: branding.logo === null ? 'removed' : 'set',
-      });
+    setBrandingLogo: async (
+      _parent: unknown,
+      args: { dataUrl?: string | null },
+      ctx: Context,
+    ): Promise<BrandingView> => {
+      const branding = await ctx.branding.setLogo(args.dataUrl ?? null);
+      audit(ctx, AuditType.BrandingLogoSet, BRANDING_TARGET, { logo: branding.logo === null ? 'removed' : 'set' });
+      return brandingView(branding);
     },
     /**
      * Resolves `Mutation.setHttpRedirects`.
@@ -1249,12 +1226,17 @@ const resolvers = {
      * @param ctx - Request context.
      * @returns The setting.
      */
-    setHttpRedirects: (_parent: unknown, args: { allowed?: boolean | null }, ctx: Context): HttpRedirectSetting => {
-      const setting = ctx.settings.setHttpRedirects(args.allowed ?? null);
-      return audited(ctx, AuditType.HttpRedirectsSet, SETTINGS_TARGET, setting, {
+    setHttpRedirects: async (
+      _parent: unknown,
+      args: { allowed?: boolean | null },
+      ctx: Context,
+    ): Promise<HttpRedirectSetting> => {
+      const setting = await ctx.settings.setHttpRedirects(args.allowed ?? null);
+      audit(ctx, AuditType.HttpRedirectsSet, SETTINGS_TARGET, {
         httpRedirects: setting.isAllowed ? 'allowed' : 'refused',
         chosenBy: setting.isSet ? 'operator' : 'issuer',
       });
+      return setting;
     },
     /**
      * Resolves `Mutation.setPasswordRules`.
@@ -1264,21 +1246,22 @@ const resolvers = {
      * @param ctx - Request context.
      * @returns The rules.
      */
-    setPasswordRules: (
+    setPasswordRules: async (
       _parent: unknown,
       args: { minScore?: number | null; checkBreaches?: boolean | null },
       ctx: Context,
-    ): PasswordRules => {
-      const rules = ctx.settings.setPasswordRules({
+    ): Promise<PasswordRules> => {
+      const rules = await ctx.settings.setPasswordRules({
         ...(args.minScore === undefined || args.minScore === null ? {} : { minScore: args.minScore }),
         ...(args.checkBreaches === undefined || args.checkBreaches === null
           ? {}
           : { checkBreaches: args.checkBreaches }),
       });
-      return audited(ctx, AuditType.PasswordRulesSet, SETTINGS_TARGET, rules, {
+      audit(ctx, AuditType.PasswordRulesSet, SETTINGS_TARGET, {
         minScore: String(rules.minScore),
         breachCheck: rules.checkBreaches ? 'on' : 'off',
       });
+      return rules;
     },
     /**
      * Resolves `Mutation.createUpstream`.
@@ -1286,15 +1269,18 @@ const resolvers = {
      * @param _parent - Unused.
      * @param args - Its id and settings.
      * @param ctx - Request context.
+     * @param info - The field, for the row's selection.
      * @returns The provider.
      */
-    createUpstream: (
+    createUpstream: async (
       _parent: unknown,
       args: { id: string; input: UpstreamInputArgs },
       ctx: Context,
-    ): UpstreamProvider => {
-      const upstream = ctx.upstreams.create({ ...upstreamFieldsOf(args.input), id: args.id });
-      return audited(ctx, AuditType.UpstreamCreated, upstreamTarget(upstream), upstream, { kind: upstream.kind });
+      info: GraphQLResolveInfo,
+    ) => {
+      const upstream = await ctx.upstreams.create({ ...upstreamFieldsOf(args.input), id: args.id });
+      audit(ctx, AuditType.UpstreamCreated, upstreamTarget(upstream), { kind: upstream.kind });
+      return requiredRow(ctx, info, GeneratedTable.Upstreams, upstreamById(upstream.id));
     },
     /**
      * Resolves `Mutation.updateUpstream`.
@@ -1302,18 +1288,21 @@ const resolvers = {
      * @param _parent - Unused.
      * @param args - Its id and settings.
      * @param ctx - Request context.
+     * @param info - The field, for the row's selection.
      * @returns The provider.
      */
-    updateUpstream: (
+    updateUpstream: async (
       _parent: unknown,
       args: { id: string; input: UpstreamInputArgs },
       ctx: Context,
-    ): UpstreamProvider => {
+      info: GraphQLResolveInfo,
+    ) => {
       const isNewSecret = (args.input.clientSecret ?? '').trim() !== '';
-      const upstream = ctx.upstreams.update(args.id, upstreamFieldsOf(args.input));
-      return audited(ctx, AuditType.UpstreamUpdated, upstreamTarget(upstream), upstream, {
+      const upstream = await ctx.upstreams.update(args.id, upstreamFieldsOf(args.input));
+      audit(ctx, AuditType.UpstreamUpdated, upstreamTarget(upstream), {
         clientSecret: isNewSecret ? 'replaced' : 'kept',
       });
+      return requiredRow(ctx, info, GeneratedTable.Upstreams, upstreamById(upstream.id));
     },
     /**
      * Resolves `Mutation.deleteUpstream`.
@@ -1321,13 +1310,14 @@ const resolvers = {
      * @param _parent - Unused.
      * @param args - Its id.
      * @param ctx - Request context.
-     * @returns The removed provider.
+     * @param info - The field, for the row's selection.
+     * @returns The removed provider, as it was.
      */
-    deleteUpstream: (_parent: unknown, args: { id: string }, ctx: Context): UpstreamProvider => {
-      const { provider, unlinked } = ctx.upstreams.remove(args.id);
-      return audited(ctx, AuditType.UpstreamDeleted, upstreamTarget(provider), provider, {
-        unlinked: String(unlinked),
-      });
+    deleteUpstream: async (_parent: unknown, args: { id: string }, ctx: Context, info: GraphQLResolveInfo) => {
+      const row = await rowWhere(ctx, info, GeneratedTable.Upstreams, upstreamById(args.id));
+      const { provider, unlinked } = await ctx.upstreams.remove(args.id);
+      audit(ctx, AuditType.UpstreamDeleted, upstreamTarget(provider), { unlinked: String(unlinked) });
+      return row;
     },
     /**
      * Resolves `Mutation.unlinkUserUpstream`.
@@ -1335,22 +1325,20 @@ const resolvers = {
      * @param _parent - Unused.
      * @param args - The user's id and the provider's.
      * @param ctx - Request context.
+     * @param info - The field, for the row's selection.
      * @returns The user.
      */
-    unlinkUserUpstream: (_parent: unknown, args: { id: string; providerId: string }, ctx: Context): PublicUser => {
+    unlinkUserUpstream: async (
+      _parent: unknown,
+      args: { id: string; providerId: string },
+      ctx: Context,
+      info: GraphQLResolveInfo,
+    ) => {
       const user = loadUser(ctx, args.id);
-      const link = ctx.upstreams.unlink(user.id, args.providerId);
+      const link = await ctx.upstreams.unlink(user.id, args.providerId);
       const provider = ctx.upstreams.find(link.providerId) ?? { id: link.providerId, name: link.providerId };
-      return audited(ctx, AuditType.UpstreamUnlinked, upstreamTarget(provider), user, {
-        identity: link.label,
-        user: user.username,
-      });
+      audit(ctx, AuditType.UpstreamUnlinked, upstreamTarget(provider), { identity: link.label, user: user.username });
+      return requiredRow(ctx, info, GeneratedTable.Users, userById(user.id));
     },
   },
 };
-
-/** The schema this server serves at `/graphql`. */
-export const schema: GraphQLSchema = createSchema<Context>({
-  typeDefs: [TYPE_DEFS, MAIL_TYPE_DEFS, FORWARD_AUTH_TYPE_DEFS],
-  resolvers: [resolvers, apiResolvers, mailResolvers, forwardAuthResolvers],
-});

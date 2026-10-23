@@ -52,7 +52,7 @@ export function UserFormDialog({ user, open, onOpenChange, onInvited }: UserForm
       name: user?.name ?? '',
       email: user?.email ?? '',
       groups: user?.groups ?? [],
-      claims: claimsText(user?.claims ?? []),
+      claims: claimsText(user?.claims ?? {}),
     },
     onSubmit: async ({ value }) => {
       const input = {

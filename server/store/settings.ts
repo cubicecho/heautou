@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { PASSWORD_RULE_DEFAULTS } from '../core/defaults.ts';
 import { parseInput } from '../core/validation.ts';
-import type { JsonFile } from './json-file.ts';
+import type { DataDocument } from '../db/document.ts';
 
 /** The highest score zxcvbn gives a password. */
 export const MAX_PASSWORD_SCORE = 4;
@@ -57,7 +57,7 @@ export interface SettingsStore {
    * @param isAllowed - The choice, or null to follow the issuer again.
    * @returns The setting.
    */
-  setHttpRedirects: (isAllowed: boolean | null) => HttpRedirectSetting;
+  setHttpRedirects: (isAllowed: boolean | null) => Promise<HttpRedirectSetting>;
   /**
    * Reads what a new password must pass.
    *
@@ -71,7 +71,7 @@ export interface SettingsStore {
    * @returns The rules.
    * @throws BAD_USER_INPUT for a score outside 0 to `MAX_PASSWORD_SCORE`.
    */
-  setPasswordRules: (changes: Partial<PasswordRules>) => PasswordRules;
+  setPasswordRules: (changes: Partial<PasswordRules>) => Promise<PasswordRules>;
 }
 
 /**
@@ -81,7 +81,7 @@ export interface SettingsStore {
  * @param issuer - The provider's issuer, which the http redirect default follows.
  * @returns The store.
  */
-export function createSettingsStore(file: JsonFile<SettingsDocument>, issuer: string): SettingsStore {
+export function createSettingsStore(file: DataDocument<SettingsDocument>, issuer: string): SettingsStore {
   const isIssuerHttp = new URL(issuer).protocol === 'http:';
   const httpRedirects = (): HttpRedirectSetting => {
     const chosen = file.read().allowHttpRedirectUris;
@@ -96,17 +96,17 @@ export function createSettingsStore(file: JsonFile<SettingsDocument>, issuer: st
   };
   return {
     httpRedirects,
-    setHttpRedirects: (isAllowed) => {
-      file.update((current) => {
+    setHttpRedirects: async (isAllowed) => {
+      await file.update((current) => {
         const { allowHttpRedirectUris: _previous, ...rest } = current;
         return isAllowed === null ? rest : { ...rest, allowHttpRedirectUris: isAllowed };
       });
       return httpRedirects();
     },
     passwordRules,
-    setPasswordRules: (changes) => {
+    setPasswordRules: async (changes) => {
       const { minScore, checkBreaches } = parseInput(passwordRulesSchema, changes);
-      file.update((current) => ({
+      await file.update((current) => ({
         ...current,
         ...(minScore === undefined ? {} : { minPasswordScore: minScore }),
         ...(checkBreaches === undefined ? {} : { checkPasswordBreaches: checkBreaches }),

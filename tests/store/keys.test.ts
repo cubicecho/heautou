@@ -1,39 +1,47 @@
-import { writeFileSync } from 'node:fs';
-import path from 'node:path';
 import { KEY_DEFAULTS } from '../../server/core/defaults.ts';
-import { openJsonFile } from '../../server/store/json-file.ts';
-import { openKeyStore, type ProviderKeys } from '../../server/store/keys.ts';
-import { tempDir } from '../helpers.ts';
+import { loosen, openDocument, replaceDocument } from '../../server/db/document.ts';
+import { KEYS_DOCUMENT } from '../../server/db/documents.ts';
+import { openKeyStore } from '../../server/store/keys.ts';
+import { createTestStore, type TestStore } from '../db.ts';
 
 const DAY_MS = 86_400_000;
 
 describe('key store', () => {
-  it('makes keys once and rotates them when they are old', () => {
-    const file = path.join(tempDir(), 'keys.json');
+  let db: TestStore;
+
+  beforeEach(async () => {
+    db = await createTestStore();
+  });
+
+  afterEach(() => db.close());
+
+  it('makes keys once and rotates them when they are old', async () => {
     let time = Date.parse('2026-01-01T00:00:00Z');
     const now = (): Date => new Date(time);
-    const store = openKeyStore(openJsonFile<ProviderKeys | null>(file, null), now);
+    const store = await openKeyStore(await openDocument(db, KEYS_DOCUMENT), now);
     const first = store.current();
     expect(first.jwks).toHaveLength(1);
-    expect(openKeyStore(openJsonFile<ProviderKeys | null>(file, null), now).current()).toEqual(first);
+    expect((await openKeyStore(await openDocument(db, KEYS_DOCUMENT), now)).current()).toEqual(first);
     expect(store.isDue()).toBe(false);
     time += (KEY_DEFAULTS.rotationDays + 1) * DAY_MS;
     expect(store.isDue()).toBe(true);
-    store.rotate();
-    store.rotate();
+    await store.rotate();
+    await store.rotate();
     const { jwks, cookieKeys, rotatedAt } = store.current();
     expect(jwks).toHaveLength(KEY_DEFAULTS.keptKeys);
     expect(cookieKeys).toHaveLength(KEY_DEFAULTS.keptKeys);
     expect(jwks.map((jwk) => jwk.kid)).not.toContain(first.jwks[0]?.kid);
     expect(rotatedAt).toBe(now().toISOString());
     expect(store.isDue()).toBe(false);
+    expect((await openKeyStore(await openDocument(db, KEYS_DOCUMENT), now)).current()).toEqual(store.current());
   });
 
-  it('dates keys written before rotation existed from now', () => {
-    const file = path.join(tempDir(), 'keys.json');
-    const fresh = openKeyStore(openJsonFile<ProviderKeys | null>(path.join(tempDir(), 'k.json'), null)).current();
-    writeFileSync(file, JSON.stringify({ jwks: fresh.jwks, cookieKeys: fresh.cookieKeys }));
-    const store = openKeyStore(openJsonFile<ProviderKeys | null>(file, null));
+  it('dates keys written before rotation existed from now', async () => {
+    const fresh = (await openKeyStore(await openDocument(db, KEYS_DOCUMENT))).current();
+    await db.db.transaction((tx) =>
+      replaceDocument(tx, loosen(KEYS_DOCUMENT), { jwks: fresh.jwks, cookieKeys: fresh.cookieKeys }),
+    );
+    const store = await openKeyStore(await openDocument(db, KEYS_DOCUMENT));
     expect(store.current().jwks).toEqual(fresh.jwks);
     expect(store.current().rotatedAt).toEqual(expect.any(String));
     expect(store.isDue()).toBe(false);

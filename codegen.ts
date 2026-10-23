@@ -8,7 +8,13 @@ const config: CodegenConfig = {
   generates: {
     './web/src/__generated__/graphql.ts': {
       plugins: ['typescript-operations', 'typed-document-node'],
-      config: { useTypeImports: true, skipTypename: true, enumsAsTypes: true, avoidOptionals: { field: true } },
+      config: {
+        useTypeImports: true,
+        skipTypename: true,
+        enumsAsTypes: true,
+        avoidOptionals: { field: true },
+        scalars: { DateTime: 'string', JSON: 'Record<string, string>' },
+      },
     },
   },
 };

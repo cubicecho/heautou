@@ -1,6 +1,6 @@
-import path from 'node:path';
-import { type ClientAuthMethod, createClientStore, type OidcClient } from '../../server/store/clients.ts';
-import { openJsonFile } from '../../server/store/json-file.ts';
+import { openDocument } from '../../server/db/document.ts';
+import { CLIENTS_DOCUMENT } from '../../server/db/documents.ts';
+import { type ClientAuthMethod, createClientStore } from '../../server/store/clients.ts';
 import {
   baseUrlFrom,
   baseUrlOfClient,
@@ -13,7 +13,7 @@ import {
   SITE_PRESETS,
   UNSUPPORTED_APPS,
 } from '../../web/src/clients/presets.ts';
-import { tempDir } from '../helpers.ts';
+import { createTestStore } from '../db.ts';
 
 const CONTEXT: PresetContext = {
   issuer: 'https://auth.example.com/oidc',
@@ -55,14 +55,19 @@ describe('client presets', () => {
     }
   });
 
-  it('builds a client the client store takes for every preset, on an https address', () => {
-    const store = createClientStore(openJsonFile<OidcClient[]>(path.join(tempDir(), 'clients.json'), []));
-    for (const preset of PRESETS) {
-      const fields = presetFields(preset, 'https://app.example.com');
-      // GraphQL's enum names are the store's values in capitals.
-      const authMethod = fields.authMethod.toLowerCase() as ClientAuthMethod;
-      const saved = store.create({ ...fields, authMethod, clientId: preset.id, preset: preset.id });
-      expect(saved).toMatchObject({ preset: preset.id, authMethod });
+  it('builds a client the client store takes for every preset, on an https address', async () => {
+    const db = await createTestStore();
+    try {
+      const store = createClientStore(await openDocument(db, CLIENTS_DOCUMENT));
+      for (const preset of PRESETS) {
+        const fields = presetFields(preset, 'https://app.example.com');
+        // GraphQL's enum names are the store's values in capitals.
+        const authMethod = fields.authMethod.toLowerCase() as ClientAuthMethod;
+        const saved = await store.create({ ...fields, authMethod, clientId: preset.id, preset: preset.id });
+        expect(saved).toMatchObject({ preset: preset.id, authMethod });
+      }
+    } finally {
+      await db.close();
     }
   });
 

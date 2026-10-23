@@ -3,8 +3,8 @@ import { z } from 'zod';
 import { FORWARD_AUTH_DEFAULTS } from '../core/defaults.ts';
 import { badInput, notFound } from '../core/errors.ts';
 import { parseInput } from '../core/validation.ts';
+import type { DataDocument } from '../db/document.ts';
 import { replaceGroupIn } from './claims.ts';
-import type { JsonFile } from './json-file.ts';
 
 /** A DNS name in lowercase: labels of letters, digits and inner dashes, joined by dots. */
 const HOST_PATTERN = /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/;
@@ -125,7 +125,7 @@ export interface ProtectedSiteStore {
    * @returns The site.
    * @throws BAD_USER_INPUT when a field is wrong, or another site has the same host and path.
    */
-  create: (fields: SiteFields) => ProtectedSite;
+  create: (fields: SiteFields) => Promise<ProtectedSite>;
   /**
    * Changes a site.
    *
@@ -134,7 +134,7 @@ export interface ProtectedSiteStore {
    * @returns The site.
    * @throws NOT_FOUND when there is no such site; BAD_USER_INPUT as for `create`.
    */
-  update: (id: string, fields: SiteFields) => ProtectedSite;
+  update: (id: string, fields: SiteFields) => Promise<ProtectedSite>;
   /**
    * Removes a site.
    *
@@ -142,14 +142,14 @@ export interface ProtectedSiteStore {
    * @returns The removed site.
    * @throws NOT_FOUND when there is no such site.
    */
-  remove: (id: string) => ProtectedSite;
+  remove: (id: string) => Promise<ProtectedSite>;
   /**
    * Renames or removes a group in every site's allowed groups.
    *
    * @param from - The group.
    * @param to - Its new name, or null to remove it.
    */
-  replaceGroup: (from: string, to: string | null) => void;
+  replaceGroup: (from: string, to: string | null) => Promise<void>;
   /** The cookie domain the admin chose, or null for Heautou's own host. */
   cookieDomain: () => string | null;
   /**
@@ -159,7 +159,7 @@ export interface ProtectedSiteStore {
    * @returns The domain as kept.
    * @throws BAD_USER_INPUT when the browser would refuse a cookie for it from Heautou's host.
    */
-  setCookieDomain: (domain: string | null) => string | null;
+  setCookieDomain: (domain: string | null) => Promise<string | null>;
 }
 
 /**
@@ -172,7 +172,7 @@ export interface ProtectedSiteStore {
  * @returns The store.
  */
 export function createProtectedSiteStore(
-  file: JsonFile<ProtectedSitesDocument>,
+  file: DataDocument<ProtectedSitesDocument>,
   { issuerHost, now = Date.now }: { issuerHost: string; now?: () => number },
 ): ProtectedSiteStore {
   const sites = (): ProtectedSite[] => file.read().sites ?? [];
@@ -194,8 +194,8 @@ export function createProtectedSiteStore(
     }
     return fields;
   };
-  const write = (next: ProtectedSite[]): void => {
-    file.update((current) => ({ ...current, sites: next }));
+  const write = async (next: ProtectedSite[]): Promise<void> => {
+    await file.update((current) => ({ ...current, sites: next }));
   };
 
   return {
@@ -209,44 +209,44 @@ export function createProtectedSiteStore(
         null,
       );
     },
-    create: (input) => {
+    create: async (input) => {
       const site: ProtectedSite = {
         ...checked(input, null),
         id: randomUUID(),
         createdAt: new Date(now()).toISOString(),
       };
-      write([...sites(), site]);
+      await write([...sites(), site]);
       return site;
     },
-    update: (id, input) => {
+    update: async (id, input) => {
       const current = load(id);
       const site: ProtectedSite = { ...current, ...checked(input, id) };
-      write(sites().map((other) => (other.id === id ? site : other)));
+      await write(sites().map((other) => (other.id === id ? site : other)));
       return site;
     },
-    remove: (id) => {
+    remove: async (id) => {
       const site = load(id);
-      write(sites().filter((other) => other.id !== id));
+      await write(sites().filter((other) => other.id !== id));
       return site;
     },
-    replaceGroup: (from, to) => {
+    replaceGroup: async (from, to) => {
       const isUsed = sites().some((site) => site.allowedGroups.includes(from));
       if (isUsed) {
-        write(sites().map((site) => ({ ...site, allowedGroups: replaceGroupIn(site.allowedGroups, from, to) })));
+        await write(sites().map((site) => ({ ...site, allowedGroups: replaceGroupIn(site.allowedGroups, from, to) })));
       }
     },
     cookieDomain: () => file.read().cookieDomain ?? null,
-    setCookieDomain: (input) => {
+    setCookieDomain: async (input) => {
       const domain = input === null ? '' : input.trim().toLowerCase().replace(/^\.+/, '');
       if (domain === '') {
-        file.update(({ cookieDomain: _previous, ...rest }) => rest);
+        await file.update(({ cookieDomain: _previous, ...rest }) => rest);
         return null;
       }
       const problem = cookieDomainProblem(domain, issuerHost);
       if (problem !== null) {
         throw badInput(`cookieDomain: ${problem}.`);
       }
-      file.update((current) => ({ ...current, cookieDomain: domain }));
+      await file.update((current) => ({ ...current, cookieDomain: domain }));
       return domain;
     },
   };

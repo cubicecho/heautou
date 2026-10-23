@@ -66,7 +66,7 @@ describe('signing in with GitHub', () => {
   beforeEach(async () => {
     seen = [];
     app = await startTestApp({ fetchUpstream: fakeGitHub(seen) });
-    app.services.upstreams.create({
+    await app.services.upstreams.create({
       id: 'github',
       name: 'GitHub',
       kind: UpstreamKind.GitHub,
@@ -74,7 +74,7 @@ describe('signing in with GitHub', () => {
       clientSecret: 'gh-secret',
       unknownIdentity: UnknownIdentity.Create,
     });
-    client = app.services.clients.create({
+    client = await app.services.clients.create({
       name: 'Photos',
       authMethod: ClientAuthMethod.SecretBasic,
       redirectUris: [REDIRECT_URI],

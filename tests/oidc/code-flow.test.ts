@@ -11,7 +11,7 @@ describe('authorization code flow', () => {
   beforeAll(async () => {
     app = await startTestApp();
     issuer = app.services.issuer;
-    app.services.users.create({
+    await app.services.users.create({
       username: 'ada',
       password: PASSWORD,
       email: 'ada@example.com',
@@ -32,7 +32,7 @@ describe('authorization code flow', () => {
   });
 
   it('signs a user into a confidential client and releases their claims', async () => {
-    const client = app.services.clients.create({
+    const client = await app.services.clients.create({
       name: 'Test app',
       authMethod: ClientAuthMethod.SecretBasic,
       redirectUris: [REDIRECT_URI],
@@ -81,7 +81,7 @@ describe('authorization code flow', () => {
   });
 
   it('signs a user into a public client with PKCE', async () => {
-    const client = app.services.clients.create({
+    const client = await app.services.clients.create({
       name: 'Test app',
       authMethod: ClientAuthMethod.None,
       redirectUris: [REDIRECT_URI],
@@ -117,7 +117,7 @@ describe('authorization code flow', () => {
   // redirect URI with a query string.
   it('signs a user into a confidential client that also uses PKCE', async () => {
     const directUri = `${REDIRECT_URI}?direct=1`;
-    const client = app.services.clients.create({
+    const client = await app.services.clients.create({
       name: 'Test app',
       authMethod: ClientAuthMethod.SecretBasic,
       redirectUris: [REDIRECT_URI, directUri],
@@ -163,7 +163,7 @@ describe('authorization code flow', () => {
   });
 
   it('turns away a wrong password', async () => {
-    const client = app.services.clients.create({
+    const client = await app.services.clients.create({
       name: 'Test app',
       authMethod: ClientAuthMethod.SecretBasic,
       redirectUris: [REDIRECT_URI],

@@ -56,11 +56,13 @@ export function claimsOf(text: string): ClaimEntry[] {
 /**
  * Writes claims one per line, for the textarea `claimsOf` reads.
  *
- * @param claims - The claims.
+ * @param claims - The claims, value by name.
  * @returns The text.
  */
-export function claimsText(claims: readonly ClaimEntry[]): string {
-  return claims.map(({ name, value }) => `${name}=${value}`).join('\n');
+export function claimsText(claims: Readonly<Record<string, string>>): string {
+  return Object.entries(claims)
+    .map(([name, value]) => `${name}=${value}`)
+    .join('\n');
 }
 
 /**

@@ -11,6 +11,7 @@
     "includes": [
       "**",
       "!**/dist",
+      "!drizzle",
       "!**/__generated__",
       "!**/*.gen.ts",
       "!**/storybook-static",
@@ -64,6 +65,9 @@
       },
       "suspicious": {
         "noExplicitAny": "error"
+      },
+      "nursery": {
+        "noFloatingPromises": "error"
       }
     }
   },

@@ -61,7 +61,7 @@ describe('admin sign-in', () => {
   });
 
   it('sends a user outside the admin group to their account, not the admin API', async () => {
-    app.services.users.create({ username: 'ada', password: PASSWORD, email: '', name: '', groups: [] });
+    await app.services.users.create({ username: 'ada', password: PASSWORD, email: '', name: '', groups: [] });
     const browser = createBrowser(app.base);
     const callback = await signIn(app, '/admin/login', 'ada', PASSWORD, browser, `${app.base}/admin/callback`);
     const res = await browser.send(callback.pathname + callback.search);
@@ -77,7 +77,7 @@ describe('admin sign-in', () => {
 
   it('takes the admin API from an admin taken out of the group', async () => {
     const { users } = app.services;
-    const bob = users.create({
+    const bob = await users.create({
       username: 'bob',
       password: PASSWORD,
       email: '',
@@ -86,7 +86,7 @@ describe('admin sign-in', () => {
     });
     const browser = await signInAsAdmin(app, 'bob');
     expect((await adminGql(browser, VIEWER)).data.viewer.username).toBe('bob');
-    users.update(bob.id, { username: 'bob', email: '', name: '', groups: [] });
+    await users.update(bob.id, { username: 'bob', email: '', name: '', groups: [] });
     const res = await browser.send('/graphql', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -189,7 +189,7 @@ describe('first admin setup', () => {
 
   it('makes an existing user an admin only with their password', async () => {
     const { token } = app.services.setup;
-    app.services.users.create({ username: 'ada', password: PASSWORD, email: '', name: '', groups: ['family'] });
+    await app.services.users.create({ username: 'ada', password: PASSWORD, email: '', name: '', groups: ['family'] });
     const wrong = await postSetup({ token, username: 'ada', password: 'wrong horse' });
     expect(wrong.status).toBe(HttpStatus.Unauthorized);
     const right = await postSetup({ token, username: 'ada', password: PASSWORD });
@@ -238,7 +238,7 @@ describe('first admin setup without a token', () => {
   });
 
   it('never promotes an existing user without the token', async () => {
-    app.services.users.create({ username: 'ada', password: PASSWORD, email: '', name: '', groups: [] });
+    await app.services.users.create({ username: 'ada', password: PASSWORD, email: '', name: '', groups: [] });
     const res = await postSetup({ username: 'ada', password: PASSWORD });
     expect(res.status).toBe(HttpStatus.Forbidden);
     expect(app.services.users.hasAdmin()).toBe(false);

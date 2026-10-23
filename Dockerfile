@@ -19,8 +19,9 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
-# The server isn't compiled. Its sources are the build output.
+# The server isn't compiled. Its sources are the build output, and it applies the migrations at boot.
 COPY server server
+COPY drizzle drizzle
 COPY --from=builder /app/dist dist
 
 ENV NODE_ENV=production

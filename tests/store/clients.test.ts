@@ -1,14 +1,15 @@
-import path from 'node:path';
 import { CLIENT_TOKEN_LIFETIME_DEFAULTS } from '../../server/core/defaults.ts';
 import { ErrorCode } from '../../server/core/errors.ts';
+import { loosen, openDocument, replaceDocument } from '../../server/db/document.ts';
+import { CLIENTS_DOCUMENT } from '../../server/db/documents.ts';
 import {
   ClientAuthMethod,
+  type ClientStore,
+  type ClientStoreOptions,
   createClientStore,
   DEFAULT_CLIENT_TOKEN_LIFETIMES,
-  type OidcClient,
 } from '../../server/store/clients.ts';
-import { openJsonFile } from '../../server/store/json-file.ts';
-import { tempDir } from '../helpers.ts';
+import { createTestStore, type TestStore } from '../db.ts';
 
 const FIELDS = {
   name: 'Grafana',
@@ -17,162 +18,169 @@ const FIELDS = {
   postLogoutRedirectUris: [],
 };
 
-/**
- * Opens a client store on a fresh file.
- *
- * @returns The store and the file's path.
- */
-function freshStore() {
-  const file = path.join(tempDir(), 'clients.json');
-  return { file, store: createClientStore(openJsonFile<OidcClient[]>(file, [])) };
-}
-
 describe('client store', () => {
-  it('gives a confidential client a secret and keeps it on disk', () => {
-    const { file, store } = freshStore();
-    const created = store.create({ ...FIELDS, clientId: 'grafana' });
+  let db: TestStore;
+  let store: ClientStore;
+
+  /**
+   * Opens a client store on the test database.
+   *
+   * @param options - The store's options.
+   * @returns The store.
+   */
+  async function open(options: ClientStoreOptions = {}): Promise<ClientStore> {
+    return createClientStore(await openDocument(db, CLIENTS_DOCUMENT), options);
+  }
+
+  /**
+   * Writes the clients an older version saved straight into the tables, as its file held them.
+   *
+   * @param older - The clients, in the older shape.
+   */
+  async function writeOlder(older: unknown): Promise<void> {
+    await db.db.transaction((tx) => replaceDocument(tx, loosen(CLIENTS_DOCUMENT), older));
+  }
+
+  beforeEach(async () => {
+    db = await createTestStore();
+    store = await open();
+  });
+
+  afterEach(() => db.close());
+
+  it('gives a confidential client a secret and keeps it in the database', async () => {
+    const created = await store.create({ ...FIELDS, clientId: 'grafana' });
     expect(created.clientSecret).toMatch(/^[\w-]{40,}$/);
-    const reopened = createClientStore(openJsonFile<OidcClient[]>(file, []));
+    const reopened = await open();
     expect(reopened.find('grafana')).toEqual(created);
   });
 
-  it('makes up an ID when none is given', () => {
-    const { store } = freshStore();
-    expect(store.create({ ...FIELDS, clientId: '' }).clientId).toMatch(/^[0-9a-f-]{36}$/);
+  it('makes up an ID when none is given', async () => {
+    expect((await store.create({ ...FIELDS, clientId: '' })).clientId).toMatch(/^[0-9a-f-]{36}$/);
   });
 
-  it('refuses a second client with the same ID', () => {
-    const { store } = freshStore();
-    store.create({ ...FIELDS, clientId: 'grafana' });
-    expect(() => store.create({ ...FIELDS, clientId: 'grafana' })).toThrow(
+  it('refuses a second client with the same ID', async () => {
+    await store.create({ ...FIELDS, clientId: 'grafana' });
+    await expect(store.create({ ...FIELDS, clientId: 'grafana' })).rejects.toThrow(
       expect.objectContaining({ extensions: expect.objectContaining({ code: ErrorCode.BadUserInput }) }),
     );
   });
 
-  it('keeps a client on the default token lifetimes until it is given its own', () => {
-    const { store } = freshStore();
-    const { clientId } = store.create({ ...FIELDS, clientId: 'grafana' });
+  it('keeps a client on the default token lifetimes until it is given its own', async () => {
+    const { clientId } = await store.create({ ...FIELDS, clientId: 'grafana' });
     expect(store.find(clientId)?.tokenLifetimes).toEqual(DEFAULT_CLIENT_TOKEN_LIFETIMES);
     const tokenLifetimes = { accessTokenSeconds: 900, idTokenSeconds: null, refreshTokenSeconds: 2_592_000 };
-    store.update(clientId, { ...FIELDS, tokenLifetimes });
+    await store.update(clientId, { ...FIELDS, tokenLifetimes });
     expect(store.find(clientId)?.tokenLifetimes).toEqual(tokenLifetimes);
-    store.update(clientId, { ...FIELDS, name: 'Grafana 2' });
+    await store.update(clientId, { ...FIELDS, name: 'Grafana 2' });
     expect(store.find(clientId)?.tokenLifetimes).toEqual(tokenLifetimes);
+    expect((await open()).find(clientId)?.tokenLifetimes).toEqual(tokenLifetimes);
   });
 
-  it('refuses a token lifetime outside the bounds', () => {
-    const { store } = freshStore();
+  it('refuses a token lifetime outside the bounds', async () => {
     const { minSeconds, maxSeconds } = CLIENT_TOKEN_LIFETIME_DEFAULTS;
     const lifetimes = (accessTokenSeconds: number) => ({ ...FIELDS, tokenLifetimes: { accessTokenSeconds } });
-    expect(() => store.create(lifetimes(minSeconds - 1))).toThrow(/accessTokenSeconds/);
-    expect(() => store.create(lifetimes(maxSeconds + 1))).toThrow(/accessTokenSeconds/);
-    expect(() => store.create(lifetimes(minSeconds + 0.5))).toThrow(/whole number/);
+    await expect(store.create(lifetimes(minSeconds - 1))).rejects.toThrow(/accessTokenSeconds/);
+    await expect(store.create(lifetimes(maxSeconds + 1))).rejects.toThrow(/accessTokenSeconds/);
+    await expect(store.create(lifetimes(minSeconds + 0.5))).rejects.toThrow(/whole number/);
   });
 
-  it('reads a client saved before lifetimes existed as on the defaults', () => {
-    const file = path.join(tempDir(), 'clients.json');
-    const saved = createClientStore(openJsonFile<OidcClient[]>(file, [])).create({ ...FIELDS, clientId: 'old' });
+  it('reads a client saved before lifetimes existed as on the defaults', async () => {
+    const saved = await store.create({ ...FIELDS, clientId: 'old' });
     const { tokenLifetimes: _dropped, ...older } = saved;
-    openJsonFile<OidcClient[]>(file, []).update(() => [older as OidcClient]);
-    expect(createClientStore(openJsonFile<OidcClient[]>(file, [])).find('old')?.tokenLifetimes).toEqual(
-      DEFAULT_CLIENT_TOKEN_LIFETIMES,
-    );
+    await writeOlder([older]);
+    expect((await open()).find('old')?.tokenLifetimes).toEqual(DEFAULT_CLIENT_TOKEN_LIFETIMES);
   });
 
-  it('refuses a redirect URI that is not a URL', () => {
-    const { store } = freshStore();
-    expect(() => store.create({ ...FIELDS, redirectUris: ['not a url'] })).toThrow(/redirectUris/);
+  it('refuses a redirect URI that is not a URL', async () => {
+    await expect(store.create({ ...FIELDS, redirectUris: ['not a url'] })).rejects.toThrow(/redirectUris/);
   });
 
-  it('refuses a plain http redirect URI unless the operator allows it, checking it on save only', () => {
-    const file = path.join(tempDir(), 'clients.json');
+  it('refuses a plain http redirect URI unless the operator allows it, checking it on save only', async () => {
     let allowsHttp = true;
-    const store = createClientStore(openJsonFile<OidcClient[]>(file, []), { allowsHttpRedirects: () => allowsHttp });
+    const checked = await open({ allowsHttpRedirects: () => allowsHttp });
     const http = { ...FIELDS, redirectUris: ['http://nas.lan:31001/login'] };
-    const { clientId } = store.create(http);
+    const { clientId } = await checked.create(http);
     allowsHttp = false;
-    expect(store.find(clientId)?.redirectUris).toEqual(http.redirectUris);
-    expect(() => store.update(clientId, http)).toThrow(/redirectUris: .*plain http/);
-    expect(() => store.create(http)).toThrow(/plain http/);
-    expect(() => store.create({ ...FIELDS, postLogoutRedirectUris: ['http://nas.lan/bye'] })).toThrow(
+    expect(checked.find(clientId)?.redirectUris).toEqual(http.redirectUris);
+    await expect(checked.update(clientId, http)).rejects.toThrow(/redirectUris: .*plain http/);
+    await expect(checked.create(http)).rejects.toThrow(/plain http/);
+    await expect(checked.create({ ...FIELDS, postLogoutRedirectUris: ['http://nas.lan/bye'] })).rejects.toThrow(
       /postLogoutRedirectUris/,
     );
-    expect(store.create({ ...FIELDS, redirectUris: ['http://localhost:8080/cb'] }).clientId).toBeTruthy();
+    expect((await checked.create({ ...FIELDS, redirectUris: ['http://localhost:8080/cb'] })).clientId).toBeTruthy();
   });
 
-  it('holds a back-channel logout URI to the https rule, keeps it on update and clears it when blank', () => {
-    const file = path.join(tempDir(), 'clients.json');
+  it('holds a back-channel logout URI to the https rule, keeps it on update and clears it when blank', async () => {
     let allowsHttp = false;
-    const store = createClientStore(openJsonFile<OidcClient[]>(file, []), { allowsHttpRedirects: () => allowsHttp });
+    const checked = await open({ allowsHttpRedirects: () => allowsHttp });
     const backchannelLogoutUri = 'https://grafana.example/logout/backchannel';
-    const { clientId } = store.create({ ...FIELDS, backchannelLogoutUri });
-    expect(store.find(clientId)).toMatchObject({ backchannelLogoutUri, backchannelLogoutSessionRequired: true });
-    store.update(clientId, { ...FIELDS, name: 'Grafana 2' });
-    expect(store.find(clientId)?.backchannelLogoutUri).toBe(backchannelLogoutUri);
-    store.update(clientId, { ...FIELDS, backchannelLogoutUri: '' });
-    expect(store.find(clientId)?.backchannelLogoutUri).toBeNull();
+    const { clientId } = await checked.create({ ...FIELDS, backchannelLogoutUri });
+    expect(checked.find(clientId)).toMatchObject({ backchannelLogoutUri, backchannelLogoutSessionRequired: true });
+    await checked.update(clientId, { ...FIELDS, name: 'Grafana 2' });
+    expect(checked.find(clientId)?.backchannelLogoutUri).toBe(backchannelLogoutUri);
+    await checked.update(clientId, { ...FIELDS, backchannelLogoutUri: '' });
+    expect(checked.find(clientId)?.backchannelLogoutUri).toBeNull();
 
     const http = { ...FIELDS, backchannelLogoutUri: 'http://nas.lan:31001/logout' };
-    expect(() => store.create(http)).toThrow(/backchannelLogoutUri: .*plain http/);
-    expect(() => store.create({ ...FIELDS, backchannelLogoutUri: 'com.example.app:/logout' })).toThrow(
+    await expect(checked.create(http)).rejects.toThrow(/backchannelLogoutUri: .*plain http/);
+    await expect(checked.create({ ...FIELDS, backchannelLogoutUri: 'com.example.app:/logout' })).rejects.toThrow(
       /backchannelLogoutUri/,
     );
-    expect(() => store.create({ ...FIELDS, backchannelLogoutUri: `${backchannelLogoutUri}#x` })).toThrow(/fragment/);
-    expect(store.create({ ...FIELDS, backchannelLogoutUri: 'http://localhost:8080/logout' }).clientId).toBeTruthy();
+    await expect(checked.create({ ...FIELDS, backchannelLogoutUri: `${backchannelLogoutUri}#x` })).rejects.toThrow(
+      /fragment/,
+    );
+    const loopback = await checked.create({ ...FIELDS, backchannelLogoutUri: 'http://localhost:8080/logout' });
+    expect(loopback.clientId).toBeTruthy();
     allowsHttp = true;
-    expect(store.create(http).backchannelLogoutUri).toBe(http.backchannelLogoutUri);
+    expect((await checked.create(http)).backchannelLogoutUri).toBe(http.backchannelLogoutUri);
   });
 
-  it('reads a client saved before back-channel logout existed as having none', () => {
-    const file = path.join(tempDir(), 'clients.json');
-    const saved = createClientStore(openJsonFile<OidcClient[]>(file, [])).create({ ...FIELDS, clientId: 'old' });
+  it('reads a client saved before back-channel logout existed as having none', async () => {
+    const saved = await store.create({ ...FIELDS, clientId: 'old' });
     const { backchannelLogoutUri: _uri, backchannelLogoutSessionRequired: _sid, ...older } = saved;
-    openJsonFile<OidcClient[]>(file, []).update(() => [older as OidcClient]);
-    expect(createClientStore(openJsonFile<OidcClient[]>(file, [])).find('old')).toMatchObject({
+    await writeOlder([older]);
+    expect((await open()).find('old')).toMatchObject({
       backchannelLogoutUri: null,
       backchannelLogoutSessionRequired: true,
     });
   });
 
-  it('remembers the preset a client was started from, keeps it on update and clears it when blank', () => {
-    const { store } = freshStore();
-    const { clientId } = store.create({ ...FIELDS, preset: 'mealie' });
+  it('remembers the preset a client was started from, keeps it on update and clears it when blank', async () => {
+    const { clientId } = await store.create({ ...FIELDS, preset: 'mealie' });
     expect(store.find(clientId)?.preset).toBe('mealie');
-    store.update(clientId, FIELDS);
+    await store.update(clientId, FIELDS);
     expect(store.find(clientId)?.preset).toBe('mealie');
-    store.update(clientId, { ...FIELDS, preset: '' });
+    await store.update(clientId, { ...FIELDS, preset: '' });
     expect(store.find(clientId)?.preset).toBeNull();
-    expect(store.create({ ...FIELDS }).preset).toBeNull();
+    expect((await store.create({ ...FIELDS })).preset).toBeNull();
   });
 
-  it('refuses a preset name that is not lowercase words joined by dashes', () => {
-    const { store } = freshStore();
-    expect(() => store.create({ ...FIELDS, preset: 'Mealie!' })).toThrow(/preset/);
+  it('refuses a preset name that is not lowercase words joined by dashes', async () => {
+    await expect(store.create({ ...FIELDS, preset: 'Mealie!' })).rejects.toThrow(/preset/);
   });
 
-  it("takes a native app's own scheme for a public client only", () => {
-    const { store } = freshStore();
+  it("takes a native app's own scheme for a public client only", async () => {
     const native = { ...FIELDS, redirectUris: ['com.example.app:/callback'] };
-    expect(() => store.create(native)).toThrow(/public/);
-    expect(store.create({ ...native, authMethod: ClientAuthMethod.None }).clientSecret).toBeNull();
+    await expect(store.create(native)).rejects.toThrow(/public/);
+    expect((await store.create({ ...native, authMethod: ClientAuthMethod.None })).clientSecret).toBeNull();
   });
 
-  it('drops the secret for a public client and makes one when it turns confidential', () => {
-    const { store } = freshStore();
-    const { clientId } = store.create(FIELDS);
-    expect(store.update(clientId, { ...FIELDS, authMethod: ClientAuthMethod.None }).clientSecret).toBeNull();
-    expect(store.update(clientId, FIELDS).clientSecret).not.toBeNull();
+  it('drops the secret for a public client and makes one when it turns confidential', async () => {
+    const { clientId } = await store.create(FIELDS);
+    expect((await store.update(clientId, { ...FIELDS, authMethod: ClientAuthMethod.None })).clientSecret).toBeNull();
+    expect((await store.update(clientId, FIELDS)).clientSecret).not.toBeNull();
   });
 
-  it('replaces the secret on rotation', () => {
-    const { store } = freshStore();
-    const created = store.create(FIELDS);
-    expect(store.rotateSecret(created.clientId).clientSecret).not.toBe(created.clientSecret);
+  it('replaces the secret on rotation', async () => {
+    const created = await store.create(FIELDS);
+    const rotated = await store.rotateSecret(created.clientId);
+    expect(rotated.clientSecret).not.toBe(created.clientSecret);
+    expect((await open()).find(created.clientId)?.clientSecret).toBe(rotated.clientSecret);
   });
 
-  it('says a missing client is not found', () => {
-    const { store } = freshStore();
-    expect(() => store.remove('nope')).toThrow(
+  it('says a missing client is not found', async () => {
+    await expect(store.remove('nope')).rejects.toThrow(
       expect.objectContaining({ extensions: expect.objectContaining({ code: ErrorCode.NotFound }) }),
     );
   });

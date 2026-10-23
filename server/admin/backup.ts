@@ -100,7 +100,7 @@ export function createBackupRouter(deps: BackupDeps): Router {
     sameOriginJson(origin),
     admin,
     express.json({ limit: HTTP_DEFAULTS.bodyLimit }),
-    (req, res) => {
+    async (req, res) => {
       const parsed = downloadSchema.safeParse(req.body);
       if (parsed.success === false) {
         sendRefusal(res, HttpStatus.BadRequest, 'Say whether to include the sessions: {"includeSessions": true}.');
@@ -108,7 +108,7 @@ export function createBackupRouter(deps: BackupDeps): Router {
       }
       const { includeSessions } = parsed.data;
       try {
-        const archive = backup.create({ includeSessions });
+        const archive = await backup.create({ includeSessions });
         const viewer: PublicUser = res.locals.viewer;
         audit.record({
           type: AuditType.BackupDownloaded,
@@ -130,7 +130,7 @@ export function createBackupRouter(deps: BackupDeps): Router {
     },
   );
 
-  router.post(BACKUP_PATH.restore, sameOriginPost(origin, ARCHIVE_BODY), admin, readArchive, (req, res) => {
+  router.post(BACKUP_PATH.restore, sameOriginPost(origin, ARCHIVE_BODY), admin, readArchive, async (req, res) => {
     const archive: unknown = req.body;
     if (Buffer.isBuffer(archive) === false) {
       sendRefusal(res, HttpStatus.BadRequest, 'Send the archive as the body.');
@@ -138,7 +138,7 @@ export function createBackupRouter(deps: BackupDeps): Router {
     }
     const viewer: PublicUser = res.locals.viewer;
     try {
-      const restored = backup.restore(archive);
+      const restored = await backup.restore(archive);
       audit.record({
         type: AuditType.DataRestored,
         actor: actorOf(viewer),

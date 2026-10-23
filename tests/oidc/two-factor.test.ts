@@ -122,21 +122,23 @@ describe('two-factor sign-in', () => {
 
   beforeEach(async () => {
     app = await startTestApp();
-    app.services.users.create({
+    await app.services.users.create({
       username: 'root',
       password: PASSWORD,
       email: '',
       name: '',
       groups: [ADMIN_DEFAULTS.group],
     });
-    adaId = app.services.users.create({
-      username: 'ada',
-      password: PASSWORD,
-      email: '',
-      name: 'Ada',
-      groups: ['family'],
-    }).id;
-    client = app.services.clients.create({
+    adaId = (
+      await app.services.users.create({
+        username: 'ada',
+        password: PASSWORD,
+        email: '',
+        name: 'Ada',
+        groups: ['family'],
+      })
+    ).id;
+    client = await app.services.clients.create({
       name: 'Photos',
       authMethod: ClientAuthMethod.SecretBasic,
       redirectUris: [REDIRECT_URI],
@@ -160,11 +162,11 @@ describe('two-factor sign-in', () => {
     expect(await login.json()).toEqual({ secondFactor: { totp: true, passkey: false, recoveryCode: true } });
     const wrong = await postJson(browser, `/interaction/${uid}/second-factor`, { code: '000000' });
     expect(wrong.status).toBe(HttpStatus.Unauthorized);
-    expect(app.services.audit.list({ types: [AuditType.SecondFactorFailed] }).entries).toHaveLength(1);
+    expect((await app.services.audit.list({ types: [AuditType.SecondFactorFailed] })).entries).toHaveLength(1);
 
     const claims = await idTokenFor(app, client, 'ada', withTotp(secret));
     expect(claims).toMatchObject({ amr: ['pwd', 'otp', 'mfa'], acr: 'mfa' });
-    expect(app.services.audit.list({ types: [AuditType.SignInSucceeded] }).entries[0]?.detail).toEqual({
+    expect((await app.services.audit.list({ types: [AuditType.SignInSucceeded] })).entries[0]?.detail).toEqual({
       method: 'password_totp',
     });
   });
@@ -250,13 +252,13 @@ describe('two-factor sign-in', () => {
     };
     expect((await tryAlone(false)).status).toBe(HttpStatus.Unauthorized);
     await signInAsAdmin(app);
-    app.services.users.setDisabled(adaId, true);
+    await app.services.users.setDisabled(adaId, true);
     expect((await tryAlone(true)).status).toBe(HttpStatus.Forbidden);
   });
 
   it('refuses another user’s passkey after the password', async () => {
     const theirs = createSoftwareAuthenticator(app.base);
-    app.services.users.create({ username: 'bob', password: PASSWORD, email: '', name: '', groups: [] });
+    await app.services.users.create({ username: 'bob', password: PASSWORD, email: '', name: '', groups: [] });
     const bob = await accountBrowser(app, 'bob');
     const { options } = await (await postJson(bob, '/admin/account/passkeys/options', {})).json();
     await postJson(bob, '/admin/account/passkeys', { name: 'Bob’s', response: theirs.create(options) });
@@ -274,7 +276,7 @@ describe('two-factor sign-in', () => {
     const admin = await signInAsAdmin(app);
     const shown = await adminGql(
       admin,
-      'query($id: ID!) { user(id: $id) { secondFactors { hasTotp recoveryCodesLeft passkeyCount } } }',
+      'query($id: String!) { user(where: { id: { eq: $id } }) { secondFactors { hasTotp recoveryCodesLeft passkeyCount } } }',
       { id: adaId },
     );
     expect(shown.data.user.secondFactors).toEqual({ hasTotp: true, recoveryCodesLeft: 10, passkeyCount: 0 });
@@ -285,6 +287,6 @@ describe('two-factor sign-in', () => {
     );
     expect(reset.data.resetSecondFactors.secondFactors.hasTotp).toBe(false);
     await expect(idTokenFor(app, client, 'ada')).resolves.toMatchObject({ acr: 'pwd' });
-    expect(app.services.audit.list({ types: [AuditType.UserSecondFactorsReset] }).entries).toHaveLength(1);
+    expect((await app.services.audit.list({ types: [AuditType.UserSecondFactorsReset] })).entries).toHaveLength(1);
   });
 });

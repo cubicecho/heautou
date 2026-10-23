@@ -204,7 +204,7 @@ function UpstreamsSection() {
                   upstream.unknownIdentity === 'CREATE' ? 'makes users' : 'linked accounts only',
                   upstream.countsAsBothFactors && 'counts as both factors',
                 )}
-                meta={`${upstream.linkCount} linked`}
+                meta={`${upstream.linksAggregate.count} linked`}
                 actionSlot={
                   <>
                     <Button
@@ -222,7 +222,7 @@ function UpstreamsSection() {
                       size="icon-sm"
                       iconSlot={<Trash2 />}
                       title={`Remove ${upstream.name}?`}
-                      description={`Its ${upstream.linkCount} linked accounts are unlinked. Users who only sign in through it need a password link to get back in.`}
+                      description={`Its ${upstream.linksAggregate.count} linked accounts are unlinked. Users who only sign in through it need a password link to get back in.`}
                       confirmLabel="Remove"
                       onConfirm={() => remove.mutate(upstream.id)}
                     />

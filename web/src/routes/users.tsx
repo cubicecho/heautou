@@ -82,7 +82,7 @@ function badgesOf(user: UserFieldsFragment) {
   const twoFactor = hasTwoFactor(user) ? <Badge variant="outline">Two-factor</Badge> : null;
   const linked =
     user.upstreamLinks.length === 0 ? null : (
-      <Badge variant="outline">{user.upstreamLinks.map((link) => link.providerName).join(', ')}</Badge>
+      <Badge variant="outline">{user.upstreamLinks.map((link) => link.provider.name).join(', ')}</Badge>
     );
   return state === null && twoFactor === null && linked === null ? null : (
     <>

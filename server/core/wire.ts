@@ -16,6 +16,7 @@ export const HttpStatus = {
   UnsupportedMediaType: 415,
   TooManyRequests: 429,
   BadGateway: 502,
+  ServiceUnavailable: 503,
 } as const;
 export type HttpStatus = (typeof HttpStatus)[keyof typeof HttpStatus];
 
@@ -25,3 +26,7 @@ export const MS_PER_SECOND = 1000;
 export const BYTES_PER_KB = 1024;
 /** Bytes in a megabyte, for sizes shown to people. */
 export const BYTES_PER_MB = 1_048_576;
+/** Owner read and write only, for a file holding keys, secrets or sessions. */
+export const FILE_MODE = 0o600;
+/** Owner only, for a directory made here. One that already exists is left as it is. */
+export const DIR_MODE = 0o700;

@@ -26,8 +26,8 @@ describe('pages the provider sends a browser to', () => {
 
   beforeAll(async () => {
     app = await startTestApp();
-    app.services.users.create({ username: 'ada', password: PASSWORD, email: '', name: '', groups: [] });
-    client = app.services.clients.create({
+    await app.services.users.create({ username: 'ada', password: PASSWORD, email: '', name: '', groups: [] });
+    client = await app.services.clients.create({
       name: 'Test app',
       authMethod: ClientAuthMethod.SecretBasic,
       redirectUris: [REDIRECT_URI],
@@ -70,7 +70,7 @@ describe('pages the provider sends a browser to', () => {
     const success = locationOf(app, confirmed);
     const loggedOut = locationOf(app, await browser.send(success.pathname + success.search));
     expect(loggedOut.pathname).toBe(WEB_PAGE.loggedOut);
-    expect(app.services.audit.list({ types: [AuditType.AppSignedOut] }).entries[0]).toMatchObject({
+    expect((await app.services.audit.list({ types: [AuditType.AppSignedOut] })).entries[0]).toMatchObject({
       actor: { username: 'ada' },
       target: { id: client.clientId, name: 'Test app' },
     });

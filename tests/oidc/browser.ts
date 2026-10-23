@@ -133,7 +133,7 @@ export async function signInAsAdmin(app: TestApp, username = 'root'): Promise<Br
   const { users } = app.services;
   const exists = users.list().some((user) => user.username === username);
   if (exists === false) {
-    users.create({ username, password: PASSWORD, email: '', name: '', groups: [ADMIN_DEFAULTS.group] });
+    await users.create({ username, password: PASSWORD, email: '', name: '', groups: [ADMIN_DEFAULTS.group] });
   }
   const browser = createBrowser(app.base);
   const callback = await signIn(app, '/admin/login', username, PASSWORD, browser, `${app.base}/admin/callback`);

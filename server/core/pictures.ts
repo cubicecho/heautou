@@ -233,7 +233,7 @@ export function createProfilePictures(deps: ProfilePictureDeps): ProfilePictures
       const picture = await processPicture(bytes, declaredType);
       const version = versionOf(picture);
       await store.put(keyOf(userId, version), picture, STORED_PICTURE_TYPE);
-      const user = users.setPictureVersion(userId, version);
+      const user = await users.setPictureVersion(userId, version);
       if (before !== version) {
         await deleteQuietly(userId, before);
       }
@@ -242,7 +242,7 @@ export function createProfilePictures(deps: ProfilePictureDeps): ProfilePictures
     remove: async (userId) => {
       bucket();
       const before = load(userId).pictureVersion;
-      const user = users.setPictureVersion(userId, null);
+      const user = await users.setPictureVersion(userId, null);
       await deleteQuietly(userId, before);
       return user;
     },

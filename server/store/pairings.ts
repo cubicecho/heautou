@@ -3,8 +3,8 @@ import { z } from 'zod';
 import { PAIRING_DEFAULTS } from '../core/defaults.ts';
 import { parseInput } from '../core/validation.ts';
 import { MS_PER_SECOND } from '../core/wire.ts';
+import type { DataDocument } from '../db/document.ts';
 import { DEFAULT_GROUPS_CLAIM, groupsClaimSchema } from './claims.ts';
-import type { JsonFile } from './json-file.ts';
 
 /**
  * One setup URL handed out: what the app that registers with it gets, whether one has, and what the operator chose
@@ -60,7 +60,7 @@ export interface PairingStore {
    * @returns The pairing.
    * @throws BAD_USER_INPUT when the groups or the claim name are not allowed.
    */
-  start: (token: string, input: PairingInput) => Pairing;
+  start: (token: string, input: PairingInput) => Promise<Pairing>;
   /**
    * Looks a pairing up.
    *
@@ -90,27 +90,27 @@ export interface PairingStore {
    * @param clientId - The client the app registered as.
    * @param clientUri - The `client_uri` it registered with, or null.
    */
-  complete: (id: string, clientId: string, clientUri: string | null) => void;
+  complete: (id: string, clientId: string, clientUri: string | null) => Promise<void>;
   /**
    * Records the device client an app registered second.
    *
    * @param id - The pairing's id.
    * @param clientId - The device client.
    */
-  addDeviceClient: (id: string, clientId: string) => void;
+  addDeviceClient: (id: string, clientId: string) => Promise<void>;
   /**
    * Marks a pairing finished: the operator has chosen what else to set up.
    *
    * @param id - The pairing's id.
    */
-  finish: (id: string) => void;
+  finish: (id: string) => Promise<void>;
   /**
    * Cancels a pairing, so its setup URL stops working.
    *
    * @param id - The pairing's id.
    * @returns True when there was one to cancel.
    */
-  cancel: (id: string) => boolean;
+  cancel: (id: string) => Promise<boolean>;
 }
 
 /**
@@ -148,16 +148,16 @@ function toPairing(id: string, record: PairingRecord): Pairing {
  * @param [now] - The clock, in epoch milliseconds.
  * @returns The store. Expired pairings are dropped whenever it writes.
  */
-export function createPairingStore(file: JsonFile<PairingDocument>, now: () => number = Date.now): PairingStore {
+export function createPairingStore(file: DataDocument<PairingDocument>, now: () => number = Date.now): PairingStore {
   const live = (): [string, PairingRecord][] =>
     Object.entries(file.read()).filter(([, record]) => record.expiresAt > now());
 
-  const write = (change: (entries: [string, PairingRecord][]) => [string, PairingRecord][]): void => {
-    file.update(() => Object.fromEntries(change(live())));
+  const write = async (change: (entries: [string, PairingRecord][]) => [string, PairingRecord][]): Promise<void> => {
+    await file.update(() => Object.fromEntries(change(live())));
   };
 
-  const change = (id: string, edit: (record: PairingRecord) => PairingRecord): void => {
-    write((entries) => entries.map(([key, record]) => [key, key === id ? edit(record) : record]));
+  const change = async (id: string, edit: (record: PairingRecord) => PairingRecord): Promise<void> => {
+    await write((entries) => entries.map(([key, record]) => [key, key === id ? edit(record) : record]));
   };
 
   const findBy = (token: string, matches: (record: PairingRecord) => boolean): Pairing | null => {
@@ -167,7 +167,7 @@ export function createPairingStore(file: JsonFile<PairingDocument>, now: () => n
   };
 
   return {
-    start: (token, input) => {
+    start: async (token, input) => {
       const fields = parseInput(pairingInputSchema, input);
       const id = randomUUID();
       const record: PairingRecord = {
@@ -179,7 +179,7 @@ export function createPairingStore(file: JsonFile<PairingDocument>, now: () => n
         deviceClientId: null,
         isFinished: false,
       };
-      write((entries) => [...entries, [id, record]]);
+      await write((entries) => [...entries, [id, record]]);
       return toPairing(id, record);
     },
     find: (id) => {
@@ -192,20 +192,25 @@ export function createPairingStore(file: JsonFile<PairingDocument>, now: () => n
         token,
         (record) => record.clientId !== null && (record.deviceClientId ?? null) === null && record.isFinished !== true,
       ),
-    complete: (id, clientId, clientUri) => {
+    complete: async (id, clientId, clientUri) => {
       const reviewUntil = now() + PAIRING_DEFAULTS.reviewSeconds * MS_PER_SECOND;
-      change(id, (record) => ({ ...record, clientId, clientUri, expiresAt: Math.max(record.expiresAt, reviewUntil) }));
+      await change(id, (record) => ({
+        ...record,
+        clientId,
+        clientUri,
+        expiresAt: Math.max(record.expiresAt, reviewUntil),
+      }));
     },
-    addDeviceClient: (id, clientId) => {
-      change(id, (record) => ({ ...record, deviceClientId: clientId }));
+    addDeviceClient: async (id, clientId) => {
+      await change(id, (record) => ({ ...record, deviceClientId: clientId }));
     },
-    finish: (id) => {
-      change(id, (record) => ({ ...record, isFinished: true }));
+    finish: async (id) => {
+      await change(id, (record) => ({ ...record, isFinished: true }));
     },
-    cancel: (id) => {
+    cancel: async (id) => {
       const isWaiting = live().some(([key]) => key === id);
       if (isWaiting) {
-        write((entries) => entries.filter(([key]) => key !== id));
+        await write((entries) => entries.filter(([key]) => key !== id));
       }
       return isWaiting;
     },

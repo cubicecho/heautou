@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { FORWARD_AUTH_DEFAULTS } from '../core/defaults.ts';
 import { MS_PER_SECOND } from '../core/wire.ts';
-import type { JsonFile } from './json-file.ts';
+import type { DataDocument } from '../db/document.ts';
 
 /** One browser signed in to the protected sites, as the file holds it. */
 export interface ProxySession {
@@ -36,20 +36,20 @@ export interface ProxySessionStore {
    * @param session - Who signed in, under which grant, and how.
    * @returns The token for the cookie.
    */
-  create: (session: NewProxySession) => string;
+  create: (session: NewProxySession) => Promise<string>;
   /**
    * Looks a session up, and notes the request on it at most every `touchSeconds`.
    *
    * @param token - The cookie's value.
    * @returns It, or null when it is unknown, past its lifetime or idle too long.
    */
-  use: (token: string) => ProxySession | null;
+  use: (token: string) => Promise<ProxySession | null>;
   /**
    * Ends a session. Unknown tokens are ignored.
    *
    * @param token - The cookie's value.
    */
-  remove: (token: string) => void;
+  remove: (token: string) => Promise<void>;
 }
 
 /**
@@ -70,7 +70,7 @@ function digest(token: string): string {
  * @returns The store. Dead sessions are dropped whenever it writes.
  */
 export function createProxySessionStore(
-  file: JsonFile<ProxySessionDocument>,
+  file: DataDocument<ProxySessionDocument>,
   now: () => number = Date.now,
 ): ProxySessionStore {
   const { sessionSeconds, idleSeconds, touchSeconds, tokenBytes } = FORWARD_AUTH_DEFAULTS;
@@ -84,14 +84,14 @@ export function createProxySessionStore(
   };
 
   return {
-    create: (session) => {
+    create: async (session) => {
       const token = randomBytes(tokenBytes).toString('base64url');
       const at = now();
       const stored: ProxySession = { ...session, expiresAt: at + sessionSeconds * MS_PER_SECOND, lastSeenAt: at };
-      file.update((sessions) => ({ ...liveExcept(sessions, null), [digest(token)]: stored }));
+      await file.update((sessions) => ({ ...liveExcept(sessions, null), [digest(token)]: stored }));
       return token;
     },
-    use: (token) => {
+    use: async (token) => {
       const key = digest(token);
       const session = file.read()[key];
       const at = now();
@@ -100,13 +100,13 @@ export function createProxySessionStore(
       }
       const isStale = at - session.lastSeenAt >= touchSeconds * MS_PER_SECOND;
       if (isStale) {
-        file.update((sessions) => ({ ...liveExcept(sessions, null), [key]: { ...session, lastSeenAt: at } }));
+        await file.update((sessions) => ({ ...liveExcept(sessions, null), [key]: { ...session, lastSeenAt: at } }));
       }
       return session;
     },
-    remove: (token) => {
+    remove: async (token) => {
       const key = digest(token);
-      file.update((sessions) => liveExcept(sessions, key));
+      await file.update((sessions) => liveExcept(sessions, key));
     },
   };
 }

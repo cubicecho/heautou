@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { useState } from 'react';
-import type { AuditLogQuery } from '@/__generated__/graphql';
+import type { AuditEntryFieldsFragment } from '@/__generated__/graphql';
 import { AUDIT_TYPE_OPTIONS, auditTypeLabel, isAuditType, isWarning } from '@/activity/audit-types';
 import { Combobox } from '@/components/combobox';
 import { List } from '@/components/list';
@@ -16,7 +16,7 @@ import { formatAgo, formatDateTime, joinStats } from '@/lib/format';
 
 export const Route = createFileRoute('/activity')({ component: ActivityPage });
 
-type Entry = AuditLogQuery['auditLog']['entries'][number];
+type Entry = AuditEntryFieldsFragment;
 
 /**
  * A line on who did it, to what, from where, and the entry's detail.
@@ -26,10 +26,10 @@ type Entry = AuditLogQuery['auditLog']['entries'][number];
  */
 function summaryOf(entry: Entry): string {
   return joinStats(
-    entry.actor === null ? 'Nobody signed in' : `By ${entry.actor.username}`,
-    entry.target !== null && `${entry.target.kind.toLowerCase()} ${entry.target.name}`,
+    entry.actorUserId === null ? 'Nobody signed in' : `By ${entry.actorUsername ?? ''}`,
+    entry.targetKind !== null && `${entry.targetKind.toLowerCase()} ${entry.targetName ?? ''}`,
     entry.ip !== null && `from ${entry.ip}`,
-    ...entry.detail.map((item) => `${item.name}: ${item.value}`),
+    ...Object.entries(entry.detail).map(([name, value]) => `${name}: ${value}`),
   );
 }
 

@@ -1,217 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import { appendFileSync, mkdirSync, readFileSync, renameSync, rmSync, statSync } from 'node:fs';
-import path from 'node:path';
-import { AUDIT_DEFAULTS } from '../core/defaults.ts';
-import { DIR_MODE } from './json-file.ts';
+import { and, desc, eq, inArray, lt, lte, or, type SQL } from 'drizzle-orm';
+import { AUDIT_DEFAULTS, type AuditSettings } from '../core/defaults.ts';
+import { errorMessage } from '../core/errors.ts';
+import type { DocumentStore } from '../db/document.ts';
+import { auditEntries } from '../db/schema.ts';
+import { AuditTargetKind, type AuditType } from './audit-vocabulary.ts';
 
-/** What happened. One flat vocabulary, so the log can be filtered by it and the UI can name each one. */
-export const AuditType = {
-  /** A user's password was accepted on the provider's sign-in page. An app or web sign-in follows it. */
-  SignInSucceeded: 'sign_in_succeeded',
-  /** A provider sign-in with an unknown username or a wrong password. */
-  SignInFailed: 'sign_in_failed',
-  /** A provider sign-in turned away because of too many failures. */
-  SignInThrottled: 'sign_in_throttled',
-  /** A provider sign-in by a disabled user, or one outside the client's allowed groups. */
-  SignInRefused: 'sign_in_refused',
-  /**
-   * The provider sent a user back to an application with a code: with the password just typed, or with the session
-   * they already had. The detail names the redirect URI.
-   */
-  AppSignedIn: 'app_signed_in',
-  /**
-   * The provider turned an application's sign-in request away before anyone signed in, such as an unknown client, a
-   * redirect URI it doesn't have or a scope it may not ask for. The detail has the error.
-   */
-  AppSignInFailed: 'app_sign_in_failed',
-  /**
-   * The token endpoint refused an application: a wrong client secret, or a code or refresh token that was used
-   * already or has expired. The detail has the error and the grant type.
-   */
-  AppTokenRefused: 'app_token_refused',
-  /** A user signed out from inside an application (RP-initiated logout). */
-  AppSignedOut: 'app_signed_out',
-  /**
-   * The provider could not tell an application that one of its users signed out (back-channel logout): the app was
-   * unreachable or refused the logout token. The detail has the error.
-   */
-  AppLogoutFailed: 'app_logout_failed',
-  /** A client got a token for itself with the client credentials grant, with no user. */
-  MachineTokenIssued: 'machine_token_issued',
-  /**
-   * A device asked for a code to show its user (RFC 8628). There is no actor yet; the detail has the scope and the
-   * API asked for, never the code.
-   */
-  DeviceCodeIssued: 'device_code_issued',
-  /** A user signed a device in by entering its code. It takes the place of `app_signed_in` for a device. */
-  DeviceApproved: 'device_approved',
-  /**
-   * A device's code was turned down: its user cancelled, or the sign-in for it failed. The device is told
-   * `access_denied` or the error when it next polls. The detail has the error.
-   */
-  DeviceRefused: 'device_refused',
-  /** A user signed in to the admin UI or their account page. */
-  WebSignedIn: 'web_signed_in',
-  /** A user signed out of the admin UI or their account page. */
-  WebSignedOut: 'web_signed_out',
-  ClientCreated: 'client_created',
-  ClientUpdated: 'client_updated',
-  ClientSecretRotated: 'client_secret_rotated',
-  ClientDeleted: 'client_deleted',
-  PairingStarted: 'pairing_started',
-  PairingCancelled: 'pairing_cancelled',
-  /** An app registered itself with a setup URL. */
-  PairingCompleted: 'pairing_completed',
-  /** The operator chose what else to set up for a paired app: its device client, its API. */
-  PairingFinished: 'pairing_finished',
-  /** A paired app changed its own registration (RFC 7592). */
-  RegistrationUpdated: 'registration_updated',
-  /** A paired app removed its own registration (RFC 7592). */
-  RegistrationDeleted: 'registration_deleted',
-  UserCreated: 'user_created',
-  UserUpdated: 'user_updated',
-  UserPasswordSet: 'user_password_set',
-  UserDeleted: 'user_deleted',
-  UserDisabled: 'user_disabled',
-  UserEnabled: 'user_enabled',
-  UserSessionEnded: 'user_session_ended',
-  UserSignedOut: 'user_signed_out',
-  PasswordLinkCreated: 'password_link_created',
-  /** Someone set a password through an invite or reset link. */
-  PasswordLinkUsed: 'password_link_used',
-  GroupRenamed: 'group_renamed',
-  GroupDeleted: 'group_deleted',
-  KeysRotated: 'keys_rotated',
-  BrandingNameSet: 'branding_name_set',
-  BrandingLogoSet: 'branding_logo_set',
-  /** Plain http redirect URIs allowed, refused, or left to follow the issuer. */
-  HttpRedirectsSet: 'http_redirects_set',
-  /** The password strength or breach check rule changed. */
-  PasswordRulesSet: 'password_rules_set',
-  AccountPasswordChanged: 'account_password_changed',
-  /** A user's own password change with the wrong current password. */
-  AccountPasswordFailed: 'account_password_failed',
-  AccountSignedOutEverywhere: 'account_signed_out_everywhere',
-  /** The first admin was made, or an existing user was made the admin, through `/setup`. */
-  AdminSetUp: 'admin_set_up',
-  /** A wrong authenticator code, recovery code or passkey after a password that worked. */
-  SecondFactorFailed: 'second_factor_failed',
-  /** A user set up an authenticator app on their account page. */
-  TotpAdded: 'totp_added',
-  /** A user removed their authenticator app. */
-  TotpRemoved: 'totp_removed',
-  /** A user made new recovery codes, which ends the old ones. */
-  RecoveryCodesMade: 'recovery_codes_made',
-  /** A user registered a passkey. The detail names it. */
-  PasskeyAdded: 'passkey_added',
-  /** A user removed a passkey. The detail names it. */
-  PasskeyRemoved: 'passkey_removed',
-  /** An admin removed every second factor a user had, as for a lost phone. */
-  UserSecondFactorsReset: 'user_second_factors_reset',
-  /** An admin downloaded a backup of the data. The detail says whether it took the sessions. */
-  BackupDownloaded: 'backup_downloaded',
-  /** The data was replaced from a backup, by an admin or the CLI. The detail says when the backup was made. */
-  DataRestored: 'data_restored',
-  /** An admin added a provider users may sign in through, such as Google or GitHub. */
-  UpstreamCreated: 'upstream_created',
-  UpstreamUpdated: 'upstream_updated',
-  /** An admin removed an upstream provider, and every identity linked through it. */
-  UpstreamDeleted: 'upstream_deleted',
-  /** An upstream identity was linked to a user: from their account page, or by the sign-in that made the user. */
-  UpstreamLinked: 'upstream_linked',
-  /** An upstream identity was unlinked, by its user or by an admin. */
-  UpstreamUnlinked: 'upstream_unlinked',
-  /** A sign-in through an upstream provider changed the user's mapped groups. The detail lists them. */
-  UpstreamGroupsApplied: 'upstream_groups_applied',
-  /** An admin added an API apps may ask for access tokens to. */
-  ApiCreated: 'api_created',
-  ApiUpdated: 'api_updated',
-  ApiDeleted: 'api_deleted',
-  /** An email went out. The detail has its kind and the address, never the link it carried. */
-  MailSent: 'mail_sent',
-  /** An email could not be sent. The detail has its kind, the address and the SMTP server's error. */
-  MailFailed: 'mail_failed',
-  /** An admin saved the SMTP server under Settings. The detail says whether the password was replaced. */
-  MailServerSet: 'mail_server_set',
-  /** An admin removed the SMTP server saved under Settings. */
-  MailServerRemoved: 'mail_server_removed',
-  /** An admin turned the forgot-password link or a notification on or off. */
-  MailOptionsSet: 'mail_options_set',
-  /**
-   * Someone asked for a reset link on the sign-in page. The actor is the user it matched; with none, the detail has
-   * what was typed. A link is only sent when the user is enabled and has an email address.
-   */
-  PasswordResetRequested: 'password_reset_requested',
-  /** A user's profile picture was set: by them on their account page, or by an admin. */
-  PictureSet: 'picture_set',
-  /** A user's profile picture was removed: by them, or by an admin. */
-  PictureRemoved: 'picture_removed',
-  /** A user signed in to the protected sites (forward auth). The detail names the host they were going to. */
-  ProxySignedIn: 'proxy_signed_in',
-  /** A user signed out of the protected sites. */
-  ProxySignedOut: 'proxy_signed_out',
-  /**
-   * A signed-in user was turned away from a protected site: not in its groups, or without the second factor it asks
-   * for. Logged once per user and site every `FORWARD_AUTH_DEFAULTS.refusalLogSeconds`.
-   */
-  ProxyRefused: 'proxy_refused',
-  ProtectedSiteCreated: 'protected_site_created',
-  ProtectedSiteUpdated: 'protected_site_updated',
-  ProtectedSiteDeleted: 'protected_site_deleted',
-  /** The parent domain the forward auth session cookie is set on changed. */
-  ProxyCookieDomainSet: 'proxy_cookie_domain_set',
-} as const;
-export type AuditType = (typeof AuditType)[keyof typeof AuditType];
-
-/** Every type, in the order above. */
-export const AUDIT_TYPES: readonly AuditType[] = Object.values(AuditType);
-
-/**
- * The sign-ins a user is shown on their account page. A password that worked is followed by an app or web sign-in,
- * so `SignInSucceeded` would only say it twice.
- */
-export const SIGN_IN_TYPES: readonly AuditType[] = [
-  AuditType.SignInFailed,
-  AuditType.SignInThrottled,
-  AuditType.SignInRefused,
-  AuditType.SecondFactorFailed,
-  AuditType.AppSignedIn,
-  AuditType.DeviceApproved,
-  AuditType.AppSignedOut,
-  AuditType.WebSignedIn,
-  AuditType.ProxySignedIn,
-];
-
-/** How an app sign-in was made, in its `via` detail. */
-export const AppSignInVia = {
-  /** The user typed their password for it. */
-  Password: 'password',
-  /** The user already had a provider session, so nothing was asked. */
-  Session: 'session',
-  /** The user signed in with a passkey alone. */
-  Passkey: 'passkey',
-  /** The user signed in through an upstream provider, such as Google or GitHub. */
-  Upstream: 'upstream',
-} as const;
-export type AppSignInVia = (typeof AppSignInVia)[keyof typeof AppSignInVia];
-
-/** The kinds of thing an entry can be about. */
-export const AuditTargetKind = {
-  Client: 'client',
-  User: 'user',
-  Group: 'group',
-  Pairing: 'pairing',
-  Keys: 'keys',
-  Branding: 'branding',
-  Settings: 'settings',
-  /** A provider users sign in through, such as Google or GitHub. */
-  Upstream: 'upstream',
-  /** An API (resource server) apps ask for access tokens to. */
-  Api: 'api',
-  /** A site behind the reverse proxy that forward auth protects. */
-  ProtectedSite: 'protected_site',
-} as const;
-export type AuditTargetKind = (typeof AuditTargetKind)[keyof typeof AuditTargetKind];
+export { AppSignInVia, AUDIT_TYPES, AuditTargetKind, AuditType, SIGN_IN_TYPES } from './audit-vocabulary.ts';
 
 /** The target of key rotations. */
 export const KEYS_TARGET: AuditTarget = Object.freeze({
@@ -301,18 +96,25 @@ export interface AuditPage {
 /** The append-only log of who did what. */
 export interface AuditLog {
   /**
-   * Appends an entry. It never throws: a write that fails is logged and the request goes on.
+   * Appends an entry. Listeners hear of it at once; it is saved in the order it was recorded. It never throws: a
+   * write that fails is logged and the request goes on.
    *
    * @param event - What happened.
    */
   record: (event: AuditEvent) => void;
   /**
-   * Reads entries, newest first, across the current file and the rotated ones.
+   * Waits for the entries recorded so far to be saved, or to fail.
+   *
+   * @returns Once they have.
+   */
+  settled: () => Promise<void>;
+  /**
+   * Reads entries, newest first, once every entry recorded before the call is saved.
    *
    * @param query - The filters and the page.
    * @returns The page.
    */
-  list: (query: AuditQuery) => AuditPage;
+  list: (query: AuditQuery) => Promise<AuditPage>;
   /**
    * Calls a listener with every entry recorded from now on.
    *
@@ -322,43 +124,61 @@ export interface AuditLog {
   onRecord: (listener: (entry: AuditEntry) => void) => () => void;
 }
 
-/** Owner read and write only, like the other data files. */
-const FILE_MODE = 0o600;
 /** Where the log's own failures are reported. */
 const LOG_TAG = '[audit]';
+/** The log's file in a backup, one entry per line, oldest first; the data directory of an older version had it too. */
+export const AUDIT_FILE = 'audit.jsonl';
+
+/** An entry as its table holds it. */
+type AuditRow = typeof auditEntries.$inferSelect;
+/** An entry as it is inserted: the table numbers it. */
+type NewAuditRow = Omit<typeof auditEntries.$inferInsert, 'seq'>;
 
 /**
- * Names the files of a log, the current one first, then each rotated one from newest to oldest.
+ * Lays an entry out as a row.
  *
- * @param file - The current file, such as `audit.jsonl`.
- * @param kept - How many rotated files there are at most.
- * @returns `audit.jsonl`, `audit.1.jsonl`, `audit.2.jsonl`...
+ * @param entry - The entry.
+ * @returns Its row.
  */
-function filesOf(file: string, kept: number): string[] {
-  const extension = path.extname(file);
-  const stem = file.slice(0, file.length - extension.length);
-  return [file, ...Array.from({ length: kept }, (_, i) => `${stem}.${i + 1}${extension}`)];
+export function auditRowOf(entry: AuditEntry): NewAuditRow {
+  return {
+    id: entry.id,
+    at: new Date(entry.at),
+    type: entry.type,
+    actorUserId: entry.actor?.userId ?? null,
+    actorUsername: entry.actor?.username ?? null,
+    ip: entry.ip ?? null,
+    targetKind: entry.target?.kind ?? null,
+    targetId: entry.target?.id ?? null,
+    targetName: entry.target?.name ?? null,
+    detail: entry.detail ?? {},
+  };
 }
 
 /**
- * Reads a file's size.
+ * Reads an entry from its row.
  *
- * @param file - The file.
- * @returns Its size in bytes, or 0 when it is not there.
+ * @param row - The row.
+ * @returns The entry, without the parts it did not have.
  */
-function sizeOf(file: string): number {
-  try {
-    return statSync(file).size;
-  } catch {
-    return 0;
-  }
+export function auditEntryOf(row: AuditRow): AuditEntry {
+  const { actorUserId, actorUsername, targetKind, targetId, targetName, detail } = row;
+  return {
+    id: row.id,
+    at: row.at.toISOString(),
+    type: row.type,
+    actor: actorUserId === null ? null : { userId: actorUserId, username: actorUsername ?? '' },
+    ip: row.ip,
+    ...(targetKind === null ? {} : { target: { kind: targetKind, id: targetId ?? '', name: targetName ?? '' } }),
+    ...(Object.keys(detail).length === 0 ? {} : { detail }),
+  };
 }
 
 /**
- * Checks a parsed line has the fields every entry has. A line cut short by a crash, or edited by hand, is skipped.
+ * Says whether a parsed line is an entry.
  *
  * @param value - The parsed line.
- * @returns Whether it is an entry.
+ * @returns True when it has an id, a time and a type.
  */
 function isEntry(value: unknown): value is AuditEntry {
   if (typeof value !== 'object' || value === null) {
@@ -370,18 +190,13 @@ function isEntry(value: unknown): value is AuditEntry {
 }
 
 /**
- * Reads one file's entries, oldest first.
+ * Reads the entries of a log file: one JSON entry per line. A line that is not one, such as a torn last line, is
+ * skipped.
  *
- * @param file - The file.
- * @returns Its entries; none when it is not there.
+ * @param text - The file.
+ * @returns Its entries, in file order.
  */
-function entriesIn(file: string): AuditEntry[] {
-  let text: string;
-  try {
-    text = readFileSync(file, 'utf8');
-  } catch {
-    return [];
-  }
+export function entriesOfLines(text: string): AuditEntry[] {
   const entries: AuditEntry[] = [];
   for (const line of text.split('\n')) {
     if (line.trim() === '') {
@@ -393,29 +208,39 @@ function entriesIn(file: string): AuditEntry[] {
         entries.push(value);
       }
     } catch {
-      // A torn last line: skip it.
+      // A torn line: skip it.
     }
   }
   return entries;
 }
 
 /**
- * Checks an entry is about a user: done by them, or done to them.
+ * Writes entries as a log file.
+ *
+ * @param entries - The entries, oldest first.
+ * @returns One JSON entry per line.
+ */
+export function linesOfEntries(entries: readonly AuditEntry[]): string {
+  return entries.map((entry) => `${JSON.stringify(entry)}\n`).join('');
+}
+
+/**
+ * Says whether an entry was done by a user or to them.
  *
  * @param entry - The entry.
  * @param userId - The user.
- * @returns Whether it is.
+ * @returns True when they are its actor or its target.
  */
 function concerns(entry: AuditEntry, userId: string): boolean {
   return entry.actor?.userId === userId || (entry.target?.kind === AuditTargetKind.User && entry.target.id === userId);
 }
 
 /**
- * Checks an entry passes a query's filters; the page fields are ignored.
+ * Says whether an entry passes a query's filters, for the entries a subscription hears of as they are recorded.
  *
  * @param entry - The entry.
- * @param query - The type and user filters.
- * @returns Whether it passes.
+ * @param query - The filters. The page is ignored.
+ * @returns True when it passes.
  */
 export function matchesQuery(entry: AuditEntry, { types = null, userId = null }: AuditQuery): boolean {
   if (types !== null && types.includes(entry.type) === false) {
@@ -425,82 +250,103 @@ export function matchesQuery(entry: AuditEntry, { types = null, userId = null }:
 }
 
 /**
- * Opens the audit log: JSON lines appended to `file`, which is rotated to `audit.1.jsonl` and so on once it would
- * pass `AUDIT_DEFAULTS.maxFileBytes`, keeping `AUDIT_DEFAULTS.keptFiles` of them.
+ * Builds the condition a query's filters make.
  *
- * @param file - The current file's path. Its directory is made when missing.
+ * @param query - The filters.
+ * @returns The condition, or undefined for every entry.
+ */
+function filterOf({ types = null, userId = null }: AuditQuery): SQL | undefined {
+  const byType = types === null ? undefined : inArray(auditEntries.type, [...types]);
+  const byUser =
+    userId === null
+      ? undefined
+      : or(
+          eq(auditEntries.actorUserId, userId),
+          and(eq(auditEntries.targetKind, AuditTargetKind.User), eq(auditEntries.targetId, userId)),
+        );
+  return and(byType, byUser);
+}
+
+/**
+ * Opens the audit log in its table.
+ *
+ * @param store - The database and its write queue.
  * @param [now] - The clock, in epoch milliseconds.
- * @param [settings] - The size limit and how many files are kept; tests make them small.
+ * @param [overrides] - Settings that differ from `AUDIT_DEFAULTS`.
  * @returns The log.
- *
- * @remarks
- * Appends are synchronous, so entries keep their order within the one process that owns the files. Reading
- * parses every kept file, which the size limits keep to a few megabytes.
  */
 export function openAuditLog(
-  file: string,
+  store: DocumentStore,
   now: () => number = Date.now,
-  settings: Pick<typeof AUDIT_DEFAULTS, 'maxFileBytes' | 'keptFiles'> = AUDIT_DEFAULTS,
+  overrides: Partial<AuditSettings> = {},
 ): AuditLog {
-  const files = filesOf(file, settings.keptFiles);
+  const { keptEntries, pruneEveryEntries, pageSize, maxPageSize } = { ...AUDIT_DEFAULTS, ...overrides };
+  const { db, queue } = store;
   const listeners = new Set<(entry: AuditEntry) => void>();
+  let recordedSincePrune = 0;
+  let lastWrite: Promise<void> = Promise.resolve();
 
-  /** Moves each file one place down the list, dropping the oldest. */
-  const rotate = (): void => {
-    rmSync(files[files.length - 1], { force: true });
-    for (let i = files.length - 2; i >= 0; i--) {
-      if (sizeOf(files[i]) > 0) {
-        renameSync(files[i], files[i + 1]);
-      }
+  /** Drops the entries older than the newest `keptEntries`. */
+  const prune = async (): Promise<void> => {
+    const [newest] = await db
+      .select({ seq: auditEntries.seq })
+      .from(auditEntries)
+      .orderBy(desc(auditEntries.seq))
+      .limit(1);
+    if (newest !== undefined) {
+      await db.delete(auditEntries).where(lte(auditEntries.seq, newest.seq - keptEntries));
     }
   };
 
   return {
     record: (event) => {
-      try {
-        const entry: AuditEntry = { id: randomUUID(), at: new Date(now()).toISOString(), ...event };
-        const line = `${JSON.stringify(entry)}\n`;
-        const size = sizeOf(file);
-        if (size > 0 && size + Buffer.byteLength(line) > settings.maxFileBytes) {
-          rotate();
-        }
-        mkdirSync(path.dirname(file), { recursive: true, mode: DIR_MODE });
-        appendFileSync(file, line, { encoding: 'utf8', mode: FILE_MODE });
-        for (const listener of listeners) {
+      const entry: AuditEntry = { id: randomUUID(), at: new Date(now()).toISOString(), ...event };
+      lastWrite = queue
+        .run(async () => {
+          await db.insert(auditEntries).values(auditRowOf(entry));
+          recordedSincePrune += 1;
+          if (recordedSincePrune >= pruneEveryEntries) {
+            recordedSincePrune = 0;
+            await prune();
+          }
+        })
+        .catch((error: unknown) => console.error(LOG_TAG, 'could not record', event.type, errorMessage(error)));
+      for (const listener of listeners) {
+        try {
           listener(entry);
+        } catch (error) {
+          console.error(LOG_TAG, 'a listener failed on', event.type, errorMessage(error));
         }
-      } catch (error) {
-        console.error(LOG_TAG, 'could not record', event.type, error);
       }
     },
+    settled: () => lastWrite,
     onRecord: (listener) => {
       listeners.add(listener);
       return () => {
         listeners.delete(listener);
       };
     },
-    list: (query) => {
-      const { first = AUDIT_DEFAULTS.pageSize, after = null } = query;
-      const size = Math.min(Math.max(first, 1), AUDIT_DEFAULTS.maxPageSize);
-      const newestFirst = files.flatMap((each) => entriesIn(each).reverse());
-      let start = 0;
-      if (after !== null) {
-        const index = newestFirst.findIndex((entry) => entry.id === after);
-        start = index === -1 ? newestFirst.length : index + 1;
-      }
-      const matching: AuditEntry[] = [];
-      let hasMore = false;
-      for (const entry of newestFirst.slice(start)) {
-        if (matchesQuery(entry, query) === false) {
-          continue;
+    list: (query) =>
+      queue.run(async () => {
+        const { first = pageSize, after = null } = query;
+        const size = Math.min(Math.max(first, 1), maxPageSize);
+        const [cursor] =
+          after === null
+            ? []
+            : await db.select({ seq: auditEntries.seq }).from(auditEntries).where(eq(auditEntries.id, after));
+        // A cursor that is gone, such as one pruned since, ends the list.
+        if (after !== null && cursor === undefined) {
+          return { entries: [], nextCursor: null };
         }
-        if (matching.length === size) {
-          hasMore = true;
-          break;
-        }
-        matching.push(entry);
-      }
-      return { entries: matching, nextCursor: hasMore ? (matching.at(-1)?.id ?? null) : null };
-    },
+        const rows = await db
+          .select()
+          .from(auditEntries)
+          .where(and(filterOf(query), cursor === undefined ? undefined : lt(auditEntries.seq, cursor.seq)))
+          .orderBy(desc(auditEntries.seq))
+          .limit(size + 1);
+        const entries = rows.slice(0, size).map(auditEntryOf);
+        const hasMore = rows.length > size;
+        return { entries, nextCursor: hasMore ? (entries.at(-1)?.id ?? null) : null };
+      }),
   };
 }

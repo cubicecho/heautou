@@ -1,7 +1,7 @@
 import { maxAliasesRule } from '@escape.tech/graphql-armor-max-aliases';
 import { maxDepthRule } from '@escape.tech/graphql-armor-max-depth';
 import type { ExecutionArgs, GraphQLError, ValidationContext } from 'graphql';
-import { getComplexity, simpleEstimator } from 'graphql-query-complexity';
+import { fieldExtensionsEstimator, getComplexity, simpleEstimator } from 'graphql-query-complexity';
 import type { Plugin } from 'graphql-yoga';
 import { OPERATION_LIMIT_DEFAULTS } from '../core/defaults.ts';
 import { tooComplex } from '../core/errors.ts';
@@ -33,7 +33,8 @@ function costOf(args: ExecutionArgs): number {
     query: args.document,
     operationName: args.operationName ?? undefined,
     variables: args.variableValues ?? {},
-    estimators: [simpleEstimator({ defaultComplexity: defaultFieldCost })],
+    // drizzle-graphql's hints first: a list costs its page size times one row. Any other field costs one.
+    estimators: [fieldExtensionsEstimator(), simpleEstimator({ defaultComplexity: defaultFieldCost })],
   });
 }
 
@@ -54,7 +55,9 @@ function refuseCostly({ args, setResultAndStopExecution }: OperationStart): void
   if (cost <= maxCost) {
     return;
   }
-  setResultAndStopExecution({ errors: [tooComplex(`Query cost ${cost} exceeds ${maxCost}. Ask for fewer fields.`)] });
+  setResultAndStopExecution({
+    errors: [tooComplex(`Query cost ${cost} exceeds ${maxCost}. Ask for fewer rows (limit) or fewer fields.`)],
+  });
 }
 
 /**

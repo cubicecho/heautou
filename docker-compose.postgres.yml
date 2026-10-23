@@ -1,0 +1,29 @@
+# heautou on a Postgres of its own, instead of PGlite in its data volume:
+#
+#   POSTGRES_PASSWORD=... docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d --build
+#
+# On first boot heautou applies its migrations. An older JSON data directory in the heautou volume is imported once.
+services:
+  heautou:
+    environment:
+      DATABASE_URL: postgres://heautou:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/heautou
+    depends_on:
+      postgres:
+        condition: service_healthy
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: heautou
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: heautou
+    volumes:
+      - heautou-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U heautou"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  heautou-postgres:

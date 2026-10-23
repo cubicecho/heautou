@@ -245,7 +245,7 @@ export function createAdminRouter(deps: AdminDeps): Router {
         return;
       }
       audit.record({ type: AuditType.WebSignedIn, actor: actorOf(user), ip: req.ip ?? null });
-      res.cookie(COOKIE.session, adminSessions.create(user.id), {
+      res.cookie(COOKIE.session, await adminSessions.create(user.id), {
         ...sessionCookie,
         maxAge: ADMIN_DEFAULTS.sessionSeconds * MS_PER_SECOND,
       });
@@ -255,7 +255,7 @@ export function createAdminRouter(deps: AdminDeps): Router {
     }
   });
 
-  router.post(ADMIN_PATH.logout, guard, (req, res) => {
+  router.post(ADMIN_PATH.logout, guard, async (req, res) => {
     const cookie = readCookie(req, COOKIE.session);
     if (cookie !== null) {
       const userId = adminSessions.find(cookie);
@@ -263,7 +263,7 @@ export function createAdminRouter(deps: AdminDeps): Router {
       if (user !== null) {
         audit.record({ type: AuditType.WebSignedOut, actor: actorOf(user), ip: req.ip ?? null });
       }
-      adminSessions.remove(cookie);
+      await adminSessions.remove(cookie);
     }
     res.clearCookie(COOKIE.session, sessionCookie);
     const end = new URLSearchParams({ client_id: ADMIN_DEFAULTS.clientId });
@@ -317,7 +317,7 @@ export function createAdminRouter(deps: AdminDeps): Router {
     try {
       if (existing === null) {
         await passwordPolicy.check(password, { username });
-        const created = users.create({ username, password, email: '', name: '', groups: [ADMIN_DEFAULTS.group] });
+        const created = await users.create({ username, password, email: '', name: '', groups: [ADMIN_DEFAULTS.group] });
         audit.record({
           type: AuditType.AdminSetUp,
           actor: null,
@@ -333,7 +333,7 @@ export function createAdminRouter(deps: AdminDeps): Router {
           return;
         }
         const { email, name, groups } = user;
-        users.update(user.id, { username, email, name, groups: [...groups, ADMIN_DEFAULTS.group] });
+        await users.update(user.id, { username, email, name, groups: [...groups, ADMIN_DEFAULTS.group] });
         audit.record({
           type: AuditType.AdminSetUp,
           actor: actorOf(user),

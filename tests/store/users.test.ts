@@ -1,9 +1,9 @@
-import { statSync } from 'node:fs';
-import path from 'node:path';
 import { ADMIN_DEFAULTS } from '../../server/core/defaults.ts';
-import { openJsonFile } from '../../server/store/json-file.ts';
-import { createUserStore, type User } from '../../server/store/users.ts';
-import { tempDir } from '../helpers.ts';
+import { openDocument } from '../../server/db/document.ts';
+import { USERS_DOCUMENT } from '../../server/db/documents.ts';
+import { users } from '../../server/db/schema.ts';
+import { createUserStore, type UserStore } from '../../server/store/users.ts';
+import { createTestStore, type TestStore } from '../db.ts';
 
 const NEW_USER = {
   username: 'ada',
@@ -13,77 +13,68 @@ const NEW_USER = {
   groups: ['admins'],
 };
 
-/**
- * Opens a user store on a fresh file.
- *
- * @returns The store and the file's path.
- */
-function freshStore() {
-  const file = path.join(tempDir(), 'users.json');
-  return { file, store: createUserStore(openJsonFile<User[]>(file, [])) };
-}
-
 describe('user store', () => {
+  let db: TestStore;
+  let store: UserStore;
+
+  beforeEach(async () => {
+    db = await createTestStore();
+    store = createUserStore(await openDocument(db, USERS_DOCUMENT));
+  });
+
+  afterEach(() => db.close());
+
   it('signs a user in with their password and not with another', async () => {
-    const { store } = freshStore();
-    const created = store.create(NEW_USER);
+    const created = await store.create(NEW_USER);
     expect(await store.authenticate('ada', 'correct horse')).toEqual(created);
     expect(await store.authenticate('ada', 'wrong horse')).toBeNull();
     expect(await store.authenticate('bob', 'correct horse')).toBeNull();
   });
 
-  it('never returns or stores the password itself', () => {
-    const { file, store } = freshStore();
-    const created = store.create(NEW_USER);
+  it('never returns or stores the password itself', async () => {
+    const created = await store.create(NEW_USER);
     expect(created).not.toHaveProperty('passwordHash');
-    const stored = openJsonFile<User[]>(file, []).read();
-    expect(stored[0]?.passwordHash).toMatch(/^scrypt\$/);
-    expect(JSON.stringify(stored)).not.toContain('correct horse');
+    const rows = await db.db.select().from(users);
+    expect(rows[0]?.passwordHash).toMatch(/^scrypt\$/);
+    expect(JSON.stringify(rows)).not.toContain('correct horse');
   });
 
-  it('refuses a short password', () => {
-    const { store } = freshStore();
-    expect(() => store.create({ ...NEW_USER, password: 'short' })).toThrow(/password/);
+  it('refuses a short password', async () => {
+    await expect(store.create({ ...NEW_USER, password: 'short' })).rejects.toThrow(/password/);
   });
 
-  it('refuses a taken username', () => {
-    const { store } = freshStore();
-    store.create(NEW_USER);
-    expect(() => store.create(NEW_USER)).toThrow(/ada/);
+  it('refuses a taken username', async () => {
+    await store.create(NEW_USER);
+    await expect(store.create(NEW_USER)).rejects.toThrow(/ada/);
   });
 
   it('changes the password', async () => {
-    const { store } = freshStore();
-    const { id } = store.create(NEW_USER);
-    store.setPassword(id, 'battery staple');
+    const { id } = await store.create(NEW_USER);
+    await store.setPassword(id, 'battery staple');
     expect(await store.authenticate('ada', 'correct horse')).toBeNull();
     expect(await store.authenticate('ada', 'battery staple')).not.toBeNull();
   });
 
-  it('keeps the last admin', () => {
-    const { store } = freshStore();
-    const admin = store.create({ ...NEW_USER, groups: [ADMIN_DEFAULTS.group] });
+  it('keeps the last admin', async () => {
+    const admin = await store.create({ ...NEW_USER, groups: [ADMIN_DEFAULTS.group] });
     expect(store.hasAdmin()).toBe(true);
-    expect(() => store.update(admin.id, { ...NEW_USER, groups: [] })).toThrow(ADMIN_DEFAULTS.group);
-    expect(() => store.remove(admin.id)).toThrow(ADMIN_DEFAULTS.group);
+    await expect(store.update(admin.id, { ...NEW_USER, groups: [] })).rejects.toThrow(ADMIN_DEFAULTS.group);
+    await expect(store.remove(admin.id)).rejects.toThrow(ADMIN_DEFAULTS.group);
 
-    const other = store.create({ ...NEW_USER, username: 'bob', groups: [ADMIN_DEFAULTS.group] });
-    store.remove(admin.id);
+    const other = await store.create({ ...NEW_USER, username: 'bob', groups: [ADMIN_DEFAULTS.group] });
+    await store.remove(admin.id);
     expect(store.list().map((user) => user.id)).toEqual([other.id]);
   });
 
-  it('lets a store with no admin change freely', () => {
-    const { store } = freshStore();
-    const { id } = store.create(NEW_USER);
+  it('lets a store with no admin change freely', async () => {
+    const { id } = await store.create(NEW_USER);
     expect(store.hasAdmin()).toBe(false);
-    expect(store.remove(id).username).toBe('ada');
+    expect((await store.remove(id)).username).toBe('ada');
   });
 
-  it('keeps its file readable by the owner only', () => {
-    const { file, store } = freshStore();
-    store.create(NEW_USER);
-    const OWNER_ONLY = 0o600;
-    const PERMISSION_BITS = 0o777;
-    expect(statSync(file).mode & PERMISSION_BITS).toBe(OWNER_ONLY);
+  it('reads back what it saved', async () => {
+    const created = await store.create({ ...NEW_USER, claims: [{ name: 'team', value: 'ops' }] });
+    const reopened = createUserStore(await openDocument(db, USERS_DOCUMENT));
+    expect(reopened.find(created.id)).toEqual(created);
   });
 });

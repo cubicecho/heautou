@@ -13,11 +13,9 @@ fragment ClientFields on Client {
   logoUri
   createdAt
   refusedRedirectUris
-  tokenLifetimes {
-    accessTokenSeconds
-    idTokenSeconds
-    refreshTokenSeconds
-  }
+  accessTokenSeconds
+  idTokenSeconds
+  refreshTokenSeconds
   backchannelLogoutUri
   backchannelLogoutSessionRequired
   preset
@@ -25,7 +23,8 @@ fragment ClientFields on Client {
     id
     uri
   }
-  apis {
+  # A client is on a few APIs. A page of 50 keeps the clients list within the server's cost limit.
+  apis(limit: 50) {
     identifier
     name
   }
@@ -63,10 +62,7 @@ fragment UserFields on User {
   email
   name
   groups
-  claims {
-    name
-    value
-  }
+  claims
   disabled
   hasPassword
   createdAt
@@ -77,7 +73,9 @@ fragment UserFields on User {
   }
   upstreamLinks {
     providerId
-    providerName
+    provider {
+      name
+    }
     label
     linkedAt
     lastUsedAt
@@ -196,8 +194,8 @@ mutation SetUserDisabled($id: ID!, $disabled: Boolean!) {
   }
 }
 
-query UserSessions($id: ID!) {
-  user(id: $id) {
+query UserSessions($id: String!) {
+  user(where: { id: { eq: $id } }) {
     id
     sessions {
       id
@@ -342,28 +340,19 @@ fragment AuditEntryFields on AuditEntry {
   id
   at
   type
-  actor {
-    userId
-    username
-  }
+  actorUserId
+  actorUsername
   ip
-  target {
-    kind
-    id
-    name
-  }
-  detail {
-    name
-    value
-  }
+  targetKind
+  targetId
+  targetName
+  detail
+  cursor
 }
 
-query AuditLog($first: Int, $after: String, $type: AuditType, $userId: ID) {
-  auditLog(first: $first, after: $after, type: $type, userId: $userId) {
-    entries {
-      ...AuditEntryFields
-    }
-    nextCursor
+query AuditEntries($limit: Int, $after: String, $where: AuditEntryFilters) {
+  auditEntries(limit: $limit, after: $after, where: $where) {
+    ...AuditEntryFields
   }
 }
 
@@ -391,7 +380,9 @@ fragment UpstreamFields on Upstream {
     local
   }
   redirectUri
-  linkCount
+  linksAggregate {
+    count
+  }
   createdAt
 }
 

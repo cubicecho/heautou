@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { CREDENTIAL_DEFAULTS } from '../core/defaults.ts';
 import { MS_PER_SECOND } from '../core/wire.ts';
-import type { JsonFile } from './json-file.ts';
+import type { DataDocument } from '../db/document.ts';
 
 /** One link that lets a user set their password without the old one. */
 interface PasswordLink {
@@ -29,7 +29,7 @@ export interface PasswordLinkStore {
    * @param userId - Whose password the link sets.
    * @returns The token and when it stops working.
    */
-  issue: (userId: string) => IssuedLink;
+  issue: (userId: string) => Promise<IssuedLink>;
   /**
    * Looks a link up without using it.
    *
@@ -43,13 +43,13 @@ export interface PasswordLinkStore {
    * @param token - The link's token.
    * @returns Whose it was, or null when it is unknown, used or expired.
    */
-  consume: (token: string) => string | null;
+  consume: (token: string) => Promise<string | null>;
   /**
    * Cancels a user's link, when they are removed or set a password another way.
    *
    * @param userId - The user.
    */
-  cancelFor: (userId: string) => void;
+  cancelFor: (userId: string) => Promise<void>;
 }
 
 /**
@@ -70,7 +70,7 @@ function digest(token: string): string {
  * @returns The store. Expired links are dropped whenever it writes.
  */
 export function createPasswordLinkStore(
-  file: JsonFile<PasswordLinkDocument>,
+  file: DataDocument<PasswordLinkDocument>,
   now: () => number = Date.now,
 ): PasswordLinkStore {
   const live = (keep: (link: PasswordLink, key: string) => boolean): PasswordLinkDocument =>
@@ -82,25 +82,25 @@ export function createPasswordLinkStore(
   };
 
   return {
-    issue: (userId) => {
+    issue: async (userId) => {
       const token = randomBytes(CREDENTIAL_DEFAULTS.passwordLinkBytes).toString('base64url');
       const expiresAt = now() + CREDENTIAL_DEFAULTS.passwordLinkSeconds * MS_PER_SECOND;
-      file.update(() => ({ ...live((link) => link.userId !== userId), [digest(token)]: { userId, expiresAt } }));
+      await file.update(() => ({ ...live((link) => link.userId !== userId), [digest(token)]: { userId, expiresAt } }));
       return { token, expiresAt };
     },
     find,
-    consume: (token) => {
+    consume: async (token) => {
       const userId = find(token);
       if (userId !== null) {
         const key = digest(token);
-        file.update(() => live((_link, other) => other !== key));
+        await file.update(() => live((_link, other) => other !== key));
       }
       return userId;
     },
-    cancelFor: (userId) => {
+    cancelFor: async (userId) => {
       const hasLink = Object.values(file.read()).some((link) => link.userId === userId);
       if (hasLink) {
-        file.update(() => live((link) => link.userId !== userId));
+        await file.update(() => live((link) => link.userId !== userId));
       }
     },
   };

@@ -2,9 +2,12 @@
 import './core/preflight.ts';
 import { adminUrls } from './admin/admin-client.ts';
 import {
+  databaseUrl,
   dataDir,
+  dbConnectTimeoutMs,
   forwardAuthCookieDomain,
   forwardAuthTrustedProxies,
+  isProduction,
   issuerUrl,
   port,
   s3Config,
@@ -17,6 +20,11 @@ import { errorMessage } from './core/errors.ts';
 import { createObjectStorage } from './core/object-storage.ts';
 import { SecretKeyError } from './core/secret-box.ts';
 import { openServices, type Services } from './core/services.ts';
+import { DatabaseKind, type OpenDatabase, openDatabase } from './db/client.ts';
+import { createDataSet } from './db/data-set.ts';
+import { createWriteQueue } from './db/document.ts';
+import { importDataDirectory, isUnstarted } from './db/import.ts';
+import { waitForDatabase } from './db/wait.ts';
 import { createApp } from './http/app.ts';
 import { stopOnSignals } from './http/shutdown.ts';
 import { mailServerFromEnv } from './mail/env.ts';
@@ -29,14 +37,55 @@ const sealingKeys = secretKeys();
 const bucket = s3Config();
 
 /**
+ * Opens the database, waits for Postgres when it is one, and brings its tables up to date. Stops with a sentence when
+ * it can't.
+ *
+ * @returns The database.
+ */
+async function openDatabaseOrExit(): Promise<OpenDatabase> {
+  try {
+    const database = await openDatabase({ url: databaseUrl(), dataDir: dataDir(), isProduction: isProduction() });
+    if (database.kind === DatabaseKind.Postgres) {
+      await waitForDatabase(database.db, { connectTimeoutMs: dbConnectTimeoutMs() });
+    }
+    await database.migrate();
+    return database;
+  } catch (error) {
+    console.error(`[db] ${errorMessage(error)}`);
+    process.exit(1);
+  }
+}
+
+/**
+ * Puts an older version's JSON files in the database, the first time this version starts on their data directory.
+ *
+ * @param database - The database, migrated.
+ */
+async function importOrExit(database: OpenDatabase): Promise<void> {
+  try {
+    const dataSet = createDataSet({ db: database.db, queue: createWriteQueue() });
+    const imported = await importDataDirectory(dataSet, dataDir(), await isUnstarted(database.db));
+    if (imported !== null) {
+      console.log(
+        `[db] Imported ${imported.files} files from ${dataDir()} into ${database.label}, and moved them to ${imported.movedTo}. Delete them once you are happy.`,
+      );
+    }
+  } catch (error) {
+    console.error(`[db] Could not import the files in ${dataDir()}, so nothing was: ${errorMessage(error)}`);
+    process.exit(1);
+  }
+}
+
+/**
  * Opens the data, stopping with a sentence when the secret key doesn't fit it.
  *
+ * @param database - The database, migrated.
  * @returns The services.
  */
-function openOrExit(): Services {
+async function openOrExit(database: OpenDatabase): Promise<Services> {
   try {
-    return openServices({
-      dataDir: dataDir(),
+    return await openServices({
+      database: database.db,
       issuer: issuerUrl(),
       isProxied: trustProxy() !== false,
       secretKeys: sealingKeys,
@@ -54,10 +103,12 @@ function openOrExit(): Services {
   }
 }
 
-const services = openOrExit();
+const database = await openDatabaseOrExit();
+await importOrExit(database);
+const services = await openOrExit(database);
 if (sealingKeys === null) {
   console.warn(
-    `[boot] SECRET_KEY is not set: client secrets and signing keys are stored in plain text in ${dataDir()}. Set SECRET_KEY or SECRET_KEY_FILE to seal them.`,
+    `[boot] SECRET_KEY is not set: client secrets and signing keys are stored in plain text in ${database.label}. Set SECRET_KEY or SECRET_KEY_FILE to seal them.`,
   );
 }
 
@@ -70,7 +121,7 @@ if (domainProblem !== null) {
 
 const server = createApp(services).listen(port(), LISTEN_HOST, () => {
   console.log(
-    `[boot] heautou ${version()} on http://localhost:${port()}, issuer ${services.issuer}, data in ${dataDir()}`,
+    `[boot] heautou ${version()} on http://localhost:${port()}, issuer ${services.issuer}, data in ${database.label}`,
   );
   if (services.setup.isNeeded()) {
     const { base } = adminUrls(services.issuer);
@@ -79,5 +130,10 @@ const server = createApp(services).listen(port(), LISTEN_HOST, () => {
       `[setup] No admin yet. Open ${base} within ${minutes} minutes to make one. After that, or to make an existing user the admin, open ${base}/setup#token=${services.setup.token}. The token changes on every restart.`,
     );
   }
-  stopOnSignals(server);
+  stopOnSignals(server, {
+    after: async () => {
+      await services.settled();
+      await database.close();
+    },
+  });
 });

@@ -2,8 +2,8 @@ import { z } from 'zod';
 import { API_DEFAULTS } from '../core/defaults.ts';
 import { badInput, notFound } from '../core/errors.ts';
 import { parseInput } from '../core/validation.ts';
+import type { DataDocument } from '../db/document.ts';
 import { withoutBlanks } from './claims.ts';
-import type { JsonFile } from './json-file.ts';
 
 /** An access token the API checks by itself: a JWT signed with the provider's keys, verified with its JWKS. */
 export const TOKEN_FORMAT_JWT = 'jwt' as const;
@@ -98,15 +98,15 @@ export type NewApi = z.input<ReturnType<typeof apiFieldsSchemaFor>> & { identifi
 export interface ApiStore {
   list: () => Api[];
   find: (identifier: string) => Api | null;
-  create: (input: NewApi) => Api;
-  update: (identifier: string, input: ApiFields) => Api;
-  remove: (identifier: string) => Api;
+  create: (input: NewApi) => Promise<Api>;
+  update: (identifier: string, input: ApiFields) => Promise<Api>;
+  remove: (identifier: string) => Promise<Api>;
   /**
    * Takes a client off every API's allowed list, when the client is removed.
    *
    * @param clientId - The client.
    */
-  removeClient: (clientId: string) => void;
+  removeClient: (clientId: string) => Promise<void>;
 }
 
 /** What the API store is built with besides its file. */
@@ -126,7 +126,7 @@ export interface ApiStoreOptions {
  * @param options - Which clients exist, the provider's own scopes and the clock.
  * @returns The store.
  */
-export function createApiStore(file: JsonFile<Api[]>, options: ApiStoreOptions): ApiStore {
+export function createApiStore(file: DataDocument<Api[]>, options: ApiStoreOptions): ApiStore {
   const { clientExists, reservedScopes, now = () => new Date() } = options;
   const fieldsSchema = apiFieldsSchemaFor(reservedScopes);
   const find = (identifier: string): Api | null => file.read().find((api) => api.identifier === identifier) ?? null;
@@ -149,7 +149,7 @@ export function createApiStore(file: JsonFile<Api[]>, options: ApiStoreOptions):
   return {
     list: () => file.read(),
     find,
-    create: ({ identifier: raw, ...input }) => {
+    create: async ({ identifier: raw, ...input }) => {
       const identifier = raw.trim();
       const problem = identifierProblem(identifier);
       if (problem !== null) {
@@ -161,10 +161,10 @@ export function createApiStore(file: JsonFile<Api[]>, options: ApiStoreOptions):
       const fields = parseInput(fieldsSchema, withoutBlanks(input));
       checkClients(fields.allowedClientIds);
       const api: Api = { identifier, ...fields, createdAt: now().toISOString() };
-      file.update((apis) => [...apis, api]);
+      await file.update((apis) => [...apis, api]);
       return api;
     },
-    update: (identifier, input) => {
+    update: async (identifier, input) => {
       const { createdAt, ...current } = load(identifier);
       // Null clears the lifetime rather than keeping it, so it is taken before the blanks are dropped.
       const hasLifetime = Object.hasOwn(input, 'accessTokenSeconds');
@@ -172,18 +172,18 @@ export function createApiStore(file: JsonFile<Api[]>, options: ApiStoreOptions):
       const fields = parseInput(fieldsSchema, { ...current, ...withoutBlanks(input), ...lifetime });
       checkClients(fields.allowedClientIds);
       const next: Api = { ...fields, identifier, createdAt };
-      file.update((apis) => apis.map((api) => (api.identifier === identifier ? next : api)));
+      await file.update((apis) => apis.map((api) => (api.identifier === identifier ? next : api)));
       return next;
     },
-    remove: (identifier) => {
+    remove: async (identifier) => {
       const api = load(identifier);
-      file.update((apis) => apis.filter((other) => other.identifier !== identifier));
+      await file.update((apis) => apis.filter((other) => other.identifier !== identifier));
       return api;
     },
-    removeClient: (clientId) => {
+    removeClient: async (clientId) => {
       const isUsed = file.read().some((api) => api.allowedClientIds.includes(clientId));
       if (isUsed) {
-        file.update((apis) =>
+        await file.update((apis) =>
           apis.map((api) => ({ ...api, allowedClientIds: api.allowedClientIds.filter((id) => id !== clientId) })),
         );
       }

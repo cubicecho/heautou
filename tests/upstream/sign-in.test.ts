@@ -133,14 +133,14 @@ describe('signing in through an upstream OpenID Connect provider', () => {
   beforeEach(async () => {
     upstream = await startTestApp();
     app = await startTestApp();
-    upstream.services.users.create({
+    await upstream.services.users.create({
       username: 'grace',
       password: PASSWORD,
       email: 'grace@corp.example',
       name: 'Grace Hopper',
       groups: ['engineering'],
     });
-    const atUpstream = upstream.services.clients.create({
+    const atUpstream = await upstream.services.clients.create({
       name: 'Heautou downstream',
       authMethod: ClientAuthMethod.SecretBasic,
       redirectUris: [app.services.upstreamFlows.redirectUriOf(UPSTREAM_ID)],
@@ -154,8 +154,8 @@ describe('signing in through an upstream OpenID Connect provider', () => {
       clientSecret: atUpstream.clientSecret,
       scopes: ['openid', 'profile', 'email', 'groups'],
     };
-    app.services.upstreams.create({ id: UPSTREAM_ID, ...upstreamFields });
-    client = app.services.clients.create({
+    await app.services.upstreams.create({ id: UPSTREAM_ID, ...upstreamFields });
+    client = await app.services.clients.create({
       name: 'Photos',
       authMethod: ClientAuthMethod.SecretBasic,
       redirectUris: [REDIRECT_URI],
@@ -169,7 +169,7 @@ describe('signing in through an upstream OpenID Connect provider', () => {
   });
 
   it('turns away an identity no user is linked to, and does not match it by address', async () => {
-    app.services.users.create({
+    await app.services.users.create({
       username: 'gh',
       password: PASSWORD,
       email: 'grace@corp.example',
@@ -179,16 +179,22 @@ describe('signing in through an upstream OpenID Connect provider', () => {
     const stopped = await signInUpstream(createSiteBrowser(), 'grace');
     expect(stopped.searchParams.get('error')).toMatch(/not linked to a user here/);
     expect(app.services.upstreams.linkCount(UPSTREAM_ID)).toBe(0);
-    const refused = app.services.audit
-      .list({ first: 10 })
-      .entries.find((entry) => entry.type === AuditType.SignInRefused);
+    const refused = (await app.services.audit.list({ first: 10 })).entries.find(
+      (entry) => entry.type === AuditType.SignInRefused,
+    );
     expect(refused?.detail).toMatchObject({ provider: 'Corp', reason: 'unknown_identity' });
   });
 
   it('links an identity from the account page, then signs in with it', async () => {
-    const ada = app.services.users.create({ username: 'ada', password: PASSWORD, email: '', name: '', groups: [] });
+    const ada = await app.services.users.create({
+      username: 'ada',
+      password: PASSWORD,
+      email: '',
+      name: '',
+      groups: [],
+    });
     // With no admin, the admin sign-in sends the browser to /setup instead.
-    app.services.users.create({
+    await app.services.users.create({
       username: 'root',
       password: PASSWORD,
       email: '',
@@ -221,12 +227,14 @@ describe('signing in through an upstream OpenID Connect provider', () => {
     expect(done.href.startsWith(REDIRECT_URI)).toBe(true);
     const claims = await idTokenClaims(app, client, done.searchParams.get('code') ?? '');
     expect(claims).toMatchObject({ sub: ada.id, amr: ['fed'], acr: 'pwd' });
-    const succeeded = app.services.audit.list({ first: 20 }).entries.find((e) => e.type === AuditType.SignInSucceeded);
+    const succeeded = (await app.services.audit.list({ first: 20 })).entries.find(
+      (e) => e.type === AuditType.SignInSucceeded,
+    );
     expect(succeeded?.detail).toMatchObject({ method: 'upstream', provider: 'Corp' });
   });
 
   it('creates a user for an allowed domain, with mapped groups, and keeps them in step', async () => {
-    app.services.upstreams.update(UPSTREAM_ID, {
+    await app.services.upstreams.update(UPSTREAM_ID, {
       ...upstreamFields,
       unknownIdentity: UnknownIdentity.Create,
       createDomains: ['corp.example'],
@@ -242,7 +250,7 @@ describe('signing in through an upstream OpenID Connect provider', () => {
 
     // Leaving the group upstream takes the mapped group away at the next sign-in, and only that one.
     const graceUp = upstream.services.users.list().find((user) => user.username === 'grace');
-    upstream.services.users.update(graceUp?.id ?? '', {
+    await upstream.services.users.update(graceUp?.id ?? '', {
       username: 'grace',
       email: 'grace@corp.example',
       name: 'Grace Hopper',
@@ -253,7 +261,7 @@ describe('signing in through an upstream OpenID Connect provider', () => {
   });
 
   it('refuses to create a user outside the allowed domains', async () => {
-    app.services.upstreams.update(UPSTREAM_ID, {
+    await app.services.upstreams.update(UPSTREAM_ID, {
       ...upstreamFields,
       unknownIdentity: UnknownIdentity.Create,
       createDomains: ['other.example'],
@@ -264,16 +272,22 @@ describe('signing in through an upstream OpenID Connect provider', () => {
   });
 
   it('still asks for a second factor here, unless the provider counts as both', async () => {
-    const ada = app.services.users.create({ username: 'ada', password: PASSWORD, email: '', name: '', groups: [] });
+    const ada = await app.services.users.create({
+      username: 'ada',
+      password: PASSWORD,
+      email: '',
+      name: '',
+      groups: [],
+    });
     const graceUp = upstream.services.users.list().find((user) => user.username === 'grace');
-    app.services.upstreams.link(
+    await app.services.upstreams.link(
       ada.id,
       { providerId: UPSTREAM_ID, issuer: upstream.services.issuer, subject: graceUp?.id ?? '' },
       'grace@corp.example',
     );
     const secret = newTotpSecret();
-    app.services.factors.setTotp(ada.id, secret, totpStepAt(Date.now()) - 1);
-    app.services.factors.newRecoveryCodes(ada.id);
+    await app.services.factors.setTotp(ada.id, secret, totpStepAt(Date.now()) - 1);
+    await app.services.factors.newRecoveryCodes(ada.id);
 
     const browser = createSiteBrowser();
     const page = await signInUpstream(browser, 'grace');
@@ -289,21 +303,27 @@ describe('signing in through an upstream OpenID Connect provider', () => {
     const claims = await idTokenClaims(app, client, done.searchParams.get('code') ?? '');
     expect(claims).toMatchObject({ amr: ['fed', 'otp', 'mfa'], acr: 'mfa' });
 
-    app.services.upstreams.update(UPSTREAM_ID, { ...upstreamFields, countsAsBothFactors: true });
+    await app.services.upstreams.update(UPSTREAM_ID, { ...upstreamFields, countsAsBothFactors: true });
     const trusted = await signInUpstream(createSiteBrowser(), 'grace');
     const trustedClaims = await idTokenClaims(app, client, trusted.searchParams.get('code') ?? '');
     expect(trustedClaims).toMatchObject({ amr: ['fed', 'mfa'], acr: 'mfa' });
   });
 
   it('refuses a disabled user, and a user outside the client’s groups', async () => {
-    const ada = app.services.users.create({ username: 'ada', password: PASSWORD, email: '', name: '', groups: [] });
+    const ada = await app.services.users.create({
+      username: 'ada',
+      password: PASSWORD,
+      email: '',
+      name: '',
+      groups: [],
+    });
     const graceUp = upstream.services.users.list().find((user) => user.username === 'grace');
-    app.services.upstreams.link(
+    await app.services.upstreams.link(
       ada.id,
       { providerId: UPSTREAM_ID, issuer: upstream.services.issuer, subject: graceUp?.id ?? '' },
       'grace',
     );
-    app.services.clients.update(client.clientId, {
+    await app.services.clients.update(client.clientId, {
       name: client.name,
       authMethod: client.authMethod,
       redirectUris: client.redirectUris,
@@ -315,7 +335,7 @@ describe('signing in through an upstream OpenID Connect provider', () => {
   });
 
   it('lets an admin manage providers over GraphQL without ever reading the secret back', async () => {
-    const admin = app.services.users.create({
+    const admin = await app.services.users.create({
       username: 'root',
       password: PASSWORD,
       email: '',
@@ -332,14 +352,14 @@ describe('signing in through an upstream OpenID Connect provider', () => {
     const gql = async (query: string, variables: Record<string, unknown> = {}) =>
       (await browser.postJson(`${app.base}/graphql`, { query, variables })).json();
 
-    const listed = await gql('{ upstreams { id kind hasClientSecret redirectUri linkCount } }');
+    const listed = await gql('{ upstreams { id kind hasClientSecret redirectUri linksAggregate { count } } }');
     expect(listed.data.upstreams).toEqual([
       {
         id: UPSTREAM_ID,
         kind: 'OIDC',
         hasClientSecret: true,
         redirectUri: `${app.base}/upstream/${UPSTREAM_ID}/callback`,
-        linkCount: 0,
+        linksAggregate: { count: 0 },
       },
     ]);
     const created = await gql(
@@ -359,7 +379,7 @@ describe('signing in through an upstream OpenID Connect provider', () => {
     expect(app.services.upstreams.find('github')?.clientSecret).toBe('s3cret');
     const removed = await gql('mutation { deleteUpstream(id: "github") { id } }');
     expect(removed.data.deleteUpstream).toEqual({ id: 'github' });
-    const types = app.services.audit.list({ first: 10 }).entries.map((entry) => entry.type);
+    const types = (await app.services.audit.list({ first: 10 })).entries.map((entry) => entry.type);
     expect(types).toEqual(
       expect.arrayContaining([AuditType.UpstreamCreated, AuditType.UpstreamUpdated, AuditType.UpstreamDeleted]),
     );

@@ -97,18 +97,20 @@ function loadChangeable(stores: GroupStores, name: string): Group {
  * @param stores - The users and clients.
  * @param name - The group.
  * @param newName - What to call it.
- * @returns The group under its new name.
+ * @returns Once every store has saved it: the group under its new name.
  */
-export function renameGroup(stores: GroupStores, name: string, newName: string): Group {
+export async function renameGroup(stores: GroupStores, name: string, newName: string): Promise<Group> {
   loadChangeable(stores, name);
   const to = parseInput(groupNameSchema, newName);
   if (to === ADMIN_DEFAULTS.group) {
     throw badInput(`newName: add users to "${to}" one by one, so no one becomes an admin by accident.`);
   }
-  stores.users.replaceGroup(name, to);
-  stores.clients.replaceGroup(name, to);
-  stores.upstreams?.replaceGroup(name, to);
-  stores.protectedSites?.replaceGroup(name, to);
+  await Promise.all([
+    stores.users.replaceGroup(name, to),
+    stores.clients.replaceGroup(name, to),
+    stores.upstreams?.replaceGroup(name, to),
+    stores.protectedSites?.replaceGroup(name, to),
+  ]);
   const renamed = listGroups(stores).find((group) => group.name === to);
   if (renamed === undefined) {
     throw notFound(`No user or client has the group "${to}".`);
@@ -122,9 +124,9 @@ export function renameGroup(stores: GroupStores, name: string, newName: string):
  *
  * @param stores - The users and clients.
  * @param name - The group.
- * @returns How many users were in it.
+ * @returns Once saved: how many users were in it.
  */
-export function deleteGroup(stores: GroupStores, name: string): number {
+export async function deleteGroup(stores: GroupStores, name: string): Promise<number> {
   const group = loadChangeable(stores, name);
   if (group.clientIds.length > 0) {
     const names = group.clientIds.map((clientId) => `"${stores.clients.find(clientId)?.name ?? clientId}"`);
@@ -135,6 +137,9 @@ export function deleteGroup(stores: GroupStores, name: string): number {
     const names = sites.map((site) => `"${site.name}"`);
     throw badInput(`${names.join(', ')} only let "${name}" in. Change their allowed groups first.`);
   }
-  stores.upstreams?.replaceGroup(name, null);
-  return stores.users.replaceGroup(name, null);
+  const [, members] = await Promise.all([
+    stores.upstreams?.replaceGroup(name, null),
+    stores.users.replaceGroup(name, null),
+  ]);
+  return members;
 }

@@ -86,21 +86,21 @@ describe('access tokens for a named API (resource indicators)', () => {
 
   beforeEach(async () => {
     app = await startTestApp();
-    app.services.users.create({ username: 'ada', password: PASSWORD, email: '', name: 'Ada', groups: [] });
-    client = app.services.clients.create({
+    await app.services.users.create({ username: 'ada', password: PASSWORD, email: '', name: 'Ada', groups: [] });
+    client = await app.services.clients.create({
       name: 'Photos',
       authMethod: ClientAuthMethod.SecretBasic,
       redirectUris: [REDIRECT_URI],
       postLogoutRedirectUris: [],
     });
-    service = app.services.clients.create({
+    service = await app.services.clients.create({
       name: 'Backup job',
       authMethod: ClientAuthMethod.SecretBasic,
       redirectUris: [],
       postLogoutRedirectUris: [],
       allowClientCredentials: true,
     });
-    app.services.apis.create({
+    await app.services.apis.create({
       identifier: PHOTOS_API,
       name: 'Photos API',
       scopes: ['photos:read', 'photos:write'],
@@ -133,12 +133,12 @@ describe('access tokens for a named API (resource indicators)', () => {
     // The API checks a JWT itself; oidc-provider does not introspect one.
     expect(await introspect.json()).toMatchObject({ error: 'unsupported_token_type' });
 
-    const [signedIn] = app.services.audit.list({ types: [AuditType.AppSignedIn] }).entries;
+    const [signedIn] = (await app.services.audit.list({ types: [AuditType.AppSignedIn] })).entries;
     expect(signedIn?.detail).toMatchObject({ resource: PHOTOS_API });
   });
 
   it('gives an opaque token to an API that asks for one, and introspection names the API', async () => {
-    app.services.apis.update(PHOTOS_API, { tokenFormat: TOKEN_FORMAT_OPAQUE });
+    await app.services.apis.update(PHOTOS_API, { tokenFormat: TOKEN_FORMAT_OPAQUE });
     const { tokens } = await signInFor(app, client, PHOTOS_API, 'openid photos:write');
     const accessToken = String(tokens?.body.access_token);
     expect(accessToken.split('.')).toHaveLength(1);
@@ -151,7 +151,7 @@ describe('access tokens for a named API (resource indicators)', () => {
   });
 
   it('refuses an API the client is not allowed, and one that does not exist', async () => {
-    app.services.apis.create({ identifier: NOTES_API, name: 'Notes API', scopes: ['notes'] });
+    await app.services.apis.create({ identifier: NOTES_API, name: 'Notes API', scopes: ['notes'] });
     const refused = await signInFor(app, client, NOTES_API, 'openid notes');
     expect(refused.callback.searchParams.get('error')).toBe('invalid_target');
     const unknown = await signInFor(app, client, 'https://nowhere.home.lan', 'openid');
@@ -159,11 +159,11 @@ describe('access tokens for a named API (resource indicators)', () => {
     const machine = await tokenRequest(app, service, { grant_type: 'client_credentials', resource: NOTES_API });
     expect(machine).toMatchObject({ status: HttpStatus.BadRequest, body: { error: 'invalid_target' } });
 
-    const failed = app.services.audit.list({ types: [AuditType.AppSignInFailed] }).entries;
+    const failed = (await app.services.audit.list({ types: [AuditType.AppSignInFailed] })).entries;
     expect(failed.map((entry) => entry.detail)).toContainEqual(
       expect.objectContaining({ error: 'invalid_target', resource: NOTES_API }),
     );
-    const [tokenRefused] = app.services.audit.list({ types: [AuditType.AppTokenRefused] }).entries;
+    const [tokenRefused] = (await app.services.audit.list({ types: [AuditType.AppTokenRefused] })).entries;
     expect(tokenRefused?.detail).toMatchObject({ error: 'invalid_target', resource: NOTES_API });
   });
 
@@ -182,7 +182,7 @@ describe('access tokens for a named API (resource indicators)', () => {
       scope: 'photos:read',
     });
     expect(machine.body.expires_in).toBe(TOKEN_LIFETIME_DEFAULTS.clientCredentialsSeconds);
-    const [issued] = app.services.audit.list({ types: [AuditType.MachineTokenIssued] }).entries;
+    const [issued] = (await app.services.audit.list({ types: [AuditType.MachineTokenIssued] })).entries;
     expect(issued?.detail).toMatchObject({ resource: PHOTOS_API });
 
     // Its only API is the one it gets when it names none.
@@ -193,18 +193,18 @@ describe('access tokens for a named API (resource indicators)', () => {
   it('takes the API’s lifetime over the client’s, and the client’s over the server’s', async () => {
     const clientSeconds = 900;
     const apiSeconds = 300;
-    app.services.clients.update(client.clientId, {
+    await app.services.clients.update(client.clientId, {
       ...client,
       tokenLifetimes: { accessTokenSeconds: clientSeconds, idTokenSeconds: null, refreshTokenSeconds: null },
     });
-    app.services.clients.update(service.clientId, {
+    await app.services.clients.update(service.clientId, {
       ...service,
       tokenLifetimes: { accessTokenSeconds: clientSeconds, idTokenSeconds: null, refreshTokenSeconds: null },
     });
     const withClients = await signInFor(app, client, PHOTOS_API, 'openid photos:read');
     expect(withClients.tokens?.body.expires_in).toBe(clientSeconds);
 
-    app.services.apis.update(PHOTOS_API, { accessTokenSeconds: apiSeconds });
+    await app.services.apis.update(PHOTOS_API, { accessTokenSeconds: apiSeconds });
     const withApi = await signInFor(app, client, PHOTOS_API, 'openid photos:read');
     expect(withApi.tokens?.body.expires_in).toBe(apiSeconds);
     const jwt = payloadOf(String(withApi.tokens?.body.access_token));
@@ -213,14 +213,14 @@ describe('access tokens for a named API (resource indicators)', () => {
     expect(machine.body.expires_in).toBe(apiSeconds);
 
     // A token with no API keeps the client's own.
-    app.services.apis.update(PHOTOS_API, { allowedClientIds: [client.clientId] });
+    await app.services.apis.update(PHOTOS_API, { allowedClientIds: [client.clientId] });
     const noApi = await tokenRequest(app, service, { grant_type: 'client_credentials' });
     expect(noApi.body.expires_in).toBe(clientSeconds);
   });
 
   it('caps a token for an API that sets no lifetime at the API maximum, however long the client’s own', async () => {
     const longSeconds = API_DEFAULTS.maxAccessTokenSeconds * 30;
-    app.services.clients.update(client.clientId, {
+    await app.services.clients.update(client.clientId, {
       ...client,
       tokenLifetimes: { accessTokenSeconds: longSeconds, idTokenSeconds: null, refreshTokenSeconds: null },
     });
@@ -260,14 +260,14 @@ describe('access tokens for a named API (resource indicators)', () => {
       id: client.clientId,
     });
     expect(deleted.errors).toBeUndefined();
-    const listed = await adminGql(admin, '{ apis { identifier allowedClients { clientId } } }');
+    const listed = await adminGql(admin, '{ apis(limit: 10) { identifier allowedClients(limit: 10) { clientId } } }');
     expect(listed.data.apis).toEqual([
       { identifier: PHOTOS_API, allowedClients: [{ clientId: service.clientId }] },
       { identifier: NOTES_API, allowedClients: [] },
     ]);
     await adminGql(admin, 'mutation($id: ID!) { deleteApi(identifier: $id) { identifier } }', { id: NOTES_API });
     expect(app.services.apis.find(NOTES_API)).toBeNull();
-    const types = app.services.audit.list({}).entries.map((entry) => entry.type);
+    const types = (await app.services.audit.list({})).entries.map((entry) => entry.type);
     expect(types).toEqual(expect.arrayContaining([AuditType.ApiCreated, AuditType.ApiDeleted]));
   });
 });

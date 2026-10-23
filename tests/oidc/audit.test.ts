@@ -1,9 +1,8 @@
 import { KEY_DEFAULTS } from '../../server/core/defaults.ts';
-import { openServices } from '../../server/core/services.ts';
 import { HttpStatus } from '../../server/core/wire.ts';
 import { AuditType } from '../../server/store/audit.ts';
 import { ClientAuthMethod } from '../../server/store/clients.ts';
-import { startTestApp, type TestApp, tempDir } from '../helpers.ts';
+import { startTestApp, type TestApp } from '../helpers.ts';
 import {
   adminGql,
   adminSubscribe,
@@ -21,16 +20,17 @@ import {
 const DAY_MS = 86_400_000;
 
 const AUDIT_LOG = /* GraphQL */ `
-  query ($first: Int, $after: String, $type: AuditType, $userId: ID) {
-    auditLog(first: $first, after: $after, type: $type, userId: $userId) {
-      entries {
-        type
-        actor { userId username }
-        ip
-        target { kind id name }
-        detail { name value }
-      }
-      nextCursor
+  query ($limit: Int, $after: String, $where: AuditEntryFilters) {
+    auditEntries(limit: $limit, after: $after, where: $where) {
+      type
+      actorUserId
+      actorUsername
+      ip
+      targetKind
+      targetId
+      targetName
+      detail
+      cursor
     }
   }
 `;
@@ -43,8 +43,8 @@ describe('the audit log', () => {
   beforeAll(async () => {
     app = await startTestApp();
     admin = await signInAsAdmin(app);
-    app.services.users.create({ username: 'ada', password: PASSWORD, email: '', name: '', groups: [] });
-    client = app.services.clients.create({
+    await app.services.users.create({ username: 'ada', password: PASSWORD, email: '', name: '', groups: [] });
+    client = await app.services.clients.create({
       name: 'Test app',
       authMethod: ClientAuthMethod.SecretBasic,
       redirectUris: [REDIRECT_URI],
@@ -55,12 +55,12 @@ describe('the audit log', () => {
   afterAll(() => app.close());
 
   /**
-   * Reads every entry as the file holds it, newest first.
+   * Reads every entry as the log holds it, newest first.
    *
    * @returns The entries, and all of them as one string to search for secrets.
    */
-  const everything = () => {
-    const { entries } = app.services.audit.list({ first: 200 });
+  const everything = async () => {
+    const { entries } = await app.services.audit.list({ first: 200 });
     return { entries, text: JSON.stringify(entries) };
   };
 
@@ -80,7 +80,7 @@ describe('the audit log', () => {
   it('records a sign-in through the code flow against its client, with no secrets', async () => {
     const tokens = await signInForTokens(app, client, 'ada', 'openid');
     const ada = app.services.users.list().find((user) => user.username === 'ada');
-    const { entries, text } = everything();
+    const { entries, text } = await everything();
     expect(entries.slice(0, 2)).toMatchObject([
       {
         type: AuditType.AppSignedIn,
@@ -103,10 +103,10 @@ describe('the audit log', () => {
   it('records an app sign-in that reused the session, with where the browser was sent', async () => {
     const browser = createBrowser(app.base);
     await signIn(app, authorizePath(), 'ada', PASSWORD, browser);
-    const before = everything().entries.length;
+    const before = (await everything()).entries.length;
     const callback = await signIn(app, authorizePath(), 'ada', 'never asked', browser);
     expect(callback.searchParams.get('code')).toEqual(expect.any(String));
-    const { entries } = everything();
+    const { entries } = await everything();
     expect(entries.length).toBe(before + 1);
     expect(entries[0]).toMatchObject({
       type: AuditType.AppSignedIn,
@@ -129,16 +129,16 @@ describe('the audit log', () => {
       scope: 'openid',
     })}`;
     await browser.send(wrongRedirect);
-    expect(everything().entries[0]).toMatchObject({
+    expect((await everything()).entries[0]).toMatchObject({
       type: AuditType.AppSignInFailed,
       target: { id: client.clientId, name: 'Test app' },
       detail: { error: 'invalid_redirect_uri', redirectUri: 'http://elsewhere.example/callback' },
     });
 
-    const before = everything().entries.length;
+    const before = (await everything()).entries.length;
     const res = await browser.send(`${authorizePath()}&prompt=none`);
     expect(res.headers.get('location')).toContain('error=login_required');
-    expect(everything().entries.length).toBe(before);
+    expect((await everything()).entries.length).toBe(before);
 
     const tokenRes = await fetch(`${app.services.issuer}/token`, {
       method: 'POST',
@@ -149,7 +149,7 @@ describe('the audit log', () => {
       body: new URLSearchParams({ grant_type: 'authorization_code', code: 'made-up', redirect_uri: REDIRECT_URI }),
     });
     expect(tokenRes.status).toBe(HttpStatus.Unauthorized);
-    const { entries, text } = everything();
+    const { entries, text } = await everything();
     expect(entries[0]).toMatchObject({
       type: AuditType.AppTokenRefused,
       actor: null,
@@ -159,23 +159,31 @@ describe('the audit log', () => {
     expect(text).not.toContain('not-the-secret');
   });
 
-  it('records keys rotated at boot once they are due', () => {
-    const dataDir = tempDir();
+  it('records keys rotated at boot once they are due', async () => {
     let time = Date.now();
-    const settings = { dataDir, issuer: 'http://127.0.0.1/oidc', isProxied: false, now: () => time };
-    expect(openServices(settings).audit.list({ types: [AuditType.KeysRotated] }).entries).toEqual([]);
-    time += (KEY_DEFAULTS.rotationDays + 1) * DAY_MS;
-    const reopened = openServices(settings);
-    expect(reopened.audit.list({ types: [AuditType.KeysRotated] }).entries).toMatchObject([
-      { actor: null, target: { kind: 'keys' }, detail: { reason: 'scheduled' } },
-    ]);
+    const now = () => time;
+    const first = await startTestApp({ now });
+    try {
+      expect((await first.services.audit.list({ types: [AuditType.KeysRotated] })).entries).toEqual([]);
+      time += (KEY_DEFAULTS.rotationDays + 1) * DAY_MS;
+      const reopened = await startTestApp({ database: first.database, now });
+      try {
+        expect((await reopened.services.audit.list({ types: [AuditType.KeysRotated] })).entries).toMatchObject([
+          { actor: null, target: { kind: 'keys' }, detail: { reason: 'scheduled' } },
+        ]);
+      } finally {
+        await reopened.close();
+      }
+    } finally {
+      await first.close();
+    }
   });
 
   it('streams new entries to a subscription, filtered the way the log is', async () => {
     const ada = app.services.users.list().find((user) => user.username === 'ada');
     const subscription = /* GraphQL */ `
       subscription ($type: AuditType, $userId: ID) {
-        auditEntryAdded(type: $type, userId: $userId) { type actor { username } target { name } }
+        auditEntryAdded(type: $type, userId: $userId) { type actorUsername targetName }
       }
     `;
     const all = await adminSubscribe(admin, subscription);
@@ -187,8 +195,8 @@ describe('the audit log', () => {
       await expect(signIn(app, authorizePath(), 'ada', 'wrong horse')).rejects.toThrow();
       expect((await all.subscription.next())?.data?.auditEntryAdded).toEqual({
         type: 'SIGN_IN_SUCCEEDED',
-        actor: { username: 'ada' },
-        target: { name: 'Test app' },
+        actorUsername: 'ada',
+        targetName: 'Test app',
       });
       expect((await all.subscription.next())?.data?.auditEntryAdded).toMatchObject({ type: 'APP_SIGNED_IN' });
       expect((await failures.subscription.next())?.data?.auditEntryAdded).toMatchObject({ type: 'SIGN_IN_FAILED' });
@@ -202,13 +210,13 @@ describe('the audit log', () => {
 
   it('records a failed sign-in, by the account it named or by the username typed', async () => {
     await expect(signIn(app, authorizePath(), 'ada', 'wrong horse')).rejects.toThrow(/expected 401 to be 200/);
-    expect(everything().entries[0]).toMatchObject({
+    expect((await everything()).entries[0]).toMatchObject({
       type: AuditType.SignInFailed,
       actor: { username: 'ada' },
       target: { id: client.clientId },
     });
     await expect(signIn(app, authorizePath(), 'nobody', 'guess one')).rejects.toThrow(/expected 401 to be 200/);
-    const { entries, text } = everything();
+    const { entries, text } = await everything();
     expect(entries[0]).toMatchObject({ type: AuditType.SignInFailed, actor: null, detail: { username: 'nobody' } });
     expect(text).not.toContain('wrong horse');
     expect(text).not.toContain('guess one');
@@ -232,33 +240,38 @@ describe('the audit log', () => {
     const link = await adminGql(admin, 'mutation ($id: ID!) { createPasswordLink(id: $id) { url } }', { id: ada?.id });
     const { url } = link.data.createPasswordLink;
 
-    const { data } = await adminGql(admin, AUDIT_LOG, { first: 2 });
-    expect(data.auditLog.entries).toMatchObject([
-      { type: 'PASSWORD_LINK_CREATED', actor: { username: 'root' }, target: { kind: 'USER', name: 'ada' } },
+    const { data } = await adminGql(admin, AUDIT_LOG, { limit: 2 });
+    expect(data.auditEntries).toMatchObject([
+      { type: 'PASSWORD_LINK_CREATED', actorUsername: 'root', targetKind: 'USER', targetName: 'ada' },
       {
         type: 'CLIENT_CREATED',
-        actor: { username: 'root' },
-        target: { kind: 'CLIENT', id: clientId, name: 'Audited' },
+        actorUsername: 'root',
+        targetKind: 'CLIENT',
+        targetId: clientId,
+        targetName: 'Audited',
       },
     ]);
-    const { text } = everything();
+    const { text } = await everything();
     expect(text).not.toContain(clientSecret);
     expect(text).not.toContain(new URL(url).hash.slice(1));
   });
 
   it('filters by type and by user, a page at a time', async () => {
     const ada = app.services.users.list().find((user) => user.username === 'ada');
-    const failed = await adminGql(admin, AUDIT_LOG, { type: 'SIGN_IN_FAILED' });
-    expect(failed.data.auditLog.entries.map((entry: { type: string }) => entry.type)).toEqual([
+    const failed = await adminGql(admin, AUDIT_LOG, { where: { type: { eq: 'SIGN_IN_FAILED' } } });
+    expect(failed.data.auditEntries.map((entry: { type: string }) => entry.type)).toEqual([
       'SIGN_IN_FAILED',
       'SIGN_IN_FAILED',
       'SIGN_IN_FAILED',
     ]);
-    const first = await adminGql(admin, AUDIT_LOG, { userId: ada?.id, first: 1 });
-    expect(first.data.auditLog.entries).toHaveLength(1);
-    expect(first.data.auditLog.nextCursor).toEqual(expect.any(String));
-    const next = await adminGql(admin, AUDIT_LOG, { userId: ada?.id, first: 1, after: first.data.auditLog.nextCursor });
-    expect(next.data.auditLog.entries[0]).not.toEqual(first.data.auditLog.entries[0]);
+    const byAda = { OR: [{ actorUserId: { eq: ada?.id } }, { targetKind: { eq: 'USER' }, targetId: { eq: ada?.id } }] };
+    const first = await adminGql(admin, AUDIT_LOG, { where: byAda, limit: 1 });
+    expect(first.data.auditEntries).toHaveLength(1);
+    const [firstEntry] = first.data.auditEntries;
+    expect(firstEntry.cursor).toEqual(expect.any(String));
+    const next = await adminGql(admin, AUDIT_LOG, { where: byAda, limit: 1, after: firstEntry.cursor });
+    expect(next.data.auditEntries).toHaveLength(1);
+    expect(next.data.auditEntries[0]).not.toEqual(firstEntry);
   });
 
   it('is only for admins', async () => {

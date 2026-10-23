@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { MS_PER_SECOND } from '../core/wire.ts';
-import { isLive, type ModelDocument, type ModelFiles } from './adapter.ts';
+import { isLive, type ModelDocument, type ModelDocuments } from './adapter.ts';
 import type { AppLogout, LogoutNotifier } from './backchannel.ts';
 
 /** The provider's models that belong to one signed-in user. */
@@ -67,23 +67,23 @@ export interface SessionTools {
 }
 
 /**
- * Drops the entries of one file that a test picks, writing only when one matched.
+ * Drops the entries of one model that a test picks, writing only when one matched.
  *
- * @param files - The model files.
+ * @param models - The provider's models.
  * @param model - The model.
  * @param drop - Which entries to drop.
  */
-function dropWhere(
-  files: ModelFiles,
+async function dropWhere(
+  models: ModelDocuments,
   model: string,
   drop: (key: string, payload: Record<string, unknown>) => boolean,
-): void {
-  const file = files.open(model);
-  const now = files.now();
-  const entries = Object.entries(file.read());
+): Promise<void> {
+  const document = models.open(model);
+  const now = models.now();
+  const entries = Object.entries(document.read());
   const keep = entries.filter(([key, entry]) => isLive(entry, now) && drop(key, entry.payload) === false);
   if (keep.length !== entries.length) {
-    file.update((): ModelDocument => Object.fromEntries(keep));
+    await document.update((): ModelDocument => Object.fromEntries(keep));
   }
 }
 
@@ -105,16 +105,19 @@ interface StoredSession extends SessionInfo {
 }
 
 /**
- * Builds the session tools over the provider's model files.
+ * Builds the session tools over the provider's models.
  *
- * @param files - The files the provider's adapter keeps its models in.
+ * @param models - The documents the provider's adapter keeps its models in.
  * @param [notifyLogout] - Tells clients the sessions they signed in with have ended.
  * @returns The tools.
  */
-export function createSessionTools(files: ModelFiles, notifyLogout: LogoutNotifier = async () => {}): SessionTools {
+export function createSessionTools(
+  models: ModelDocuments,
+  notifyLogout: LogoutNotifier = async () => {},
+): SessionTools {
   const sessionsOf = (accountId: string): StoredSession[] => {
-    const now = files.now();
-    return Object.entries(files.open(SESSION_MODEL).read())
+    const now = models.now();
+    return Object.entries(models.open(SESSION_MODEL).read())
       .filter(([, entry]) => isLive(entry, now))
       .flatMap(([id, entry]) => {
         const parsed = sessionPayloadSchema.safeParse(entry.payload);
@@ -147,10 +150,10 @@ export function createSessionTools(files: ModelFiles, notifyLogout: LogoutNotifi
         return false;
       }
       const grants = new Set(session.grantIds);
-      dropWhere(files, SESSION_MODEL, (key) => key === sessionId);
-      dropWhere(files, GRANT_MODEL, (key) => grants.has(key));
+      await dropWhere(models, SESSION_MODEL, (key) => key === sessionId);
+      await dropWhere(models, GRANT_MODEL, (key) => grants.has(key));
       for (const model of GRANT_MODELS) {
-        dropWhere(files, model, (_key, payload) => grants.has(String(payload.grantId)));
+        await dropWhere(models, model, (_key, payload) => grants.has(String(payload.grantId)));
       }
       await notifyLogout(session.logouts, ip);
       return true;
@@ -158,7 +161,7 @@ export function createSessionTools(files: ModelFiles, notifyLogout: LogoutNotifi
     revokeAccount: async (accountId, ip) => {
       const logouts = sessionsOf(accountId).flatMap((session) => session.logouts);
       for (const model of ACCOUNT_MODELS) {
-        dropWhere(files, model, (_key, payload) => payload.accountId === accountId);
+        await dropWhere(models, model, (_key, payload) => payload.accountId === accountId);
       }
       await notifyLogout(logouts, ip);
     },

@@ -41,7 +41,7 @@ export function LinkedAccountsDialog({ user, open, onOpenChange }: LinkedAccount
             contentSlot={links.map((link) => (
               <ListItem
                 key={link.providerId}
-                title={link.providerName}
+                title={link.provider.name}
                 description={joinStats(
                   link.label,
                   link.lastUsedAt === null ? 'not used yet' : `last used ${formatAgo(link.lastUsedAt)}`,

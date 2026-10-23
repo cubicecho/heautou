@@ -1,8 +1,8 @@
 import { generateKeyPairSync, randomBytes, randomUUID } from 'node:crypto';
 import type { JWK } from 'oidc-provider';
 import { KEY_DEFAULTS } from '../core/defaults.ts';
-import type { JsonFile } from './json-file.ts';
-import type { SecretMapper } from './sealed-file.ts';
+import type { DataDocument } from '../db/document.ts';
+import type { SecretMapper } from './sealed-document.ts';
 
 /** The keys the provider signs tokens and cookies with. */
 export interface ProviderKeys {
@@ -24,7 +24,7 @@ export interface KeyStore {
    *
    * @returns The keys after the rotation.
    */
-  rotate: () => ProviderKeys;
+  rotate: () => Promise<ProviderKeys>;
   /** Whether the keys are older than `KEY_DEFAULTS.rotationDays`. */
   isDue: () => boolean;
 }
@@ -96,14 +96,17 @@ export const privateKeysIn: SecretMapper<ProviderKeys | null> = (keys, change) =
  * @param [now] - The clock.
  * @returns The store.
  */
-export function openKeyStore(file: JsonFile<ProviderKeys | null>, now: () => Date = () => new Date()): KeyStore {
+export async function openKeyStore(
+  file: DataDocument<ProviderKeys | null>,
+  now: () => Date = () => new Date(),
+): Promise<KeyStore> {
   const stamp = (): string => now().toISOString();
   const stored = file.read();
   if (stored === null) {
-    file.update(() => ({ jwks: [generateSigningKey()], cookieKeys: [generateCookieKey()], rotatedAt: stamp() }));
+    await file.update(() => ({ jwks: [generateSigningKey()], cookieKeys: [generateCookieKey()], rotatedAt: stamp() }));
   } else if (stored.rotatedAt === undefined) {
     // Count the age of keys made before rotation existed from this boot.
-    file.update(() => ({ ...stored, rotatedAt: stamp() }));
+    await file.update(() => ({ ...stored, rotatedAt: stamp() }));
   }
   const current = (): ProviderKeys => {
     const keys = file.read();
@@ -114,7 +117,7 @@ export function openKeyStore(file: JsonFile<ProviderKeys | null>, now: () => Dat
   };
   return {
     current,
-    rotate: () => {
+    rotate: async () => {
       const { jwks, cookieKeys } = current();
       const { keptKeys } = KEY_DEFAULTS;
       const next: ProviderKeys = {
@@ -122,7 +125,7 @@ export function openKeyStore(file: JsonFile<ProviderKeys | null>, now: () => Dat
         cookieKeys: [generateCookieKey(), ...cookieKeys].slice(0, keptKeys),
         rotatedAt: stamp(),
       };
-      file.update(() => next);
+      await file.update(() => next);
       return next;
     },
     isDue: () => {

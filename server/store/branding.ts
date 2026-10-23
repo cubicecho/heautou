@@ -3,7 +3,7 @@ import { BRANDING_DEFAULTS } from '../core/defaults.ts';
 import { badInput } from '../core/errors.ts';
 import { parseInput } from '../core/validation.ts';
 import { BYTES_PER_KB } from '../core/wire.ts';
-import type { JsonFile } from './json-file.ts';
+import type { DataDocument } from '../db/document.ts';
 
 /** The image types a logo may be. SVG is allowed: it is only ever shown in an `<img>`, which runs no scripts. */
 export const LOGO_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'] as const;
@@ -31,7 +31,7 @@ const nameSchema = z.string().trim().min(1, 'give it a name').max(BRANDING_DEFAU
 /** The provider's name and logo, kept in one file. */
 export interface BrandingStore {
   read: () => Branding;
-  setName: (name: string) => Branding;
+  setName: (name: string) => Promise<Branding>;
   /**
    * Sets or removes the logo.
    *
@@ -39,7 +39,7 @@ export interface BrandingStore {
    * @returns The branding.
    * @throws BAD_USER_INPUT for another type or a file over `BRANDING_DEFAULTS.maxLogoBytes`.
    */
-  setLogo: (dataUrl: string | null) => Branding;
+  setLogo: (dataUrl: string | null) => Promise<Branding>;
 }
 
 /**
@@ -50,7 +50,7 @@ export interface BrandingStore {
  * @returns The store.
  */
 export function createBrandingStore(
-  file: JsonFile<Partial<Branding>>,
+  file: DataDocument<Partial<Branding>>,
   now: () => Date = () => new Date(),
 ): BrandingStore {
   const read = (): Branding => {
@@ -59,14 +59,14 @@ export function createBrandingStore(
   };
   return {
     read,
-    setName: (name) => {
+    setName: async (name) => {
       const parsed = parseInput(nameSchema, name);
-      file.update(() => ({ ...read(), name: parsed }));
+      await file.update(() => ({ ...read(), name: parsed }));
       return read();
     },
-    setLogo: (dataUrl) => {
+    setLogo: async (dataUrl) => {
       if (dataUrl === null) {
-        file.update(() => ({ ...read(), logo: null }));
+        await file.update(() => ({ ...read(), logo: null }));
         return read();
       }
       const [, type = '', data = ''] = DATA_URL_PATTERN.exec(dataUrl) ?? [];
@@ -77,7 +77,7 @@ export function createBrandingStore(
       if (Buffer.byteLength(data, 'base64') > BRANDING_DEFAULTS.maxLogoBytes) {
         throw badInput(`logo: use an image under ${BRANDING_DEFAULTS.maxLogoBytes / BYTES_PER_KB} KB.`);
       }
-      file.update(() => ({ ...read(), logo: { type: type as LogoType, data, updatedAt: now().toISOString() } }));
+      await file.update(() => ({ ...read(), logo: { type: type as LogoType, data, updatedAt: now().toISOString() } }));
       return read();
     },
   };

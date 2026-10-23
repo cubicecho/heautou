@@ -102,13 +102,17 @@ export function createAccountRouter(deps: AccountDeps): Router {
     });
   });
 
-  router.get(ADMIN_PATH.accountActivity, (req, res) => {
+  router.get(ADMIN_PATH.accountActivity, async (req, res) => {
     const user = signedInUser(deps, req);
     if (user === null) {
       sendRefusal(res, HttpStatus.Unauthorized, 'Sign in first.');
       return;
     }
-    const { entries } = audit.list({ first: AUDIT_DEFAULTS.accountEntries, types: SIGN_IN_TYPES, userId: user.id });
+    const { entries } = await audit.list({
+      first: AUDIT_DEFAULTS.accountEntries,
+      types: SIGN_IN_TYPES,
+      userId: user.id,
+    });
     res.json({
       entries: entries.map(({ id, at, type, ip, target }) => ({
         id,
@@ -146,8 +150,8 @@ export function createAccountRouter(deps: AccountDeps): Router {
     }
     try {
       await passwordPolicy.check(parsed.data.newPassword, user);
-      users.setPassword(user.id, parsed.data.newPassword);
-      passwordLinks.cancelFor(user.id);
+      await users.setPassword(user.id, parsed.data.newPassword);
+      await passwordLinks.cancelFor(user.id);
       throttle.succeed(user.username);
       audit.record({ type: AuditType.AccountPasswordChanged, actor: actorOf(user), ip: req.ip ?? null });
       res.json({ ok: true });
@@ -159,7 +163,7 @@ export function createAccountRouter(deps: AccountDeps): Router {
   router.post(ADMIN_PATH.accountSignOut, ...json, async (req, res) => {
     const user = signedInUser(deps, req);
     if (user !== null) {
-      adminSessions.removeUser(user.id);
+      await adminSessions.removeUser(user.id);
       await sessions.revokeAccount(user.id, req.ip ?? null);
       audit.record({ type: AuditType.AccountSignedOutEverywhere, actor: actorOf(user), ip: req.ip ?? null });
     }
@@ -194,8 +198,8 @@ export function createAccountRouter(deps: AccountDeps): Router {
     try {
       // Checked before the link is used up, so a password the rules refuse can be fixed and sent again.
       await passwordPolicy.check(password, user);
-      users.setPassword(user.id, password);
-      passwordLinks.consume(token);
+      await users.setPassword(user.id, password);
+      await passwordLinks.consume(token);
       audit.record({
         type: AuditType.PasswordLinkUsed,
         actor: actorOf(user),

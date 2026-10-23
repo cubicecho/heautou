@@ -178,9 +178,13 @@ export const mailResolvers = {
      * @param ctx - Request context.
      * @returns The email settings.
      */
-    setMailServer: (_parent: unknown, args: { input: MailServerInput }, ctx: Context): MailSettingsView => {
+    setMailServer: async (
+      _parent: unknown,
+      args: { input: MailServerInput },
+      ctx: Context,
+    ): Promise<MailSettingsView> => {
       const isNewPassword = (args.input.password ?? '') !== '';
-      const server = ctx.mail.setServer(args.input);
+      const server = await ctx.mail.setServer(args.input);
       return audited(ctx, AuditType.MailServerSet, settingsView(ctx), {
         host: `${server.host}:${server.port}`,
         password: isNewPassword ? 'replaced' : 'kept',
@@ -194,8 +198,8 @@ export const mailResolvers = {
      * @param ctx - Request context.
      * @returns The email settings.
      */
-    removeMailServer: (_parent: unknown, _args: unknown, ctx: Context): MailSettingsView => {
-      ctx.mail.removeServer();
+    removeMailServer: async (_parent: unknown, _args: unknown, ctx: Context): Promise<MailSettingsView> => {
+      await ctx.mail.removeServer();
       return audited(ctx, AuditType.MailServerRemoved, settingsView(ctx));
     },
     /**
@@ -206,11 +210,11 @@ export const mailResolvers = {
      * @param ctx - Request context.
      * @returns The email settings.
      */
-    setMailOptions: (_parent: unknown, args: Partial<MailOptions>, ctx: Context): MailSettingsView => {
+    setMailOptions: async (_parent: unknown, args: Partial<MailOptions>, ctx: Context): Promise<MailSettingsView> => {
       const changes = Object.fromEntries(
         Object.entries(args).filter((entry): entry is [string, boolean] => typeof entry[1] === 'boolean'),
       );
-      ctx.mail.setOptions(changes);
+      await ctx.mail.setOptions(changes);
       const detail = Object.fromEntries(Object.entries(changes).map(([name, isOn]) => [name, isOn ? 'on' : 'off']));
       return audited(ctx, AuditType.MailOptionsSet, settingsView(ctx), detail);
     },
@@ -260,7 +264,7 @@ export const mailResolvers = {
       if (user.email === '') {
         throw badInput(`"${user.username}" has no email address. Add one, or copy the link instead.`);
       }
-      const { token, expiresAt } = ctx.passwordLinks.issue(user.id);
+      const { token, expiresAt } = await ctx.passwordLinks.issue(user.id);
       const url = passwordLinkUrl(ctx.issuer, token);
       const kind = user.hasPassword ? MailKind.Reset : MailKind.Invite;
       const content = passwordLinkContent(kind, user, ctx.branding.read().name, url, new Date(expiresAt));

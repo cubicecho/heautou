@@ -2,9 +2,9 @@
 import { accessSync, constants, mkdirSync } from 'node:fs';
 import { createProxyTrust } from '../forward-auth/trust.ts';
 import { mailServerFromEnv } from '../mail/env.ts';
-import { DIR_MODE } from '../store/json-file.ts';
 import { LOOPBACK_HOSTS } from '../store/redirect-uris.ts';
 import {
+  databaseUrl,
   dataDir,
   forwardAuthTrustedProxies,
   isProduction,
@@ -16,6 +16,7 @@ import {
 import { errorMessage } from './errors.ts';
 import { createObjectStorage } from './object-storage.ts';
 import { SecretKeyError } from './secret-box.ts';
+import { DIR_MODE } from './wire.ts';
 
 let bucket: S3Config | null = null;
 try {
@@ -28,6 +29,8 @@ try {
   }
   // A malformed SECRET_KEY stops boot here; one that doesn't open the data stops it in openServices.
   secretKeys();
+  // So does a DATABASE_URL that is not a postgres:// URL.
+  databaseUrl();
   // A malformed SMTP_URL, SMTP_PORT or a missing SMTP_FROM stops boot here, without repeating a password.
   mailServerFromEnv();
   // Half an S3 configuration stops boot; a bucket that can't be reached only warns, below.

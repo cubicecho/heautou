@@ -55,12 +55,12 @@ const POLL_MS = 10;
 /**
  * Waits for something sent after a reply, such as a forgot-password email.
  *
- * @param check - True once it has happened.
+ * @param check - True once it has happened; it may answer in a promise, such as after reading the audit log.
  * @throws When it has not within two seconds.
  */
-export async function waitFor(check: () => boolean): Promise<void> {
+export async function waitFor(check: () => boolean | Promise<boolean>): Promise<void> {
   const until = Date.now() + WAIT_MS;
-  while (check() === false) {
+  while ((await check()) === false) {
     if (Date.now() > until) {
       throw new Error('It never happened.');
     }

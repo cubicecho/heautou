@@ -46,8 +46,9 @@ async function forgot(browser: Browser, uid: string, identifier: string) {
  * @param app - The running app.
  * @returns How many.
  */
-function requests(app: TestApp): number {
-  return app.services.audit.list({ types: [AuditType.PasswordResetRequested] }).entries.length;
+async function requests(app: TestApp): Promise<number> {
+  const { entries } = await app.services.audit.list({ types: [AuditType.PasswordResetRequested] });
+  return entries.length;
 }
 
 describe('forgot password', () => {
@@ -60,10 +61,10 @@ describe('forgot password', () => {
     fake = createFakeTransport();
     app = await startTestApp({ mailTransport: fake.factory });
     const { users, mail } = app.services;
-    users.create({ username: 'root', password: PASSWORD, email: '', name: '', groups: ['heautou-admin'] });
-    users.create({ username: 'ada', password: PASSWORD, email: 'Ada@Example.home', name: 'Ada', groups: [] });
-    mail.setServer(TEST_SERVER);
-    mail.setOptions({ forgotPassword: true });
+    await users.create({ username: 'root', password: PASSWORD, email: '', name: '', groups: ['heautou-admin'] });
+    await users.create({ username: 'ada', password: PASSWORD, email: 'Ada@Example.home', name: 'Ada', groups: [] });
+    await mail.setServer(TEST_SERVER);
+    await mail.setOptions({ forgotPassword: true });
     browser = createBrowser(app.base);
     uid = await startSignIn(browser);
   });
@@ -72,7 +73,7 @@ describe('forgot password', () => {
 
   it('is shown only with a server and the option on', async () => {
     expect(await (await browser.send(`/interaction/${uid}/forgot-password`)).json()).toEqual({ isAvailable: true });
-    app.services.mail.setOptions({ forgotPassword: false });
+    await app.services.mail.setOptions({ forgotPassword: false });
     expect(await (await browser.send(`/interaction/${uid}/forgot-password`)).json()).toEqual({ isAvailable: false });
     expect((await forgot(browser, uid, 'ada')).status).toBe(HttpStatus.NotFound);
     expect(fake.sent).toEqual([]);
@@ -83,7 +84,7 @@ describe('forgot password', () => {
     const unknown = await forgot(browser, uid, 'nobody@example.home');
     expect(unknown).toEqual(known);
     expect(known).toEqual({ status: HttpStatus.Ok, body: { ok: true } });
-    await waitFor(() => requests(app) === 2 && fake.sent.length === 1);
+    await waitFor(async () => (await requests(app)) === 2 && fake.sent.length === 1);
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(fake.sent.map((mail) => mail.to)).toEqual(['Ada@Example.home']);
     expect(fake.sent[0]?.subject).toBe('Reset your Heautou password');
@@ -101,17 +102,17 @@ describe('forgot password', () => {
     expect(await app.services.users.authenticate('ada', 'a brand new one')).not.toBeNull();
     // The interaction is still alive, so the page can send the browser back to it.
     expect((await browser.send(`/interaction/${uid}/details`)).status).toBe(HttpStatus.Ok);
-    expect(JSON.stringify(app.services.audit.list({}))).not.toContain(token);
+    expect(JSON.stringify(await app.services.audit.list({}))).not.toContain(token);
   });
 
   it('sends nothing to a disabled user', async () => {
     const ada = app.services.users.list().find((user) => user.username === 'ada');
-    app.services.users.setDisabled(ada?.id ?? '', true);
+    await app.services.users.setDisabled(ada?.id ?? '', true);
     expect(await forgot(browser, uid, 'ada')).toEqual({ status: HttpStatus.Ok, body: { ok: true } });
-    await waitFor(() => requests(app) === 1);
+    await waitFor(async () => (await requests(app)) === 1);
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(fake.sent).toEqual([]);
-    const [entry] = app.services.audit.list({ types: [AuditType.PasswordResetRequested] }).entries;
+    const [entry] = (await app.services.audit.list({ types: [AuditType.PasswordResetRequested] })).entries;
     expect(entry?.detail).toEqual({ refused: 'disabled' });
   });
 

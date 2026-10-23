@@ -88,15 +88,16 @@ describe('forward auth', () => {
   beforeEach(async () => {
     app = await startTestApp();
     const { users, protectedSites } = app.services;
-    adaId = users.create({
+    const ada = await users.create({
       username: 'ada',
       password: PASSWORD,
       email: 'ada@home.lan',
       name: 'Ada Lovelace',
       groups: ['media', 'staff'],
-    }).id;
-    users.create({ username: 'bob', password: PASSWORD, email: '', name: '', groups: [] });
-    site = protectedSites.create({ name: 'Sonarr', host: SITE_HOST, allowedGroups: ['media'] });
+    });
+    adaId = ada.id;
+    await users.create({ username: 'bob', password: PASSWORD, email: '', name: '', groups: [] });
+    site = await protectedSites.create({ name: 'Sonarr', host: SITE_HOST, allowedGroups: ['media'] });
   });
 
   afterEach(() => app.close());
@@ -144,10 +145,10 @@ describe('forward auth', () => {
     expect(res.headers.get(REMOTE_HEADER.name)).toBe('Ada Lovelace');
     expect(res.headers.get(REMOTE_HEADER.email)).toBe('ada@home.lan');
     expect(res.headers.get(REMOTE_HEADER.groups)).toBe('media,staff');
-    const [entry] = app.services.audit.list({ types: [AuditType.ProxySignedIn] }).entries;
+    const [entry] = (await app.services.audit.list({ types: [AuditType.ProxySignedIn] })).entries;
     expect(entry).toMatchObject({ actor: { username: 'ada' }, target: { id: site.id }, detail: { host: SITE_HOST } });
     // The provider's own sign-in is not logged twice as an app sign-in.
-    expect(app.services.audit.list({ types: [AuditType.AppSignedIn] }).entries).toEqual([]);
+    expect((await app.services.audit.list({ types: [AuditType.AppSignedIn] })).entries).toEqual([]);
   });
 
   it('takes the nginx form, X-Original-URL, alone', async () => {
@@ -162,7 +163,7 @@ describe('forward auth', () => {
     const second = await verify(browser, forwardedFor(`https://${SITE_HOST}/style.css`));
     expect(first.status).toBe(HttpStatus.Forbidden);
     expect(second.status).toBe(HttpStatus.Forbidden);
-    const refusals = app.services.audit.list({ types: [AuditType.ProxyRefused] }).entries;
+    const refusals = (await app.services.audit.list({ types: [AuditType.ProxyRefused] })).entries;
     expect(refusals).toHaveLength(1);
     expect(refusals[0]).toMatchObject({ actor: { username: 'bob' }, detail: { reason: 'not_in_allowed_groups' } });
   });
@@ -171,7 +172,7 @@ describe('forward auth', () => {
     const browser = await signedIn();
     const other = await verify(browser, forwardedFor('https://radarr.home.lan/'));
     expect(other.status).toBe(HttpStatus.Forbidden);
-    app.services.protectedSites.update(site.id, { name: 'Sonarr', host: SITE_HOST, pathPrefix: '/admin' });
+    await app.services.protectedSites.update(site.id, { name: 'Sonarr', host: SITE_HOST, pathPrefix: '/admin' });
     expect((await verify(browser, forwardedFor(`https://${SITE_HOST}/admin/x`))).status).toBe(HttpStatus.Ok);
     expect((await verify(browser, forwardedFor(`https://${SITE_HOST}/administrator`))).status).toBe(
       HttpStatus.Forbidden,
@@ -191,7 +192,7 @@ describe('forward auth', () => {
 
   it('asks for a second factor where the site requires one', async () => {
     const { protectedSites, factors } = app.services;
-    protectedSites.update(site.id, {
+    await protectedSites.update(site.id, {
       name: 'Sonarr',
       host: SITE_HOST,
       allowedGroups: ['media'],
@@ -200,12 +201,12 @@ describe('forward auth', () => {
     const browser = await signedIn();
     const withoutFactor = await verify(browser, forwardedFor(SITE_URL));
     expect(withoutFactor.status).toBe(HttpStatus.Forbidden);
-    expect(app.services.audit.list({ types: [AuditType.ProxyRefused] }).entries[0]).toMatchObject({
+    expect((await app.services.audit.list({ types: [AuditType.ProxyRefused] })).entries[0]).toMatchObject({
       detail: { reason: 'no_second_factor' },
     });
 
     const secret = newTotpSecret();
-    factors.setTotp(adaId, secret, totpStepAt(Date.now()) - 1);
+    await factors.setTotp(adaId, secret, totpStepAt(Date.now()) - 1);
     const stepUp = await verify(browser, forwardedFor(SITE_URL));
     expect(stepUp.status).toBe(HttpStatus.Unauthorized);
     const signInUrl = stepUp.headers.get('location') ?? '';
@@ -236,15 +237,15 @@ describe('forward auth', () => {
       `${app.services.issuer}/session/end?client_id=${FORWARD_AUTH_DEFAULTS.clientId}`,
     );
     expect((await verify(browser, forwardedFor(SITE_URL))).status).toBe(HttpStatus.Unauthorized);
-    expect(app.services.audit.list({ types: [AuditType.ProxySignedOut] }).entries).toHaveLength(1);
+    expect((await app.services.audit.list({ types: [AuditType.ProxySignedOut] })).entries).toHaveLength(1);
   });
 
   it('ends the proxy session when the user is disabled, or an admin signs them out', async () => {
     const browser = await signedIn();
-    app.services.users.setDisabled(adaId, true);
+    await app.services.users.setDisabled(adaId, true);
     expect((await verify(browser, forwardedFor(SITE_URL))).status).toBe(HttpStatus.Unauthorized);
 
-    app.services.users.setDisabled(adaId, false);
+    await app.services.users.setDisabled(adaId, false);
     const again = await signedIn();
     expect((await verify(again, forwardedFor(SITE_URL))).status).toBe(HttpStatus.Ok);
     const admin = await signInAsAdmin(app);
@@ -290,7 +291,7 @@ describe('forward auth behind a configured proxy list', () => {
 
   beforeAll(async () => {
     app = await startTestApp({ trustedProxies: ['10.0.0.5', '172.18.0.0/16'], proxyCookieDomain: 'home.lan' });
-    app.services.protectedSites.create({ name: 'Sonarr', host: SITE_HOST });
+    await app.services.protectedSites.create({ name: 'Sonarr', host: SITE_HOST });
   });
 
   afterAll(() => app.close());
@@ -349,11 +350,10 @@ describe('protected sites in the admin API', () => {
     );
     expect(bad.errors?.[0]?.extensions?.code).toBe('BAD_USER_INPUT');
     await adminGql(admin, 'mutation ($id: ID!) { deleteProtectedSite(id: $id) { id } }', { id });
-    const types = app.services.audit
-      .list({
-        types: [AuditType.ProtectedSiteCreated, AuditType.ProtectedSiteUpdated, AuditType.ProtectedSiteDeleted],
-      })
-      .entries.map((entry) => entry.type);
+    const { entries } = await app.services.audit.list({
+      types: [AuditType.ProtectedSiteCreated, AuditType.ProtectedSiteUpdated, AuditType.ProtectedSiteDeleted],
+    });
+    const types = entries.map((entry) => entry.type);
     expect(types).toEqual([
       AuditType.ProtectedSiteDeleted,
       AuditType.ProtectedSiteUpdated,
