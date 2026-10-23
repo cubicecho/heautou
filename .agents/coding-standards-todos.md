@@ -136,6 +136,10 @@ average 13); every failing file passes alone. See T5 and T6.
 | B8 | Bug · low value | The web's GraphQL reply is cast, not checked | P17 at the boundary | — | open |
 | D9 | Doc · low value | The `invalid_scope` message lists only the built-in scopes, not an API's | Matches the code | — | open |
 | D10 | Doc · low value | Fixes `refetching`'s `@param` name | Matches the signature | R20 | open |
+| B9 | Bug · low value | The key store's error still says "The key file was emptied while the server ran." | The message names what is there | — | open |
+| B10 | Bug (question) · low value | Asks whether the upstream id field should also hold ids to `UPSTREAM_DEFAULTS.maxIdLength`, as the server does | Same drift as B4, for the id's length | — | open |
+| R41 | Refactor [pattern] · low value | Splits `server/admin/pictures.ts`'s own-picture routes into `server/account/` if the picture routes grow apart | Finishes R15's split, which left them together | — | open |
+| R42 | Refactor [simplify] · low value | Lets the bundler drop the `defaults.ts` groups the web doesn't read (`/* @__PURE__ */` on each `Object.freeze`) | About 3 kB of the web bundle | — | open |
 
 ## Model changes
 
@@ -402,6 +406,12 @@ name. Values unchanged. Implements: M5. Needs: A2.
 `requireAdmin`, the admin's picture route. Tests move in their own commit. Paths only.
 Implements: M1. Needs: R1.
 
+Done as `server/account/routes.ts` (not `account.ts`: no module is named for its folder, and the
+other door folders call theirs `routes.ts`), `factors.ts` and `session.ts`, which also took the
+web app's cookies and `sessionCookieOptions`. `server/admin/pictures.ts` stayed whole: its
+own-picture and admin routes share the upload and removal steps and the public route, so
+splitting it would put one concept in two folders. Filed as R41.
+
 ### R20 [reuse] — Consolidate: web query keys and the refetch helper
 
 **File:** `web/src/core/admin.ts:72-101`, `web/src/core/protected-sites.ts:13-28` (an exact
@@ -471,6 +481,11 @@ sections already live in `web/src/mail/` and `web/src/backup/`. Target:
 `web/src/passwords/strength.ts:17,47-50` (copy of `server/core/password-policy.ts:17,49-58`),
 `web/src/sites/site-form-dialog.tsx:12` (`HOST_PATTERN`), `web/src/upstreams/upstream-form-dialog.tsx:22`
 (`ID_PATTERN`). Target per M6. Implements: M6. Needs: B4.
+
+Done with an `@server/` alias (Vite, `web/tsconfig.json`, the root `tsconfig.json`); `tsc -p web`
+type-checks the imported modules without an `include` entry, since it follows imports. Not done:
+`AUDIT_PAGE_SIZE` (50) is the activity page's own page size, not a copy of
+`OPERATION_LIMIT_DEFAULTS.defaultPageSize` (500).
 
 ---
 
@@ -714,6 +729,19 @@ replacing them with a check adds runtime behavior (P17).
 
 ---
 
+### B9 — The key store's error says "key file" · low value
+
+**File:** `server/store/keys.ts:114`. "The key file was emptied while the server ran." It is a
+row in `documents` now. Changing the text changes what the log says, so it is a `fix:`, not
+part of D6.
+
+### B10 — The upstream id field doesn't check the id's length · low value
+
+**File:** `web/src/upstreams/upstream-form-dialog.tsx` (the pattern only) against
+`server/store/upstreams.ts` (`idSchema`, `.max(UPSTREAM_DEFAULTS.maxIdLength)`). The form passes
+an id the save then refuses, as B4 did for hosts. Fix by checking
+`UPSTREAM_DEFAULTS.maxIdLength` too, which the web can import since R28.
+
 ## API changes (need a decision)
 
 ### A1 — The web session's persisted and public "admin" names
@@ -732,6 +760,17 @@ archive version 2 that still reads version 1. Proposal: keep them; R13 renames o
 ---
 
 ## Low value
+
+### R41 [pattern] — The own-picture routes to `server/account/`
+
+**File:** `server/admin/pictures.ts`. R15 left it whole (see R15). Split only if the two halves
+start to change apart: the account half would import the shared upload and removal steps.
+
+### R42 [simplify] — Let the bundler drop unread defaults
+
+**File:** `server/core/defaults.ts`. Since R28 the web imports two groups from it, and the
+bundle holds all of them, because the bundler keeps each `Object.freeze(...)` call. About 3 kB
+minified. `/* @__PURE__ */` before each call would let it drop the rest.
 
 ### R16 [reuse] — One mapping for hashed-token documents
 
