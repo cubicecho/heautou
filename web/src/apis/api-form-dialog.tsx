@@ -1,4 +1,4 @@
-import type { ApiFieldsFragment, ApiLifetimeBoundsQuery, TokenFormat } from '@/__generated__/graphql';
+import { type ApiFieldsFragment, type ApiLifetimeBoundsQuery, TokenFormat } from '@/__generated__/graphql';
 import { ComboboxField, InputField, SelectField, useAppForm } from '@/components/app-form';
 import { DialogLayout } from '@/components/dialog-layout';
 import { Button } from '@/components/ui/button';
@@ -20,7 +20,7 @@ export const TOKEN_FORMATS: Record<TokenFormat, { label: string; description: st
   },
 };
 
-const TOKEN_FORMAT_OPTIONS = (['JWT', 'OPAQUE'] as const).map((value) => ({
+const TOKEN_FORMAT_OPTIONS = [TokenFormat.Jwt, TokenFormat.Opaque].map((value) => ({
   value,
   label: TOKEN_FORMATS[value].label,
 }));
@@ -32,7 +32,7 @@ const TOKEN_FORMAT_OPTIONS = (['JWT', 'OPAQUE'] as const).map((value) => ({
  * @returns The format, JWT for anything else.
  */
 function tokenFormatOf(value: string): TokenFormat {
-  return TOKEN_FORMAT_OPTIONS.find((option) => option.value === value)?.value ?? 'JWT';
+  return TOKEN_FORMAT_OPTIONS.find((option) => option.value === value)?.value ?? TokenFormat.Jwt;
 }
 
 /** The bounds on an API's own lifetime, in seconds. */
@@ -96,7 +96,7 @@ export function ApiFormDialog({ api, open, onOpenChange, onSaved }: ApiFormDialo
       identifier: '',
       name: api?.name ?? '',
       scopes: api?.scopes ?? [],
-      tokenFormat: api?.tokenFormat ?? 'JWT',
+      tokenFormat: api?.tokenFormat ?? TokenFormat.Jwt,
       accessToken: ownSeconds === null ? '' : durationText(ownSeconds),
       allowedClientIds: api?.allowedClients.map((client) => client.clientId) ?? [],
     },

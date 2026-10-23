@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { useState } from 'react';
-import type { ApiFieldsFragment } from '@/__generated__/graphql';
+import { type ApiFieldsFragment, TokenFormat } from '@/__generated__/graphql';
 import { ApiFormDialog, TOKEN_FORMATS } from '@/apis/api-form-dialog';
 import { ConfirmButton } from '@/components/confirm-button';
 import { DescriptionList, PropertyRow } from '@/components/description-list';
@@ -35,7 +35,7 @@ const CHECK_PATHS = { JWT: '/jwks', OPAQUE: '/token/introspection' } as const;
  */
 function ApiDetails({ api }: { api: ApiFieldsFragment }) {
   const provider = useProviderInfo().data;
-  const isJwt = api.tokenFormat === 'JWT';
+  const isJwt = api.tokenFormat === TokenFormat.Jwt;
   const checkUrl = provider === undefined ? null : `${provider.issuer}${CHECK_PATHS[api.tokenFormat]}`;
   const clientNames = api.allowedClients.map((client) => client.name);
 

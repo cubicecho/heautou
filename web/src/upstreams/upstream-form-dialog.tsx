@@ -1,6 +1,11 @@
 import { UPSTREAM_ID_PATTERN } from '@server/store/upstream-id.ts';
 import { useRef, useState } from 'react';
-import type { UnknownIdentity, UpstreamFieldsFragment, UpstreamInput, UpstreamKind } from '@/__generated__/graphql';
+import {
+  UnknownIdentity,
+  type UpstreamFieldsFragment,
+  type UpstreamInput,
+  UpstreamKind,
+} from '@/__generated__/graphql';
 import { ComboboxField, InputField, SelectField, SwitchField, TextareaField, useAppForm } from '@/components/app-form';
 import { DialogLayout } from '@/components/dialog-layout';
 import { Disclosure } from '@/components/disclosure';
@@ -25,8 +30,8 @@ import {
 } from '@/upstreams/presets';
 
 const UNKNOWN_OPTIONS: { value: UnknownIdentity; label: string }[] = [
-  { value: 'REFUSE', label: 'Turn them away until a user links the account' },
-  { value: 'CREATE', label: 'Make a user for them' },
+  { value: UnknownIdentity.Refuse, label: 'Turn them away until a user links the account' },
+  { value: UnknownIdentity.Create, label: 'Make a user for them' },
 ];
 const MAPPING_ROWS = 3;
 /** The fields under Advanced, so it stays open while one of them is wrong. */
@@ -88,13 +93,13 @@ export function UpstreamFormDialog({ upstream, open, onOpenChange }: UpstreamFor
     defaultValues: {
       preset: OTHER_UPSTREAM,
       id: upstream?.id ?? '',
-      kind: upstream?.kind ?? 'OIDC',
+      kind: upstream?.kind ?? UpstreamKind.Oidc,
       name: upstream?.name ?? '',
       issuer: upstream?.issuer ?? '',
       clientId: upstream?.clientId ?? '',
       clientSecret: '',
       scopes: upstream?.scopes.join(' ') ?? '',
-      unknownIdentity: upstream?.unknownIdentity ?? 'REFUSE',
+      unknownIdentity: upstream?.unknownIdentity ?? UnknownIdentity.Refuse,
       createDomains: upstream?.createDomains.join(', ') ?? '',
       createGroups: upstream?.createGroups ?? [],
       countsAsBothFactors: upstream?.countsAsBothFactors ?? false,
@@ -112,7 +117,8 @@ export function UpstreamFormDialog({ upstream, open, onOpenChange }: UpstreamFor
           clientId: value.clientId.trim(),
           clientSecret: value.clientSecret.trim() || null,
           scopes: value.scopes.split(/\s+/).filter((scope) => scope !== ''),
-          unknownIdentity: value.unknownIdentity === 'CREATE' ? 'CREATE' : 'REFUSE',
+          unknownIdentity:
+            value.unknownIdentity === UnknownIdentity.Create ? UnknownIdentity.Create : UnknownIdentity.Refuse,
           createDomains: commaListOf(value.createDomains),
           createGroups: value.createGroups,
           countsAsBothFactors: value.countsAsBothFactors,
@@ -294,7 +300,7 @@ export function UpstreamFormDialog({ upstream, open, onOpenChange }: UpstreamFor
                             label="An account no user has linked"
                             options={UNKNOWN_OPTIONS}
                           />
-                          <form.Subscribe selector={(state) => state.values.unknownIdentity === 'CREATE'}>
+                          <form.Subscribe selector={(state) => state.values.unknownIdentity === UnknownIdentity.Create}>
                             {(isCreating) =>
                               isCreating && (
                                 <>
@@ -394,7 +400,9 @@ function RedirectUri({ id }: { id: string }) {
 function hasAdvanced(upstream: UpstreamFieldsFragment | null): boolean {
   return (
     upstream !== null &&
-    (upstream.unknownIdentity === 'CREATE' || Boolean(upstream.groupsClaim) || upstream.groupMappings.length > 0)
+    (upstream.unknownIdentity === UnknownIdentity.Create ||
+      Boolean(upstream.groupsClaim) ||
+      upstream.groupMappings.length > 0)
   );
 }
 

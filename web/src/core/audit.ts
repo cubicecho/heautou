@@ -5,6 +5,7 @@ import {
   AuditEntryAddedDocument,
   type AuditEntryFieldsFragment,
   type AuditEntryFilters,
+  AuditTargetKind,
   type AuditType,
 } from '@/__generated__/graphql';
 import { ACTIVITY_DEFAULTS } from '@/core/defaults';
@@ -42,7 +43,9 @@ export function auditWhere({ type, userId }: AuditFilters): AuditEntryFilters | 
   const byUser: AuditEntryFilters =
     userId === null
       ? {}
-      : { OR: [{ actorUserId: { eq: userId } }, { targetKind: { eq: 'USER' }, targetId: { eq: userId } }] };
+      : {
+          OR: [{ actorUserId: { eq: userId } }, { targetKind: { eq: AuditTargetKind.User }, targetId: { eq: userId } }],
+        };
   const where = { ...byType, ...byUser };
   return Object.keys(where).length === 0 ? null : where;
 }

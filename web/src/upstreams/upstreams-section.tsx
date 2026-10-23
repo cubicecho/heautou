@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { UpstreamFieldsFragment } from '@/__generated__/graphql';
+import { UnknownIdentity, type UpstreamFieldsFragment } from '@/__generated__/graphql';
 import { ConfirmButton } from '@/components/confirm-button';
 import { List } from '@/components/list';
 import { ListItem } from '@/components/list-item';
@@ -57,7 +57,7 @@ export function UpstreamsSection() {
                 title={upstream.name}
                 description={joinStats(
                   UPSTREAM_KINDS[upstream.kind].summaryOf(upstream.issuer),
-                  upstream.unknownIdentity === 'CREATE' ? 'makes users' : 'linked accounts only',
+                  upstream.unknownIdentity === UnknownIdentity.Create ? 'makes users' : 'linked accounts only',
                   upstream.countsAsBothFactors && 'counts as both factors',
                 )}
                 meta={`${upstream.linksAggregate.count} linked`}

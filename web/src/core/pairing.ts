@@ -9,6 +9,7 @@ import {
   PairingDocument,
   type PairingFieldsFragment,
   type PairingInput,
+  PairingStatus,
   StartPairingDocument,
 } from '@/__generated__/graphql';
 import { PAIR_DIALOG_DEFAULTS } from '@/core/defaults';
@@ -36,7 +37,7 @@ export function useStartPairing() {
  */
 function isLookingForOffers(pairing: PairingFieldsFragment | null | undefined, updates: number): boolean {
   return (
-    pairing?.status === 'PAIRED' &&
+    pairing?.status === PairingStatus.Paired &&
     pairing.finished === false &&
     (pairing.offers?.api ?? null) === null &&
     updates <= PAIR_DIALOG_DEFAULTS.offerPolls
@@ -71,7 +72,7 @@ export function usePairing(id: string) {
         {
           onData: ({ pairingChanged }) => {
             queryClient.setQueryData(pairingKey(id), pairingChanged);
-            if (pairingChanged?.status === 'PAIRED') {
+            if (pairingChanged?.status === PairingStatus.Paired) {
               void queryClient.invalidateQueries({ queryKey: QUERY_KEYS.clients });
             }
           },

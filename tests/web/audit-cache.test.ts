@@ -1,4 +1,4 @@
-import type { AuditEntryFieldsFragment } from '../../web/src/__generated__/graphql.ts';
+import { type AuditEntryFieldsFragment, AuditTargetKind, AuditType } from '../../web/src/__generated__/graphql.ts';
 import { type AuditPages, auditWhere, withNewEntry } from '../../web/src/core/audit.ts';
 
 /**
@@ -11,7 +11,7 @@ function entryOf(id: string): AuditEntryFieldsFragment {
   return {
     id,
     at: '2026-10-23T12:00:00.000Z',
-    type: 'WEB_SIGNED_IN',
+    type: AuditType.WebSignedIn,
     actorUserId: 'u1',
     actorUsername: 'ada',
     ip: null,
@@ -42,19 +42,19 @@ describe('auditWhere', () => {
   });
 
   it('keeps one type', () => {
-    expect(auditWhere({ type: 'WEB_SIGNED_IN', userId: null })).toEqual({ type: { eq: 'WEB_SIGNED_IN' } });
+    expect(auditWhere({ type: AuditType.WebSignedIn, userId: null })).toEqual({ type: { eq: AuditType.WebSignedIn } });
   });
 
   it('keeps entries done by the user or to them', () => {
     expect(auditWhere({ type: null, userId: 'u1' })).toEqual({
-      OR: [{ actorUserId: { eq: 'u1' } }, { targetKind: { eq: 'USER' }, targetId: { eq: 'u1' } }],
+      OR: [{ actorUserId: { eq: 'u1' } }, { targetKind: { eq: AuditTargetKind.User }, targetId: { eq: 'u1' } }],
     });
   });
 
   it('combines a type and a user', () => {
-    expect(auditWhere({ type: 'USER_UPDATED', userId: 'u1' })).toEqual({
-      type: { eq: 'USER_UPDATED' },
-      OR: [{ actorUserId: { eq: 'u1' } }, { targetKind: { eq: 'USER' }, targetId: { eq: 'u1' } }],
+    expect(auditWhere({ type: AuditType.UserUpdated, userId: 'u1' })).toEqual({
+      type: { eq: AuditType.UserUpdated },
+      OR: [{ actorUserId: { eq: 'u1' } }, { targetKind: { eq: AuditTargetKind.User }, targetId: { eq: 'u1' } }],
     });
   });
 });

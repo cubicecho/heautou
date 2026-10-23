@@ -1,4 +1,4 @@
-import type { AuditTargetKind, AuditType } from '@/__generated__/graphql';
+import { type AuditTargetKind, AuditType } from '@/__generated__/graphql';
 
 /** What each audit entry type is called on the page. Every type has one, so a new type fails the typecheck here. */
 const LABELS: Record<AuditType, string> = {
@@ -115,16 +115,16 @@ export function auditTypeLabel(type: string): string {
 }
 
 /** The types that are a sign-in, a sign-out or an email going wrong, drawn as warnings. */
-const WARNINGS = new Set([
-  'SIGN_IN_FAILED',
-  'SIGN_IN_THROTTLED',
-  'SIGN_IN_REFUSED',
-  'APP_SIGN_IN_FAILED',
-  'APP_TOKEN_REFUSED',
-  'APP_LOGOUT_FAILED',
-  'ACCOUNT_PASSWORD_FAILED',
-  'MAIL_FAILED',
-  'PROXY_REFUSED',
+const WARNINGS = new Set<string>([
+  AuditType.SignInFailed,
+  AuditType.SignInThrottled,
+  AuditType.SignInRefused,
+  AuditType.AppSignInFailed,
+  AuditType.AppTokenRefused,
+  AuditType.AppLogoutFailed,
+  AuditType.AccountPasswordFailed,
+  AuditType.MailFailed,
+  AuditType.ProxyRefused,
 ]);
 
 /**

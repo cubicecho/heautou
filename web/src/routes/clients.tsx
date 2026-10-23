@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { useState } from 'react';
-import type { ClientFieldsFragment } from '@/__generated__/graphql';
+import { ClientAuthMethod, type ClientFieldsFragment, ClientSource } from '@/__generated__/graphql';
 import { AUTH_METHODS } from '@/clients/auth-methods';
 import { ClientFormDialog } from '@/clients/client-form-dialog';
 import { PairDialog } from '@/clients/pair-dialog';
@@ -370,9 +370,9 @@ function clientBadges(client: ClientFieldsFragment) {
   const presetName = presetById(client.preset)?.name;
   // A preset badge that only repeats the name says nothing.
   const showsPreset = presetName !== undefined && presetName.toLowerCase() !== client.name.toLowerCase();
-  const isPublic = client.authMethod === 'NONE';
+  const isPublic = client.authMethod === ClientAuthMethod.None;
   const isLimited = client.allowedGroups.length > 0;
-  const isPaired = client.source === 'PAIRED';
+  const isPaired = client.source === ClientSource.Paired;
   const hasOwnGroupsClaim = client.groupsClaim !== DEFAULT_GROUPS_CLAIM;
   const hasRefusedUris = client.refusedRedirectUris.length > 0;
   return (

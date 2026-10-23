@@ -1,4 +1,4 @@
-import type { UpstreamKind } from '@/__generated__/graphql';
+import { UpstreamKind } from '@/__generated__/graphql';
 import { OTHER_UPSTREAM } from '@/upstreams/presets';
 
 /** What sets one kind of upstream provider apart in the forms and the list. */
@@ -25,7 +25,7 @@ export const UPSTREAM_KINDS = {
 } as const satisfies Record<UpstreamKind, UpstreamKindInfo>;
 
 /** The kinds, in the order the select lists them. */
-export const UPSTREAM_KIND_OPTIONS = (['OIDC', 'GITHUB'] as const).map((value) => ({
+export const UPSTREAM_KIND_OPTIONS = [UpstreamKind.Oidc, UpstreamKind.Github].map((value) => ({
   value,
   label: UPSTREAM_KINDS[value].label,
 }));
@@ -37,5 +37,5 @@ export const UPSTREAM_KIND_OPTIONS = (['OIDC', 'GITHUB'] as const).map((value) =
  * @returns The kind, or OpenID Connect when it is none of them.
  */
 export function upstreamKindOf(value: string): UpstreamKind {
-  return UPSTREAM_KIND_OPTIONS.find((option) => option.value === value)?.value ?? 'OIDC';
+  return UPSTREAM_KIND_OPTIONS.find((option) => option.value === value)?.value ?? UpstreamKind.Oidc;
 }

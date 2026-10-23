@@ -1,4 +1,4 @@
-import type { MailSettingsFieldsFragment } from '@/__generated__/graphql';
+import { type MailSettingsFieldsFragment, MailSource } from '@/__generated__/graphql';
 import { InputField, NumberField, SwitchField, useAppForm } from '@/components/app-form';
 import { ConfirmButton } from '@/components/confirm-button';
 import { DescriptionList, PropertyRow } from '@/components/description-list';
@@ -56,7 +56,7 @@ function ServerForm({ mail }: { mail: MailSettingsFieldsFragment }) {
   const save = useSetMailServer();
   const remove = useRemoveMailServer();
   const server = mail.server;
-  const isSavedInSettings = mail.source === 'SETTINGS';
+  const isSavedInSettings = mail.source === MailSource.Settings;
   const form = useAppForm({
     defaultValues: {
       host: server?.host ?? '',
@@ -211,7 +211,7 @@ export function MailSection() {
   const mail = useMail();
   const setOptions = useSetMailOptions();
   const current = mail.data;
-  const isLocked = current?.source === 'ENV';
+  const isLocked = current?.source === MailSource.Env;
 
   return (
     <Section

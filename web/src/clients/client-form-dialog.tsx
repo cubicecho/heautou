@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { ClientFieldsFragment, TokenLifetimeDefaultsQuery } from '@/__generated__/graphql';
+import { ClientAuthMethod, type ClientFieldsFragment, type TokenLifetimeDefaultsQuery } from '@/__generated__/graphql';
 import { AUTH_METHOD_OPTIONS, AUTH_METHODS, authMethodOf } from '@/clients/auth-methods';
 import { BLANK_PRESET, PRESET_OPTIONS, PresetLinks, SitePresetGuide } from '@/clients/preset-panel';
 import { baseUrlFrom, presetById, presetFields, sitePresetById } from '@/clients/presets';
@@ -74,7 +74,7 @@ function formDefaults(client: ClientFieldsFragment | null) {
     baseUrl: '',
     clientId: '',
     name: client?.name ?? '',
-    authMethod: client?.authMethod ?? 'CLIENT_SECRET_BASIC',
+    authMethod: client?.authMethod ?? ClientAuthMethod.ClientSecretBasic,
     redirectUris: client?.redirectUris.join('\n') ?? '',
     postLogoutRedirectUris: client?.postLogoutRedirectUris.join('\n') ?? '',
     allowedGroups: client?.allowedGroups ?? [],
@@ -120,7 +120,7 @@ function changedAdvanced(values: ClientFormValues): string[] {
   const changes = [
     { isChanged: values.clientId.trim() !== '', name: `client ID ${values.clientId.trim()}` },
     {
-      isChanged: values.authMethod !== 'CLIENT_SECRET_BASIC',
+      isChanged: values.authMethod !== ClientAuthMethod.ClientSecretBasic,
       name: AUTH_METHODS[authMethodOf(values.authMethod)].label,
     },
     { isChanged: linesOf(values.postLogoutRedirectUris).length > 0, name: 'post-logout URIs' },
