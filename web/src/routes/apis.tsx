@@ -1,8 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { useState } from 'react';
-import type { ApiFieldsFragment } from '@/__generated__/graphql';
+import { type ApiFieldsFragment, TokenFormat } from '@/__generated__/graphql';
 import { ApiFormDialog, TOKEN_FORMATS } from '@/apis/api-form-dialog';
-import { durationText } from '@/clients/durations';
 import { ConfirmButton } from '@/components/confirm-button';
 import { DescriptionList, PropertyRow } from '@/components/description-list';
 import { DisclosureRow } from '@/components/disclosure-row';
@@ -15,10 +14,11 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { CopyButton } from '@/components/ui/copy-button';
 import { Pencil, Plus, Trash2 } from '@/components/ui/icons';
-import { useProviderInfo } from '@/core/admin';
 import { useApis, useDeleteApi } from '@/core/apis';
 import { Server } from '@/core/app-icons';
-import { messageOf } from '@/core/lists';
+import { messageOf } from '@/core/errors';
+import { useProviderInfo } from '@/core/provider';
+import { durationText } from '@/token-lifetimes/durations';
 
 export const Route = createFileRoute('/apis')({ component: ApisPage });
 
@@ -35,7 +35,7 @@ const CHECK_PATHS = { JWT: '/jwks', OPAQUE: '/token/introspection' } as const;
  */
 function ApiDetails({ api }: { api: ApiFieldsFragment }) {
   const provider = useProviderInfo().data;
-  const isJwt = api.tokenFormat === 'JWT';
+  const isJwt = api.tokenFormat === TokenFormat.Jwt;
   const checkUrl = provider === undefined ? null : `${provider.issuer}${CHECK_PATHS[api.tokenFormat]}`;
   const clientNames = api.allowedClients.map((client) => client.name);
 
@@ -115,7 +115,7 @@ function ApisPage() {
       contentClassName="gap-4"
       contentSlot={
         <>
-          {remove.error === null ? null : (
+          {remove.error !== null && (
             <Alert variant="destructive" title="API not deleted" description={messageOf(remove.error)} />
           )}
           <QueryState
@@ -142,7 +142,7 @@ function ApisPage() {
                 badgesSlot={
                   <>
                     <Badge variant="outline">{TOKEN_FORMATS[api.tokenFormat].label}</Badge>
-                    {api.allowedClients.length === 0 ? <Badge variant="warning">No clients</Badge> : null}
+                    {api.allowedClients.length === 0 && <Badge variant="warning">No clients</Badge>}
                   </>
                 }
                 meta={<span className="font-mono text-foreground/60 text-xs">{api.identifier}</span>}
@@ -170,7 +170,7 @@ function ApisPage() {
               />
             ))}
           />
-          {isFormOpen ? (
+          {isFormOpen && (
             <ApiFormDialog
               key={editing.kind === 'edit' ? editing.api.identifier : 'new'}
               api={editing.kind === 'edit' ? editing.api : null}
@@ -178,7 +178,7 @@ function ApisPage() {
               onOpenChange={close}
               onSaved={(saved) => setOpenId(saved.identifier)}
             />
-          ) : null}
+          )}
         </>
       }
     />

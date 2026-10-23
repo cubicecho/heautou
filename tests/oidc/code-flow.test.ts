@@ -1,8 +1,8 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { HttpStatus } from '../../server/core/wire.ts';
 import { ClientAuthMethod } from '../../server/store/clients.ts';
-import { startTestApp, type TestApp } from '../helpers.ts';
-import { PASSWORD, REDIRECT_URI, signIn } from './browser.ts';
+import { PASSWORD, REDIRECT_URI, signIn } from '../browser.ts';
+import { createTestUser, startTestApp, type TestApp } from '../helpers.ts';
 
 describe('authorization code flow', () => {
   let app: TestApp;
@@ -11,13 +11,7 @@ describe('authorization code flow', () => {
   beforeAll(async () => {
     app = await startTestApp();
     issuer = app.services.issuer;
-    await app.services.users.create({
-      username: 'ada',
-      password: PASSWORD,
-      email: 'ada@example.com',
-      name: 'Ada Lovelace',
-      groups: ['admins'],
-    });
+    await createTestUser(app, { username: 'ada', email: 'ada@example.com', name: 'Ada Lovelace', groups: ['admins'] });
   });
 
   afterAll(() => app.close());

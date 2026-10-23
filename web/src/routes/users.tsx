@@ -12,7 +12,6 @@ import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Ellipsis, KeyRound, Pencil, Plus, Trash2 } from '@/components/ui/icons';
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '@/components/ui/menu';
-import { useDeleteUser, useGroups, useResetSecondFactors, useSetUserDisabled, useUsers } from '@/core/admin';
 import {
   Ban,
   ImageUp,
@@ -23,8 +22,10 @@ import {
   UserRoundCheck,
   UsersRound,
 } from '@/core/app-icons';
-import { messageOf } from '@/core/lists';
+import { messageOf } from '@/core/errors';
+import { useGroups } from '@/core/groups';
 import { useProfilePictures } from '@/core/pictures';
+import { useDeleteUser, useResetSecondFactors, useSetUserDisabled, useUsers } from '@/core/users';
 import { UpstreamsSection } from '@/upstreams/upstreams-section';
 import { LinkedAccountsDialog } from '@/users/linked-accounts-dialog';
 import { PasswordDialog } from '@/users/password-dialog';
@@ -135,6 +136,12 @@ function UsersPage() {
       setDialog({ kind: 'closed' });
     }
   };
+  const isFormOpen = dialog.kind === 'new' || dialog.kind === 'edit';
+  const isSettingPassword = dialog.kind === 'password';
+  const isShowingLink = dialog.kind === 'link';
+  const isShowingLinked = dialog.kind === 'linked';
+  const isSettingPicture = dialog.kind === 'picture' && pictures !== undefined;
+  const isShowingSessions = dialog.kind === 'sessions';
 
   return (
     <PageLayout
@@ -152,7 +159,7 @@ function UsersPage() {
       contentClassName="gap-4"
       contentSlot={
         <>
-          {failure === null ? null : (
+          {failure !== null && (
             <Alert variant="destructive" title="User not changed" description={messageOf(failure)} />
           )}
           <QueryState
@@ -218,34 +225,34 @@ function UsersPage() {
                           label={user.hasPassword ? 'Reset link' : 'Invite link'}
                           onSelect={() => setDialog({ kind: 'link', user })}
                         />
-                        {pictures?.isEnabled ? (
+                        {pictures?.isEnabled && (
                           <MenuItem
                             iconSlot={<ImageUp />}
                             label="Picture"
                             onSelect={() => setDialog({ kind: 'picture', user })}
                           />
-                        ) : null}
+                        )}
                         <MenuItem
                           iconSlot={<MonitorSmartphone />}
                           label="Sessions"
                           onSelect={() => setDialog({ kind: 'sessions', user })}
                         />
-                        {user.upstreamLinks.length > 0 ? (
+                        {user.upstreamLinks.length > 0 && (
                           <MenuItem
                             iconSlot={<ShieldCheck />}
                             label="Linked accounts"
                             onSelect={() => setDialog({ kind: 'linked', user })}
                           />
-                        ) : null}
-                        {user.disabled ? (
+                        )}
+                        {user.disabled && (
                           <MenuItem
                             iconSlot={<UserRoundCheck />}
                             label="Enable"
                             onSelect={() => setDisabled.mutate({ id: user.id, disabled: false })}
                           />
-                        ) : null}
+                        )}
                         <MenuSeparator />
-                        {hasTwoFactor(user) ? (
+                        {hasTwoFactor(user) && (
                           <MenuItem
                             iconSlot={<ShieldOff />}
                             label="Reset two-factor"
@@ -260,8 +267,8 @@ function UsersPage() {
                               })
                             }
                           />
-                        ) : null}
-                        {user.disabled ? null : (
+                        )}
+                        {user.disabled === false && (
                           <MenuItem
                             iconSlot={<Ban />}
                             label="Disable"
@@ -307,7 +314,7 @@ function UsersPage() {
             confirmLabel={confirming?.confirmLabel}
             onConfirm={() => confirming?.onConfirm()}
           />
-          {dialog.kind === 'new' || dialog.kind === 'edit' ? (
+          {isFormOpen && (
             <UserFormDialog
               key={dialog.kind === 'edit' ? dialog.user.id : 'new'}
               user={dialog.kind === 'edit' ? dialog.user : null}
@@ -315,17 +322,13 @@ function UsersPage() {
               onOpenChange={close}
               onInvited={(user) => setDialog({ kind: 'link', user })}
             />
-          ) : null}
-          {dialog.kind === 'password' ? (
-            <PasswordDialog key={dialog.user.id} user={dialog.user} open onOpenChange={close} />
-          ) : null}
-          {dialog.kind === 'link' ? (
-            <PasswordLinkDialog key={dialog.user.id} user={dialog.user} open onOpenChange={close} />
-          ) : null}
-          {dialog.kind === 'linked' ? (
+          )}
+          {isSettingPassword && <PasswordDialog key={dialog.user.id} user={dialog.user} open onOpenChange={close} />}
+          {isShowingLink && <PasswordLinkDialog key={dialog.user.id} user={dialog.user} open onOpenChange={close} />}
+          {isShowingLinked && (
             <LinkedAccountsDialog key={dialog.user.id} user={dialog.user} open onOpenChange={close} />
-          ) : null}
-          {dialog.kind === 'picture' && pictures !== undefined ? (
+          )}
+          {isSettingPicture && (
             <PictureDialog
               key={dialog.user.id}
               user={dialog.user}
@@ -334,10 +337,8 @@ function UsersPage() {
               open
               onOpenChange={close}
             />
-          ) : null}
-          {dialog.kind === 'sessions' ? (
-            <SessionsDialog key={dialog.user.id} user={dialog.user} open onOpenChange={close} />
-          ) : null}
+          )}
+          {isShowingSessions && <SessionsDialog key={dialog.user.id} user={dialog.user} open onOpenChange={close} />}
         </>
       }
     />

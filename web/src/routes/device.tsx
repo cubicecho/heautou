@@ -106,7 +106,8 @@ function DevicePage() {
     );
   }
 
-  const failure = error === undefined || error === ABORTED ? null : (ERROR_COPY[error] ?? FALLBACK_ERROR);
+  const wasAborted = error === ABORTED;
+  const failure = error === undefined || wasAborted ? null : (ERROR_COPY[error] ?? FALLBACK_ERROR);
   return (
     <CenteredLayout
       level={1}
@@ -132,12 +133,8 @@ function DevicePage() {
               />
             }
           />
-          {error === ABORTED ? (
-            <Alert variant="info" title="Cancelled" description="The device was not connected." />
-          ) : null}
-          {failure === null ? null : (
-            <Alert variant="destructive" title={failure.title} description={failure.description} />
-          )}
+          {wasAborted && <Alert variant="info" title="Cancelled" description="The device was not connected." />}
+          {failure !== null && <Alert variant="destructive" title={failure.title} description={failure.description} />}
         </form>
       }
       footerActionsSlot={<Button type="submit" form={FORM_ID} content="Continue" />}

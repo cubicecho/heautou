@@ -1,13 +1,12 @@
-import type { ApiFieldsFragment, ApiLifetimeBoundsQuery, TokenFormat } from '@/__generated__/graphql';
-import { durationText, secondsIn } from '@/clients/durations';
+import { type ApiFieldsFragment, type ApiLifetimeBoundsQuery, TokenFormat } from '@/__generated__/graphql';
 import { ComboboxField, InputField, SelectField, useAppForm } from '@/components/app-form';
 import { DialogLayout } from '@/components/dialog-layout';
-import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { FormElement } from '@/components/ui/form-element';
-import { useClients } from '@/core/admin';
 import { useApiLifetimeBounds, useCreateApi, useUpdateApi } from '@/core/apis';
-import { messageOf } from '@/core/lists';
+import { useClients } from '@/core/clients';
+import { SaveFailure } from '@/core/save-failure';
+import { durationText, secondsIn } from '@/token-lifetimes/durations';
 
 /** What each token format is called, and what it means for the API. */
 export const TOKEN_FORMATS: Record<TokenFormat, { label: string; description: string }> = {
@@ -21,7 +20,7 @@ export const TOKEN_FORMATS: Record<TokenFormat, { label: string; description: st
   },
 };
 
-const TOKEN_FORMAT_OPTIONS = (['JWT', 'OPAQUE'] as const).map((value) => ({
+const TOKEN_FORMAT_OPTIONS = [TokenFormat.Jwt, TokenFormat.Opaque].map((value) => ({
   value,
   label: TOKEN_FORMATS[value].label,
 }));
@@ -33,7 +32,7 @@ const TOKEN_FORMAT_OPTIONS = (['JWT', 'OPAQUE'] as const).map((value) => ({
  * @returns The format, JWT for anything else.
  */
 function tokenFormatOf(value: string): TokenFormat {
-  return TOKEN_FORMAT_OPTIONS.find((option) => option.value === value)?.value ?? 'JWT';
+  return TOKEN_FORMAT_OPTIONS.find((option) => option.value === value)?.value ?? TokenFormat.Jwt;
 }
 
 /** The bounds on an API's own lifetime, in seconds. */
@@ -84,6 +83,7 @@ interface ApiFormDialogProps {
 /** Adds an API or changes one. */
 export function ApiFormDialog({ api, open, onOpenChange, onSaved }: ApiFormDialogProps) {
   const isEdit = api !== null;
+  const isNew = isEdit === false;
   const create = useCreateApi();
   const update = useUpdateApi();
   const failure = isEdit ? update.error : create.error;
@@ -96,7 +96,7 @@ export function ApiFormDialog({ api, open, onOpenChange, onSaved }: ApiFormDialo
       identifier: '',
       name: api?.name ?? '',
       scopes: api?.scopes ?? [],
-      tokenFormat: api?.tokenFormat ?? 'JWT',
+      tokenFormat: api?.tokenFormat ?? TokenFormat.Jwt,
       accessToken: ownSeconds === null ? '' : durationText(ownSeconds),
       allowedClientIds: api?.allowedClients.map((client) => client.clientId) ?? [],
     },
@@ -126,7 +126,7 @@ export function ApiFormDialog({ api, open, onOpenChange, onSaved }: ApiFormDialo
       hasUnsavedChanges={() => form.state.isDefaultValue === false}
       contentSlot={
         <FormElement onSubmit={() => form.handleSubmit()} className="grid gap-4">
-          {isEdit ? null : (
+          {isNew && (
             <InputField
               form={form}
               name="identifier"
@@ -179,7 +179,7 @@ export function ApiFormDialog({ api, open, onOpenChange, onSaved }: ApiFormDialo
             options={clientOptions}
             placeholder="No client yet"
           />
-          {failure === null ? null : <Alert variant="destructive" title="Not saved" description={messageOf(failure)} />}
+          <SaveFailure error={failure} />
         </FormElement>
       }
       footerActionsSlot={(close) => (

@@ -5,8 +5,8 @@ import { QueryError } from '@/components/query-state';
 import { Section } from '@/components/section';
 import { Alert } from '@/components/ui/alert';
 import { CopyButton } from '@/components/ui/copy-button';
-import { useProviderInfo } from '@/core/admin';
 import { useBackupInfo } from '@/core/backup';
+import { useProviderInfo } from '@/core/provider';
 
 export const Route = createFileRoute('/')({ component: OverviewPage });
 
@@ -55,7 +55,7 @@ function OverviewPage() {
       contentClassName="gap-6"
       contentSlot={
         <>
-          {isSealed === undefined ? null : (
+          {isSealed !== undefined && (
             <Alert
               variant="warning"
               title="Keep this provider on a trusted network"
@@ -66,8 +66,8 @@ function OverviewPage() {
               }
             />
           )}
-          {query.isError ? <QueryError error={query.error} onRetry={query.refetch} what="the provider's URLs" /> : null}
-          {info === undefined ? null : (
+          {query.isError && <QueryError error={query.error} onRetry={query.refetch} what="the provider's URLs" />}
+          {info !== undefined && (
             <>
               <Section
                 title="Provider"

@@ -1,5 +1,5 @@
-import { useBranding } from '@/core/admin';
 import { ShieldCheck } from '@/core/app-icons';
+import { useBranding } from '@/core/branding';
 
 /** The name shown until the branding has loaded, and when it fails to. */
 const FALLBACK_NAME = 'Heautou';

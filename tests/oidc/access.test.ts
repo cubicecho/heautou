@@ -2,7 +2,6 @@ import { ADMIN_DEFAULTS, TOKEN_LIFETIME_DEFAULTS } from '../../server/core/defau
 import { HttpStatus } from '../../server/core/wire.ts';
 import { AuditType } from '../../server/store/audit.ts';
 import { ClientAuthMethod, type OidcClient } from '../../server/store/clients.ts';
-import { startTestApp, type TestApp } from '../helpers.ts';
 import {
   adminGql,
   basicAuth,
@@ -12,7 +11,8 @@ import {
   REDIRECT_URI,
   signInAsAdmin,
   signInForTokens,
-} from './browser.ts';
+} from '../browser.ts';
+import { createTestUser, startTestApp, type TestApp } from '../helpers.ts';
 
 /**
  * Tries a sign-in and returns the login POST's reply.
@@ -61,10 +61,9 @@ describe('who may sign in, and what clients see', () => {
 
   beforeEach(async () => {
     app = await startTestApp();
-    const { users, clients } = app.services;
-    adaId = (await users.create({ username: 'ada', password: PASSWORD, email: '', name: 'Ada', groups: ['family'] }))
-      .id;
-    await users.create({ username: 'eve', password: PASSWORD, email: '', name: '', groups: ['guests'] });
+    const { clients } = app.services;
+    adaId = (await createTestUser(app, { username: 'ada', name: 'Ada', groups: ['family'] })).id;
+    await createTestUser(app, { username: 'eve', groups: ['guests'] });
     client = await clients.create({
       name: 'Photos',
       authMethod: ClientAuthMethod.SecretBasic,

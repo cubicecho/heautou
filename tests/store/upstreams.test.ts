@@ -1,5 +1,5 @@
 import { ADMIN_DEFAULTS } from '../../server/core/defaults.ts';
-import { createSecretBox } from '../../server/core/secret-box.ts';
+import { createSecretBox, isSealed } from '../../server/core/secret-box.ts';
 import { openDocument } from '../../server/db/document.ts';
 import { UPSTREAMS_DOCUMENT } from '../../server/db/documents.ts';
 import { upstreams } from '../../server/db/schema.ts';
@@ -154,7 +154,7 @@ describe('upstream store', () => {
     await (await open()).create(GOOGLE);
     const rows = await db.db.select().from(upstreams);
     expect(JSON.stringify(rows)).not.toContain('g-secret');
-    expect(rows[0]?.clientSecret).toMatch(/^enc:v1:/);
+    expect(isSealed(rows[0]?.clientSecret ?? '')).toBe(true);
     expect((await open()).find('google')?.clientSecret).toBe('g-secret');
   });
 });

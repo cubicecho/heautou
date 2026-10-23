@@ -1,5 +1,7 @@
 {
   "extends": "../tsconfig.base.json",
   "compilerOptions": { "types": ["node", "vitest/globals"] },
-  "include": [".", "../tests", "../vitest.config.ts", "../codegen.ts"]
+  "include": [".", "../tests", "../vitest.config.ts", "../codegen.ts"],
+  // The web app's tests load its modules, so they are checked as the web app is: tests/web/tsconfig.json.
+  "exclude": ["../tests/web"]
 }

@@ -2,23 +2,11 @@ import { HttpStatus } from '../../server/core/wire.ts';
 import { PAGE_PARAM, WEB_PAGE } from '../../server/oidc/pages.ts';
 import { AuditType } from '../../server/store/audit.ts';
 import { ClientAuthMethod, type OidcClient } from '../../server/store/clients.ts';
-import { startTestApp, type TestApp } from '../helpers.ts';
-import { createBrowser, PASSWORD, REDIRECT_URI, signIn } from './browser.ts';
+import { createBrowser, locationOf, PASSWORD, REDIRECT_URI, signIn } from '../browser.ts';
+import { createTestUser, startTestApp, type TestApp } from '../helpers.ts';
 
 /** What a browser sends when it navigates, so the provider answers with a page rather than JSON. */
 const NAVIGATION = { accept: 'text/html' };
-
-/**
- * Reads where a redirect points, as a URL against the app.
- *
- * @param app - The running app.
- * @param res - A redirect.
- * @returns Its location.
- */
-function locationOf(app: TestApp, res: Response): URL {
-  expect(res.status).toBe(HttpStatus.SeeOther);
-  return new URL(res.headers.get('location') ?? '', app.base);
-}
 
 describe('pages the provider sends a browser to', () => {
   let app: TestApp;
@@ -26,7 +14,7 @@ describe('pages the provider sends a browser to', () => {
 
   beforeAll(async () => {
     app = await startTestApp();
-    await app.services.users.create({ username: 'ada', password: PASSWORD, email: '', name: '', groups: [] });
+    await createTestUser(app, { username: 'ada' });
     client = await app.services.clients.create({
       name: 'Test app',
       authMethod: ClientAuthMethod.SecretBasic,

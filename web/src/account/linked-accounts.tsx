@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { useAccountUpstreams, useFinishLink, useStartLink, useUnlink } from '@/core/account';
 import { Link2 } from '@/core/app-icons';
-import { messageOf } from '@/core/lists';
+import { messageOf } from '@/core/errors';
 import { formatAgo, joinStats } from '@/lib/format';
 
 /** Where a provider sends the browser back with the account to link: `/account?upstreamLink=`. */
@@ -66,12 +66,12 @@ export function LinkedAccountsSection() {
           <Spinner />
         ) : (
           <div className="grid gap-2">
-            {finished.isSuccess ? (
+            {finished.isSuccess && (
               <Alert
                 variant="info"
                 description={`Linked ${finished.data.label} at ${finished.data.provider}. You can sign in with it now.`}
               />
-            ) : null}
+            )}
             <List
               label="Linked accounts"
               contentSlot={providers.map((provider) => (
@@ -115,9 +115,7 @@ export function LinkedAccountsSection() {
                 />
               ))}
             />
-            {failure === null ? null : (
-              <Alert variant="destructive" title="Not linked" description={messageOf(failure)} />
-            )}
+            {failure !== null && <Alert variant="destructive" title="Not linked" description={messageOf(failure)} />}
           </div>
         )
       }

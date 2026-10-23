@@ -1,5 +1,6 @@
 import { guessableWords } from '@server/core/password-words.ts';
 import { useQuery } from '@tanstack/react-query';
+import { QUERY_KEYS } from '@/core/query-keys';
 
 /** What zxcvbn makes of a password, as the meter shows it. */
 export interface PasswordStrength {
@@ -45,7 +46,7 @@ async function loadEstimate(): Promise<Estimate> {
  */
 export function usePasswordStrength(password: string, owner: readonly string[]): PasswordStrength | null {
   const { data: estimate } = useQuery({
-    queryKey: ['zxcvbn'],
+    queryKey: QUERY_KEYS.zxcvbn,
     queryFn: loadEstimate,
     staleTime: Number.POSITIVE_INFINITY,
     gcTime: Number.POSITIVE_INFINITY,

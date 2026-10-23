@@ -3,7 +3,7 @@ import express, { type CookieOptions, type RequestHandler, type Response, Router
 import { z } from 'zod';
 import {
   COOKIE,
-  clearSessionCookies,
+  clearSessionCookie,
   type SessionDeps,
   sessionTokenOf,
   setSessionCookie,
@@ -237,7 +237,7 @@ export function createAdminRouter(deps: AdminDeps): Router {
       }
       await webSessions.remove(cookie);
     }
-    clearSessionCookies(res, issuer);
+    clearSessionCookie(res, issuer);
     const end = new URLSearchParams({ client_id: ADMIN_DEFAULTS.clientId });
     res.json({ redirectTo: `${issuer}/session/end?${end}` });
   });

@@ -1,0 +1,7 @@
+{
+  "extends": "../../web/tsconfig.json",
+  // The web app's settings, with the test globals; some of these tests load server modules too.
+  "compilerOptions": { "types": ["node", "vitest/globals", "vite/client"] },
+  // The whole app, since `main.tsx` registers the router a route module's `createFileRoute` is checked against.
+  "include": [".", "../../web/src"]
+}

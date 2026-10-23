@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, desc, eq, inArray, lt, lte, or, type SQL } from 'drizzle-orm';
+import { and, desc, eq, inArray, lte, or, type SQL } from 'drizzle-orm';
 import { AUDIT_DEFAULTS, type AuditSettings } from '../core/defaults.ts';
 import { errorMessage } from '../core/errors.ts';
 import type { DocumentStore } from '../db/document.ts';
@@ -193,21 +193,17 @@ export interface AuditEntry extends AuditEvent {
 
 /** Which entries to read. */
 export interface AuditQuery {
-  /** How many, at most `AUDIT_DEFAULTS.maxPageSize`. */
+  /** How many, at most. Unset, every entry. */
   first?: number;
-  /** The id of the last entry of the page before; the page starts after it. */
-  after?: string | null;
   /** Only these types. */
   types?: readonly AuditType[] | null;
   /** Only entries done by this user or done to them. */
   userId?: string | null;
 }
 
-/** A page of entries, newest first. */
-export interface AuditPage {
+/** The entries a query read, newest first. */
+export interface AuditListing {
   entries: AuditEntry[];
-  /** The cursor for the next page, or null at the end. */
-  nextCursor: string | null;
 }
 
 /** The append-only log of who did what. */
@@ -228,10 +224,10 @@ export interface AuditLog {
   /**
    * Reads entries, newest first, once every entry recorded before the call is saved.
    *
-   * @param query - The filters and the page.
-   * @returns The page.
+   * @param query - The filters and how many.
+   * @returns The entries.
    */
-  list: (query: AuditQuery) => Promise<AuditPage>;
+  list: (query: AuditQuery) => Promise<AuditListing>;
   /**
    * Calls a listener with every entry recorded from now on.
    *
@@ -356,7 +352,7 @@ function concerns(entry: AuditEntry, userId: string): boolean {
  * Says whether an entry passes a query's filters, for the entries a subscription hears of as they are recorded.
  *
  * @param entry - The entry.
- * @param query - The filters. The page is ignored.
+ * @param query - The filters. `first` is ignored.
  * @returns True when it passes.
  */
 export function matchesQuery(entry: AuditEntry, { types = null, userId = null }: AuditQuery): boolean {
@@ -397,7 +393,7 @@ export function openAuditLog(
   now: () => number = Date.now,
   overrides: Partial<AuditSettings> = {},
 ): AuditLog {
-  const { keptEntries, pruneEveryEntries, pageSize, maxPageSize } = { ...AUDIT_DEFAULTS, ...overrides };
+  const { keptEntries, pruneEveryEntries } = { ...AUDIT_DEFAULTS, ...overrides };
   const { db, queue } = store;
   const listeners = new Set<(entry: AuditEntry) => void>();
   let recordedSincePrune = 0;
@@ -445,25 +441,9 @@ export function openAuditLog(
     },
     list: (query) =>
       queue.run(async () => {
-        const { first = pageSize, after = null } = query;
-        const size = Math.min(Math.max(first, 1), maxPageSize);
-        const [cursor] =
-          after === null
-            ? []
-            : await db.select({ seq: auditEntries.seq }).from(auditEntries).where(eq(auditEntries.id, after));
-        // A cursor that is gone, such as one pruned since, ends the list.
-        if (after !== null && cursor === undefined) {
-          return { entries: [], nextCursor: null };
-        }
-        const rows = await db
-          .select()
-          .from(auditEntries)
-          .where(and(filterOf(query), cursor === undefined ? undefined : lt(auditEntries.seq, cursor.seq)))
-          .orderBy(desc(auditEntries.seq))
-          .limit(size + 1);
-        const entries = rows.slice(0, size).map(auditEntryOf);
-        const hasMore = rows.length > size;
-        return { entries, nextCursor: hasMore ? (entries.at(-1)?.id ?? null) : null };
+        const newestFirst = db.select().from(auditEntries).where(filterOf(query)).orderBy(desc(auditEntries.seq));
+        const rows = await (query.first === undefined ? newestFirst : newestFirst.limit(query.first));
+        return { entries: rows.map(auditEntryOf) };
       }),
   };
 }

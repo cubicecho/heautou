@@ -4,7 +4,7 @@ import express, { type Express, type Request, type Response } from 'express';
 import { createYoga } from 'graphql-yoga';
 import { createFactorRouter } from '../account/factors.ts';
 import { createAccountRouter } from '../account/routes.ts';
-import { moveFormerSessionCookie, viewerOf } from '../account/session.ts';
+import { viewerOf } from '../account/session.ts';
 import { adminUrls } from '../admin/admin-client.ts';
 import { createBackupRouter } from '../admin/backup.ts';
 import { createPictureRouter } from '../admin/pictures.ts';
@@ -66,33 +66,7 @@ export function createApp(services: Services): Express {
     // The guards below decide who may call; Yoga's own CORS would answer any origin.
     cors: false,
     plugins: [useOperationLimits()],
-    context: ({ req, res }): Context => ({
-      db: services.db,
-      clients: services.clients,
-      apis: services.apis,
-      users: services.users,
-      factors: services.factors,
-      upstreams: services.upstreams,
-      upstreamFlows: services.upstreamFlows,
-      issuer: services.issuer,
-      host: services.host,
-      sessions: services.sessions,
-      keys: services.keys,
-      branding: services.branding,
-      passwordLinks: services.passwordLinks,
-      webSessions: services.webSessions,
-      pairings: services.pairings,
-      pairingOffers: services.pairingOffers,
-      settings: services.settings,
-      passwordPolicy: services.passwordPolicy,
-      audit: services.audit,
-      mail: services.mail,
-      pictures: services.pictures,
-      protectedSites: services.protectedSites,
-      forwardAuth: services.forwardAuth,
-      viewer: viewerOf(res),
-      ip: req.ip ?? null,
-    }),
+    context: ({ req, res }): Context => ({ ...services, viewer: viewerOf(res), ip: req.ip ?? null }),
   });
   const { origin } = adminUrls(services.issuer);
   const throttle = createLoginThrottle();
@@ -103,7 +77,6 @@ export function createApp(services: Services): Express {
   app.use(securityHeaders());
   app.get(HEALTH_ENDPOINT, healthHandler(services.db));
   app.use(LIMITED_ROUTES, limitRequests());
-  app.use(moveFormerSessionCookie(services, services.issuer));
   app.use(
     GRAPHQL_ENDPOINT,
     sameOriginJson(origin, { allowHtmlGet: isDev }),

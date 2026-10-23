@@ -1,13 +1,5 @@
-// A store's data as one document in memory, written through to its tables.
-//
-// The stores were written over JSON files read once and rewritten whole on every change, and much of the server reads
-// them synchronously: the provider's account lookups, each forward auth verify, the sign-in checks. So each store keeps
-// its document in memory as before, and a change is applied there at once, while the same call is still running, so
-// "is this username taken" and "was this code used" are still decided without anything in between. The tables are
-// written after, in order, and the change's promise settles once they are: a caller that awaits it knows the data is
-// in the database, and one whose write failed gets the error and finds the document as the tables have it.
-//
-// One process owns the database: nothing else writes the tables while it runs.
+// A store's data as one document in memory, so reads stay synchronous: a change is made there at once and written
+// through to its tables after, in order. One process owns the database: nothing else writes the tables while it runs.
 import {
   and,
   eq,
@@ -56,8 +48,14 @@ export type RowsOf<TTables extends readonly PgTable[], Shape extends 'insert' | 
   [K in keyof TTables]: Shape extends 'insert' ? InferInsertModel<TTables[K]>[] : InferSelectModel<TTables[K]>[];
 };
 
-/** How a document is laid out in its tables. */
-export interface DocumentMapping<T, TTables extends readonly PgTable[] = readonly PgTable[]> {
+/**
+ * How a document is laid out in its tables.
+ *
+ * @typeParam T - The document, as its store holds it.
+ * @typeParam TTables - Its tables.
+ * @typeParam TOlder - The document as an older version's file may hold it, missing fields that version did not write.
+ */
+export interface DocumentMapping<T, TTables extends readonly PgTable[] = readonly PgTable[], TOlder = T> {
   /**
    * Its name, such as `users`: the row a single document is kept in. Its path in a backup archive, and in the data
    * directory of a version before the database, is the name as a JSON file (`archivePathOf`).
@@ -68,12 +66,12 @@ export interface DocumentMapping<T, TTables extends readonly PgTable[] = readonl
   /** Its tables, each one a table before any that points at it. */
   tables: { [K in keyof TTables]: RowSet<TTables[K]> };
   /**
-   * Lays a document out as rows. It also reads a file an older version wrote, so it fills in what that lacks.
+   * Lays a document out as rows, filling in what an older version's file lacks.
    *
-   * @param document - The document, secrets sealed.
+   * @param document - The document, secrets sealed, or an older version's file of it.
    * @returns The rows of each table.
    */
-  toRows: (document: T) => RowsOf<TTables, 'insert'>;
+  toRows: (document: T | TOlder) => RowsOf<TTables, 'insert'>;
   /**
    * Builds the document from its rows.
    *
@@ -112,21 +110,40 @@ export interface LooseMapping {
  *
  * @typeParam T - The document's shape.
  * @typeParam TTables - Its tables.
+ * @typeParam TOlder - The document as an older version's file may hold it.
  * @param mapping - The mapping.
  * @returns The same mapping, loosely typed.
  */
-export function loosen<T, TTables extends readonly PgTable[]>(mapping: DocumentMapping<T, TTables>): LooseMapping {
+export function loosen<T, TTables extends readonly PgTable[], TOlder>(
+  mapping: DocumentMapping<T, TTables, TOlder>,
+): LooseMapping {
   const tables: readonly RowSet[] = mapping.tables;
   return {
     name: mapping.name,
     fallback: mapping.fallback,
     tables,
-    // The one place the typed rows meet the loose ones the queries here pass around. A document handed in is one this
-    // store wrote, or the file an older version of it wrote, which its toRows fills in.
-    toRows: (document) => mapping.toRows(document as T) as Row[][],
-    fromRows: (rows) =>
-      mapping.fromRows(tables.map((_rowSet, index) => rows[index] ?? []) as RowsOf<TTables, 'select'>),
+    // A document handed in is one this store wrote, or the file an older version of it wrote.
+    toRows: (document) => mapping.toRows(document as T | TOlder) as Row[][],
+    fromRows: (rows) => fromRowsOf(mapping, rows),
   };
+}
+
+/**
+ * Builds a document from the rows of each of its tables, a table with none read as empty.
+ *
+ * @typeParam T - The document's shape.
+ * @typeParam TTables - Its tables.
+ * @typeParam TOlder - The document as an older version's file may hold it.
+ * @param mapping - How the document is laid out.
+ * @param rows - The rows of each table, in the order of its `tables`.
+ * @returns The document.
+ */
+function fromRowsOf<T, TTables extends readonly PgTable[], TOlder>(
+  mapping: DocumentMapping<T, TTables, TOlder>,
+  rows: readonly Row[][],
+): T {
+  // The rows the queries here read are loose; they are the ones these tables hold.
+  return mapping.fromRows(mapping.tables.map((_rowSet, index) => rows[index] ?? []) as RowsOf<TTables, 'select'>);
 }
 
 /** Runs writes one at a time, in the order they were asked for. */
@@ -333,8 +350,7 @@ export function documentFromRows<T, TTables extends readonly PgTable[]>(
   const rowSets: readonly RowSet[] = mapping.tables;
   const loose = loosen(mapping);
   const toRows = (document: T): Row[][] => loose.toRows(document);
-  const fromRows = (rows: readonly Row[][]): T =>
-    mapping.fromRows(rowSets.map((_rowSet, index) => rows[index] ?? []) as RowsOf<TTables, 'select'>);
+  const fromRows = (rows: readonly Row[][]): T => fromRowsOf(mapping, rows);
 
   /**
    * Lays out the rows the tables hold as `toRows` would, so the next document's compare with them. Only rows that were

@@ -3,17 +3,16 @@ import { HttpStatus, MS_PER_SECOND } from '../../server/core/wire.ts';
 import { SETUP_URL_NAME, SETUP_URL_TOKEN } from '../../server/oidc/pairing.ts';
 import { AuditType } from '../../server/store/audit.ts';
 import { CLIENT_SOURCE_PAIRED, ClientAuthMethod } from '../../server/store/clients.ts';
-import { startTestApp, type TestApp } from '../helpers.ts';
 import {
   adminGql,
   adminSubscribe,
   type Browser,
-  PASSWORD,
   payloadOf,
   REDIRECT_URI,
   signInAsAdmin,
   signInForTokens,
-} from './browser.ts';
+} from '../browser.ts';
+import { createTestUser, startTestApp, type TestApp } from '../helpers.ts';
 
 const START_PAIRING = /* GraphQL */ `
   mutation ($input: PairingInput!) {
@@ -55,8 +54,8 @@ describe('pairing an app with a setup URL', () => {
   beforeAll(async () => {
     app = await startTestApp({ now: () => time });
     admin = await signInAsAdmin(app);
-    await app.services.users.create({ username: 'ada', password: PASSWORD, email: '', name: '', groups: ['family'] });
-    await app.services.users.create({ username: 'bob', password: PASSWORD, email: '', name: '', groups: [] });
+    await createTestUser(app, { username: 'ada', groups: ['family'] });
+    await createTestUser(app, { username: 'bob' });
   });
 
   afterAll(() => app.close());

@@ -1,8 +1,8 @@
 // The schema `/graphql` serves. The reads are generated from the tables by drizzle-graphql: users, clients, APIs,
 // upstream providers and their links, protected sites and the audit log, with filters, ordering, keyset pages and their
-// relations. Everything else is written by hand in `type-defs.ts` and its neighbours: the fields a row can't hold
-// (sessions, second factors, a client's opened secret), the settings that are no table, and every change. A change is
-// never a generated write: each one is validated, audited and made through a store, whose document the provider reads
+// relations. Everything else is written by hand, one module per concept (`clients.ts`, `users.ts`...): the fields a
+// row can't hold (sessions, second factors, a client's opened secret), the settings that are no table, and every
+// change. A change is never a generated write: each one is validated, audited and made through a store, whose document the provider reads
 // from memory, so a write past the store would leave the provider reading old data.
 import { addResolversToSchema } from '@graphql-tools/schema';
 import { buildSchema, GraphQLDateTime } from '@vantreeseba/drizzle-graphql';
@@ -10,13 +10,19 @@ import { extendSchema, type GraphQLField, type GraphQLSchema, parse } from 'grap
 import type { Context } from '../core/context.ts';
 import { OPERATION_LIMIT_DEFAULTS } from '../core/defaults.ts';
 import type { Database } from '../db/client.ts';
-import { apiResolvers } from './apis.ts';
+import { API_TYPE_DEFS, apiResolvers } from './apis.ts';
+import { AUDIT_TYPE_DEFS, auditResolvers } from './audit.ts';
+import { CLIENT_TYPE_DEFS, clientResolvers } from './clients.ts';
 import { TABLE_DESCRIPTION, TABLE_DOCS } from './docs.ts';
 import { FORWARD_AUTH_TYPE_DEFS, forwardAuthResolvers } from './forward-auth.ts';
+import { GROUP_TYPE_DEFS, groupResolvers } from './groups.ts';
 import { MAIL_TYPE_DEFS, mailResolvers } from './mail.ts';
-import { resolvers } from './resolvers.ts';
+import { PAIRING_TYPE_DEFS, pairingResolvers } from './pairing.ts';
 import { SELECTION_NAMING, withKeysSelected } from './rows.ts';
-import { TYPE_DEFS } from './type-defs.ts';
+import { SETTINGS_TYPE_DEFS, settingsResolvers } from './settings.ts';
+import { ROOT_TYPE_DEFS } from './type-defs.ts';
+import { UPSTREAM_TYPE_DEFS, upstreamResolvers } from './upstreams.ts';
+import { USER_TYPE_DEFS, userResolvers } from './users.ts';
 
 /**
  * Tables only the server reads: secrets, hashed tokens, sessions, the provider's own models and the settings
@@ -50,6 +56,20 @@ const TIMESTAMP_COLUMN = 'PgTimestamp';
 
 /** The generated reads of the audit log. */
 const AUDIT_READS = ['auditEntries', 'auditEntry', 'auditEntriesAggregate'];
+
+/** Each concept's hand-written SDL and resolvers. */
+const HAND_WRITTEN = [
+  { typeDefs: CLIENT_TYPE_DEFS, resolvers: clientResolvers },
+  { typeDefs: PAIRING_TYPE_DEFS, resolvers: pairingResolvers },
+  { typeDefs: USER_TYPE_DEFS, resolvers: userResolvers },
+  { typeDefs: GROUP_TYPE_DEFS, resolvers: groupResolvers },
+  { typeDefs: SETTINGS_TYPE_DEFS, resolvers: settingsResolvers },
+  { typeDefs: UPSTREAM_TYPE_DEFS, resolvers: upstreamResolvers },
+  { typeDefs: API_TYPE_DEFS, resolvers: apiResolvers },
+  { typeDefs: AUDIT_TYPE_DEFS, resolvers: auditResolvers },
+  { typeDefs: MAIL_TYPE_DEFS, resolvers: mailResolvers },
+  { typeDefs: FORWARD_AUTH_TYPE_DEFS, resolvers: forwardAuthResolvers },
+];
 
 /** The ordering a list runs with when the request passes none: oldest first, and the audit log newest first. */
 const OLDEST_FIRST = { createdAt: { direction: 'asc', priority: 1 } } as const;
@@ -152,10 +172,11 @@ export function createSchema(db: Database): GraphQLSchema {
     describeColumn: (_column, { tableName, columnName }) => TABLE_DOCS[tableName]?.[columnName],
     describeRelation: (table, relation) => TABLE_DOCS[table]?.[relation],
   });
-  const extended = extendSchema(generated, parse([TYPE_DEFS, MAIL_TYPE_DEFS, FORWARD_AUTH_TYPE_DEFS].join('\n')));
+  const typeDefs = [ROOT_TYPE_DEFS, ...HAND_WRITTEN.map((module) => module.typeDefs)];
+  const extended = extendSchema(generated, parse(typeDefs.join('\n')));
   const resolved = addResolversToSchema({
     schema: extended,
-    resolvers: mergeResolvers([resolvers, apiResolvers, mailResolvers, forwardAuthResolvers]),
+    resolvers: mergeResolvers(HAND_WRITTEN.map((module) => module.resolvers)),
   });
   return waitingForAudit(withKeysSelected(resolved));
 }

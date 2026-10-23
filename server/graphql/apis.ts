@@ -5,6 +5,51 @@ import type { Api, ApiFields, NewApi } from '../store/apis.ts';
 import { AuditType, apiTarget, recordAdminChange } from '../store/audit.ts';
 import { GeneratedTable, requiredRow, rowWhere } from './rows.ts';
 
+/** The APIs (resource servers) part of the admin API: the lifetime bounds, and every change. */
+export const API_TYPE_DEFS = /* GraphQL */ `
+  "The bounds on an API's own access token lifetime, in seconds."
+  type ApiLifetimeBounds {
+    minSeconds: Int!
+    maxSeconds: Int!
+  }
+
+  "An API to add. Lists left out are empty; a null lifetime leaves it to the client's own, then the server's."
+  input NewApiInput {
+    "An absolute URI with no fragment, such as https://photos-api.home.lan. It can't be changed later."
+    identifier: String!
+    name: String!
+    "At most ${API_DEFAULTS.maxScopes}, none of them the provider's own."
+    scopes: [String!]
+    "JWT when left out."
+    tokenFormat: TokenFormat
+    accessTokenSeconds: Int
+    allowedClientIds: [ID!]
+  }
+
+  "An API's new settings. A field left out keeps its value; accessTokenSeconds null clears it."
+  input ApiInput {
+    name: String
+    scopes: [String!]
+    tokenFormat: TokenFormat
+    accessTokenSeconds: Int
+    allowedClientIds: [ID!]
+  }
+
+  extend type Query {
+    "The bounds on an API's own access token lifetime."
+    apiLifetimeBounds: ApiLifetimeBounds!
+  }
+
+  extend type Mutation {
+    "Adds an API apps may ask for access tokens to."
+    createApi(input: NewApiInput!): Api!
+    "Changes an API. Its identifier stays."
+    updateApi(identifier: ID!, input: ApiInput!): Api!
+    "Removes an API. Tokens already issued to it work until they expire; no new ones are."
+    deleteApi(identifier: ID!): Api!
+  }
+`;
+
 /**
  * Records what the signed-in admin did to an API, and passes it on.
  *

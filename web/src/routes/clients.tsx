@@ -1,9 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { useState } from 'react';
-import type { ClientFieldsFragment } from '@/__generated__/graphql';
+import { ClientAuthMethod, type ClientFieldsFragment, ClientSource } from '@/__generated__/graphql';
 import { AUTH_METHODS } from '@/clients/auth-methods';
 import { ClientFormDialog } from '@/clients/client-form-dialog';
-import { durationText } from '@/clients/durations';
 import { PairDialog } from '@/clients/pair-dialog';
 import { PresetPanel } from '@/clients/preset-panel';
 import { presetById } from '@/clients/presets';
@@ -21,10 +20,12 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { CopyButton } from '@/components/ui/copy-button';
 import { Pencil, Plug, Plus, RefreshCw, Trash2 } from '@/components/ui/icons';
-import { useClients, useDeleteClient, useProviderInfo, useRotateClientSecret } from '@/core/admin';
 import { AppWindow } from '@/core/app-icons';
-import { messageOf } from '@/core/lists';
+import { useClients, useDeleteClient, useRotateClientSecret } from '@/core/clients';
+import { messageOf } from '@/core/errors';
+import { useProviderInfo } from '@/core/provider';
 import type { SlotNode } from '@/lib/utils';
+import { durationText } from '@/token-lifetimes/durations';
 
 export const Route = createFileRoute('/clients')({ component: ClientsPage });
 
@@ -320,6 +321,7 @@ function ClientDetail({ client }: { client: ClientFieldsFragment }) {
   const [isSecretShown, setSecretShown] = useState(false);
   const { rows: credentialRows, rotateError } = useCredentialRows(client, isSecretShown, setSecretShown);
   const hasPreset = preset !== undefined;
+  const hasRefusedUris = client.refusedRedirectUris.length > 0;
   // A preset's panel holds the ID and secret inside its own settings, so the rows that copy and rotate them sit here.
   const presetCredentialRows = hasPreset
     ? [
@@ -330,14 +332,14 @@ function ClientDetail({ client }: { client: ClientFieldsFragment }) {
 
   return (
     <div className="flex flex-col gap-6">
-      {client.refusedRedirectUris.length === 0 ? null : (
+      {hasRefusedUris && (
         <Alert
           variant="warning"
           title="Redirect URIs no longer allowed"
           description={`The client still works, but cannot be saved until these use https: ${client.refusedRedirectUris.join(', ')}. Plain http can be allowed under Settings.`}
         />
       )}
-      {rotateError === null ? null : (
+      {rotateError !== null && (
         <Alert variant="destructive" title="Secret not rotated" description={messageOf(rotateError)} />
       )}
       {hasPreset ? (
@@ -368,16 +370,19 @@ function clientBadges(client: ClientFieldsFragment) {
   const presetName = presetById(client.preset)?.name;
   // A preset badge that only repeats the name says nothing.
   const showsPreset = presetName !== undefined && presetName.toLowerCase() !== client.name.toLowerCase();
+  const isPublic = client.authMethod === ClientAuthMethod.None;
+  const isLimited = client.allowedGroups.length > 0;
+  const isPaired = client.source === ClientSource.Paired;
+  const hasOwnGroupsClaim = client.groupsClaim !== DEFAULT_GROUPS_CLAIM;
+  const hasRefusedUris = client.refusedRedirectUris.length > 0;
   return (
     <>
-      {client.authMethod === 'NONE' ? <Badge variant="outline">Public</Badge> : null}
-      {client.allowedGroups.length === 0 ? null : <Badge variant="secondary">Limited</Badge>}
-      {client.source === 'PAIRED' ? <Badge variant="secondary">Paired</Badge> : null}
-      {showsPreset ? <Badge variant="secondary">{presetName}</Badge> : null}
-      {client.groupsClaim === DEFAULT_GROUPS_CLAIM ? null : (
-        <Badge variant="outline">groups as {client.groupsClaim}</Badge>
-      )}
-      {client.refusedRedirectUris.length === 0 ? null : <Badge variant="warning">http redirect</Badge>}
+      {isPublic && <Badge variant="outline">Public</Badge>}
+      {isLimited && <Badge variant="secondary">Limited</Badge>}
+      {isPaired && <Badge variant="secondary">Paired</Badge>}
+      {showsPreset && <Badge variant="secondary">{presetName}</Badge>}
+      {hasOwnGroupsClaim && <Badge variant="outline">groups as {client.groupsClaim}</Badge>}
+      {hasRefusedUris && <Badge variant="warning">http redirect</Badge>}
     </>
   );
 }
@@ -392,7 +397,11 @@ function ClientsPage() {
   const [openId, setOpenId] = useState<string | null>(null);
   const [editing, setEditing] = useState<Editing>({ kind: 'closed' });
   const isFormOpen = editing.kind === 'new' || editing.kind === 'edit';
+  const isPairing = editing.kind === 'pair';
   const { apps, others } = groupByApp(clients);
+  const hasNoApps = apps.length === 0;
+  // Beside the apps, the rest get a section of their own; with no apps they are the whole list.
+  const showsOtherClients = hasNoApps === false && others.length > 0;
   /**
    * One client's row, opening onto its credentials.
    *
@@ -460,7 +469,7 @@ function ClientsPage() {
       contentClassName="gap-4"
       contentSlot={
         <>
-          {remove.error === null ? null : (
+          {remove.error !== null && (
             <Alert variant="destructive" title="Client not deleted" description={messageOf(remove.error)} />
           )}
           <QueryState
@@ -499,15 +508,14 @@ function ClientsPage() {
               contentSlot={<List label={`${app.name} clients`} contentSlot={app.clients.map(clientRow)} />}
             />
           ))}
-          {apps.length === 0 ? (
-            <List label="Clients" contentSlot={others.map(clientRow)} />
-          ) : others.length === 0 ? null : (
+          {hasNoApps && <List label="Clients" contentSlot={others.map(clientRow)} />}
+          {showsOtherClients && (
             <Section
               title="Other clients"
               contentSlot={<List label="Other clients" contentSlot={others.map(clientRow)} />}
             />
           )}
-          {isFormOpen ? (
+          {isFormOpen && (
             <ClientFormDialog
               key={editing.kind === 'edit' ? editing.client.clientId : 'new'}
               client={editing.kind === 'edit' ? editing.client : null}
@@ -515,10 +523,8 @@ function ClientsPage() {
               onOpenChange={close}
               onSaved={(saved) => setOpenId(saved.clientId)}
             />
-          ) : null}
-          {editing.kind === 'pair' ? (
-            <PairDialog open onOpenChange={close} onPaired={(paired) => setOpenId(paired.clientId)} />
-          ) : null}
+          )}
+          {isPairing && <PairDialog open onOpenChange={close} onPaired={(paired) => setOpenId(paired.clientId)} />}
         </>
       }
     />

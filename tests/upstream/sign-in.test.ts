@@ -4,8 +4,8 @@ import { HttpStatus } from '../../server/core/wire.ts';
 import { AuditType } from '../../server/store/audit.ts';
 import { ClientAuthMethod, type OidcClient } from '../../server/store/clients.ts';
 import { UnknownIdentity, type UpstreamFields, UpstreamKind } from '../../server/store/upstreams.ts';
-import { startTestApp, type TestApp } from '../helpers.ts';
-import { basicAuth, PASSWORD, payloadOf, REDIRECT_URI } from '../oidc/browser.ts';
+import { basicAuth, PASSWORD, payloadOf, REDIRECT_URI } from '../browser.ts';
+import { createTestUser, startTestApp, type TestApp } from '../helpers.ts';
 
 /** More hops than a sign-in through an upstream provider takes. */
 const MAX_HOPS = 20;
@@ -133,9 +133,8 @@ describe('signing in through an upstream OpenID Connect provider', () => {
   beforeEach(async () => {
     upstream = await startTestApp();
     app = await startTestApp();
-    await upstream.services.users.create({
+    await createTestUser(upstream, {
       username: 'grace',
-      password: PASSWORD,
       email: 'grace@corp.example',
       name: 'Grace Hopper',
       groups: ['engineering'],
@@ -169,13 +168,7 @@ describe('signing in through an upstream OpenID Connect provider', () => {
   });
 
   it('turns away an identity no user is linked to, and does not match it by address', async () => {
-    await app.services.users.create({
-      username: 'gh',
-      password: PASSWORD,
-      email: 'grace@corp.example',
-      name: '',
-      groups: [],
-    });
+    await createTestUser(app, { username: 'gh', email: 'grace@corp.example' });
     const stopped = await signInUpstream(createSiteBrowser(), 'grace');
     expect(stopped.searchParams.get('error')).toMatch(/not linked to a user here/);
     expect(app.services.upstreams.linkCount(UPSTREAM_ID)).toBe(0);
@@ -186,21 +179,9 @@ describe('signing in through an upstream OpenID Connect provider', () => {
   });
 
   it('links an identity from the account page, then signs in with it', async () => {
-    const ada = await app.services.users.create({
-      username: 'ada',
-      password: PASSWORD,
-      email: '',
-      name: '',
-      groups: [],
-    });
+    const ada = await createTestUser(app, { username: 'ada' });
     // With no admin, the admin sign-in sends the browser to /setup instead.
-    await app.services.users.create({
-      username: 'root',
-      password: PASSWORD,
-      email: '',
-      name: '',
-      groups: [ADMIN_DEFAULTS.group],
-    });
+    await createTestUser(app, { username: 'root', groups: [ADMIN_DEFAULTS.group] });
     const browser = createSiteBrowser();
     const account = await walk(browser, `${app.base}/admin/login?return=%2Faccount`, `${app.base}/admin/callback`, {
       username: 'ada',
@@ -272,13 +253,7 @@ describe('signing in through an upstream OpenID Connect provider', () => {
   });
 
   it('still asks for a second factor here, unless the provider counts as both', async () => {
-    const ada = await app.services.users.create({
-      username: 'ada',
-      password: PASSWORD,
-      email: '',
-      name: '',
-      groups: [],
-    });
+    const ada = await createTestUser(app, { username: 'ada' });
     const graceUp = upstream.services.users.list().find((user) => user.username === 'grace');
     await app.services.upstreams.link(
       ada.id,
@@ -310,13 +285,7 @@ describe('signing in through an upstream OpenID Connect provider', () => {
   });
 
   it('refuses a disabled user, and a user outside the client’s groups', async () => {
-    const ada = await app.services.users.create({
-      username: 'ada',
-      password: PASSWORD,
-      email: '',
-      name: '',
-      groups: [],
-    });
+    const ada = await createTestUser(app, { username: 'ada' });
     const graceUp = upstream.services.users.list().find((user) => user.username === 'grace');
     await app.services.upstreams.link(
       ada.id,
@@ -335,13 +304,7 @@ describe('signing in through an upstream OpenID Connect provider', () => {
   });
 
   it('lets an admin manage providers over GraphQL without ever reading the secret back', async () => {
-    const admin = await app.services.users.create({
-      username: 'root',
-      password: PASSWORD,
-      email: '',
-      name: '',
-      groups: [ADMIN_DEFAULTS.group],
-    });
+    const admin = await createTestUser(app, { username: 'root', groups: [ADMIN_DEFAULTS.group] });
     expect(admin.id).toBeTruthy();
     const browser = createSiteBrowser();
     const callback = await walk(browser, `${app.base}/admin/login`, `${app.base}/admin/callback`, {

@@ -16,6 +16,8 @@ import { FormElement } from '@/components/ui/form-element';
 import { KeyRound, Plus, Trash2 } from '@/components/ui/icons';
 import { Spinner } from '@/components/ui/spinner';
 import { ShieldCheck } from '@/core/app-icons';
+import { QR_CODE_DEFAULTS } from '@/core/defaults';
+import { messageOf } from '@/core/errors';
 import {
   type PasskeyInfo,
   useAddPasskey,
@@ -26,11 +28,9 @@ import {
   useRemoveTotp,
   useStartTotp,
 } from '@/core/factors';
-import { messageOf } from '@/core/lists';
+import { QUERY_KEYS } from '@/core/query-keys';
 import { formatAgo, formatDate, joinStats } from '@/lib/format';
 
-/** The QR code's width and height, in CSS pixels. */
-const QR_SIZE = 192;
 /** What a new passkey is called until the user names it. */
 const DEFAULT_PASSKEY_NAME = 'Passkey';
 
@@ -94,8 +94,9 @@ function TotpSetupDialog({ onOpenChange, onCodes }: TotpSetupDialogProps) {
   }, [mutate]);
   const uri = start.data?.uri;
   const qr = useQuery({
-    queryKey: ['totp-qr', uri],
-    queryFn: async () => (await import('qrcode')).toDataURL(uri ?? '', { width: QR_SIZE, margin: 1 }),
+    queryKey: [...QUERY_KEYS.totpQr, uri],
+    queryFn: async () =>
+      (await import('qrcode')).toDataURL(uri ?? '', { width: QR_CODE_DEFAULTS.sizePixels, margin: 1 }),
     enabled: uri !== undefined,
     staleTime: Number.POSITIVE_INFINITY,
   });
@@ -125,13 +126,13 @@ function TotpSetupDialog({ onOpenChange, onCodes }: TotpSetupDialogProps) {
             ) : (
               <img
                 src={qr.data}
-                width={QR_SIZE}
-                height={QR_SIZE}
+                width={QR_CODE_DEFAULTS.sizePixels}
+                height={QR_CODE_DEFAULTS.sizePixels}
                 alt="QR code for your authenticator app"
                 className="justify-self-center rounded-md"
               />
             )}
-            {start.data === undefined ? null : (
+            {start.data !== undefined && (
               <CodeBlock
                 content={start.data.secret}
                 title="Or type this key"
@@ -148,7 +149,7 @@ function TotpSetupDialog({ onOpenChange, onCodes }: TotpSetupDialogProps) {
               inputMode="numeric"
               validators={{ onChange: ({ value }) => (value.trim() ? undefined : 'Type the code the app shows.') }}
             />
-            {confirm.error === null ? null : (
+            {confirm.error !== null && (
               <Alert variant="destructive" title="Not turned on" description={messageOf(confirm.error)} />
             )}
           </FormElement>
@@ -209,7 +210,7 @@ function AddPasskeyDialog({ onOpenChange, onCodes }: AddPasskeyDialogProps) {
             description="So you can tell it apart, such as the device or the password manager it is in."
             validators={{ onChange: ({ value }) => (value.trim() ? undefined : 'Give it a name.') }}
           />
-          {add.error === null ? null : (
+          {add.error !== null && (
             <Alert variant="destructive" title="Passkey not added" description={messageOf(add.error)} />
           )}
         </FormElement>
@@ -273,7 +274,7 @@ function PasswordConfirmDialog(props: PasswordConfirmDialogProps) {
             autoComplete="current-password"
             autoFocus
           />
-          {failure === null ? null : <Alert variant="destructive" description={failure} />}
+          {failure !== null && <Alert variant="destructive" description={failure} />}
         </FormElement>
       }
       footerActionsSlot={(close) => (
@@ -307,15 +308,19 @@ export function TwoFactorSection() {
   const data = factors.data;
   const canAddPasskey = data?.passkeysAvailable === true && browserSupportsWebAuthn();
   const hasFactor = data !== undefined && (data.hasTotp || data.passkeys.length > 0);
+  const isSettingUpTotp = dialog.kind === 'totp';
+  const isAddingPasskey = dialog.kind === 'passkey';
+  const isShowingCodes = dialog.kind === 'codes';
+  const isRemovingTotp = dialog.kind === 'remove-totp';
+  const isMakingCodes = dialog.kind === 'new-codes';
+  const isRemovingPasskey = dialog.kind === 'remove-passkey';
   // Each dialog is drawn only while it is up, so it starts fresh every time.
   const dialogs = (
     <>
-      {dialog.kind === 'totp' ? <TotpSetupDialog onOpenChange={close} onCodes={showCodes} /> : null}
-      {dialog.kind === 'passkey' ? <AddPasskeyDialog onOpenChange={close} onCodes={showCodes} /> : null}
-      {dialog.kind === 'codes' ? (
-        <RecoveryCodesDialog codes={dialog.codes} onClose={() => setDialog({ kind: 'closed' })} />
-      ) : null}
-      {dialog.kind === 'remove-totp' ? (
+      {isSettingUpTotp && <TotpSetupDialog onOpenChange={close} onCodes={showCodes} />}
+      {isAddingPasskey && <AddPasskeyDialog onOpenChange={close} onCodes={showCodes} />}
+      {isShowingCodes && <RecoveryCodesDialog codes={dialog.codes} onClose={() => setDialog({ kind: 'closed' })} />}
+      {isRemovingTotp && (
         <PasswordConfirmDialog
           title="Remove the authenticator app?"
           description="Signing in stops asking for its code. Your passkeys keep working."
@@ -327,8 +332,8 @@ export function TwoFactorSection() {
             setDialog({ kind: 'closed' });
           }}
         />
-      ) : null}
-      {dialog.kind === 'new-codes' ? (
+      )}
+      {isMakingCodes && (
         <PasswordConfirmDialog
           title="Make new recovery codes?"
           description="Your old codes stop working."
@@ -337,8 +342,8 @@ export function TwoFactorSection() {
           onOpenChange={close}
           onConfirm={async (password) => showCodes(await newCodes.mutateAsync(password))}
         />
-      ) : null}
-      {dialog.kind === 'remove-passkey' ? (
+      )}
+      {isRemovingPasskey && (
         <PasswordConfirmDialog
           title={`Remove ${dialog.passkey.name}?`}
           description="It can no longer sign you in. Remove it from your device or password manager too."
@@ -350,7 +355,7 @@ export function TwoFactorSection() {
             setDialog({ kind: 'closed' });
           }}
         />
-      ) : null}
+      )}
     </>
   );
 

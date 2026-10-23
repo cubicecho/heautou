@@ -11,7 +11,7 @@ const config: CodegenConfig = {
       config: {
         useTypeImports: true,
         skipTypename: true,
-        enumsAsTypes: true,
+        enumType: 'const',
         avoidOptionals: { field: true },
         scalars: { DateTime: 'string', JSON: 'Record<string, string>' },
       },

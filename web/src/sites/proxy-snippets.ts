@@ -2,7 +2,7 @@
  * Forward auth configuration for the reverse proxies docs/forward-auth.md covers, built from this instance's values.
  *
  * Pure functions from facts to text: the Protected sites page shows what they return, and
- * `tests/web/proxy-snippets.test.ts` checks that, for the doc's example, they return the doc's snippets word for word,
+ * `tests/web/sites/proxy-snippets.test.ts` checks that, for the doc's example, they return the doc's snippets word for word,
  * so the page and the doc cannot drift apart.
  */
 

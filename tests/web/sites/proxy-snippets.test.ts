@@ -12,9 +12,9 @@ import {
   type SnippetSite,
   traefikConfig,
   type Upstream,
-} from '../../web/src/sites/proxy-snippets.ts';
+} from '../../../web/src/sites/proxy-snippets.ts';
 
-const DOC = readFileSync(path.resolve(import.meta.dirname, '../../docs/forward-auth.md'), 'utf8');
+const DOC = readFileSync(path.resolve(import.meta.dirname, '../../../docs/forward-auth.md'), 'utf8');
 
 /**
  * Reads the fenced blocks of one language out of the doc.
@@ -54,13 +54,13 @@ function example(sites: SnippetSite[]): SnippetInput {
   return { upstream: upstream('http://heautou:3000'), heautouHost: 'auth.home.lan', sites };
 }
 
-describe('the snippets match docs/forward-auth.md', () => {
-  it('HAProxy: the Lua scripts and haproxy.cfg', () => {
+describe('the snippets', () => {
+  it('match docs/forward-auth.md for HAProxy: the Lua scripts and haproxy.cfg', () => {
     expect(docBlocks('sh')).toContain(haproxyLuaSetup());
     expect(docBlocks('haproxy')).toEqual([haproxyConfig(example([SONARR, WIKI]))]);
   });
 
-  it('nginx, Caddy and Traefik', () => {
+  it('match docs/forward-auth.md for nginx, Caddy and Traefik', () => {
     expect(docBlocks('nginx')).toEqual([nginxConfig(example([SONARR]))]);
     expect(docBlocks('caddy')).toEqual([caddyConfig(example([SONARR]))]);
     expect(docBlocks('yaml').filter((block) => block.startsWith('http:'))).toEqual([traefikConfig(example([SONARR]))]);
@@ -93,11 +93,11 @@ describe('parseUpstream', () => {
   });
 });
 
-describe('a site on part of a host', () => {
+describe('the snippets for a site on part of a host', () => {
   const admin: SnippetSite = { host: 'wiki.home.lan', pathPrefix: '/admin', backend: 'wiki:3000' };
   const input = example([SONARR, admin, { ...admin, pathPrefix: '/api.v2' }]);
 
-  it('HAProxy asks only under the prefixes, at a segment boundary', () => {
+  it('make HAProxy ask only under the prefixes, at a segment boundary', () => {
     const config = haproxyConfig(input);
     expect(config).toContain('acl protected    hdr(host),field(1,:) -i sonarr.home.lan\n');
     expect(config).toContain('acl prefix_wiki  path /api.v2 /admin\n');
@@ -107,7 +107,7 @@ describe('a site on part of a host', () => {
     expect(config.match(/^backend be_wiki$/gm)).toHaveLength(1);
   });
 
-  it('nginx guards the prefix with an escaped regex and passes the rest through', () => {
+  it('guard the prefix in nginx with an escaped regex and pass the rest through', () => {
     const config = nginxConfig(input);
     expect(config).toContain('location ~ "^/api\\.v2(/|$)" {');
     expect(config).toContain('location ~ "^/admin(/|$)" {');
@@ -115,7 +115,7 @@ describe('a site on part of a host', () => {
     expect(config.match(/server_name /g)).toHaveLength(2);
   });
 
-  it('Caddy matches the prefix and below', () => {
+  it('match the prefix and below in Caddy', () => {
     const config = caddyConfig(input);
     expect(config).toContain('    @heautou path /api.v2 /api.v2/* /admin /admin/*\n');
     expect(config).toContain('    @open not path /api.v2 /api.v2/* /admin /admin/*\n');
@@ -123,7 +123,7 @@ describe('a site on part of a host', () => {
     expect(config).toContain('    forward_auth @heautou heautou:3000 {');
   });
 
-  it('Traefik guards the prefix and opens the rest', () => {
+  it('guard the prefix in Traefik and open the rest', () => {
     const config = traefikConfig(input);
     expect(config).toContain(
       'rule: Host(`wiki.home.lan`) && (Path(`/api.v2`) || PathPrefix(`/api.v2/`) || Path(`/admin`) || PathPrefix(`/admin/`))',
@@ -134,7 +134,7 @@ describe('a site on part of a host', () => {
     expect(config).toContain('          Remote-User: ""\n');
   });
 
-  it('is not what the doc tested', () => {
+  it('are not what the doc tested', () => {
     expect(isTested('haproxy', [SONARR])).toBe(true);
     expect(isTested('nginx', [SONARR])).toBe(true);
     expect(isTested('haproxy', [SONARR, admin])).toBe(false);

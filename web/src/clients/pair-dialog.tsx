@@ -7,8 +7,9 @@ import { Button } from '@/components/ui/button';
 import { CopyButton } from '@/components/ui/copy-button';
 import { FormElement } from '@/components/ui/form-element';
 import { Spinner } from '@/components/ui/spinner';
-import { useCancelPairing, useFinishPairing, useGroupOptions, usePairing, useStartPairing } from '@/core/admin';
-import { messageOf } from '@/core/lists';
+import { messageOf } from '@/core/errors';
+import { useGroupOptions } from '@/core/groups';
+import { useCancelPairing, useFinishPairing, usePairing, useStartPairing } from '@/core/pairing';
 import { formatDateTime } from '@/lib/format';
 
 /** The claim groups are released in unless the application reads another. */
@@ -90,7 +91,7 @@ function OffersForm({ id, client, offers, isLooking }: OffersFormProps) {
         title={`Paired with ${client.name}`}
         description="It can sign its users in now. It also offers the following. Turn off what you don't want, then finish."
       />
-      {deviceClient === null ? null : (
+      {deviceClient !== null && (
         <SwitchField
           form={form}
           name="deviceFlow"
@@ -98,11 +99,9 @@ function OffersForm({ id, client, offers, isLooking }: OffersFormProps) {
           description={`Turns the device flow on for "${deviceClient.name}", so devices without a browser of their own, such as Home Assistant, can sign in with a code. Off removes that client.`}
         />
       )}
-      {api === null ? null : (
-        <SwitchField form={form} name="api" label={`API: ${api.name}`} description={apiDescription} />
-      )}
-      {isLooking ? <LookingForOffers name={client.name} /> : null}
-      {finish.error === null ? null : (
+      {api !== null && <SwitchField form={form} name="api" label={`API: ${api.name}`} description={apiDescription} />}
+      {isLooking && <LookingForOffers name={client.name} />}
+      {finish.error !== null && (
         <Alert variant="destructive" title="Not set up" description={messageOf(finish.error)} />
       )}
       <form.AppForm>
@@ -167,7 +166,7 @@ function SetupUrl({ id, setupUrl, onPaired, onRestart }: SetupUrlProps) {
           title={`Paired with ${client.name}`}
           description="It can sign its users in now. Open it in the list for its settings."
         />
-        {isLookingForOffers ? <LookingForOffers name={client.name} /> : null}
+        {isLookingForOffers && <LookingForOffers name={client.name} />}
         <DescriptionList
           contentSlot={[
             <PropertyRow key="id" label="Client ID" value={client.clientId} valueClassName="font-mono break-all" />,
@@ -274,7 +273,7 @@ export function PairDialog({ open, onOpenChange, onPaired }: PairDialogProps) {
               description="The claim the user's groups are released in. Change it for an app that reads roles from another name."
               placeholder={DEFAULT_GROUPS_CLAIM}
             />
-            {start.error === null ? null : (
+            {start.error !== null && (
               <Alert variant="destructive" title="No setup URL made" description={messageOf(start.error)} />
             )}
           </FormElement>

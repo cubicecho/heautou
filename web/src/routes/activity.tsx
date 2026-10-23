@@ -17,8 +17,9 @@ import { PageLayout } from '@/components/page-layout';
 import { QueryState } from '@/components/query-state';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { type AuditFilters, useAuditFeed, useAuditLog, useUsers } from '@/core/admin';
 import { Activity } from '@/core/app-icons';
+import { type AuditFilters, useAuditFeed, useAuditLog } from '@/core/audit';
+import { useUsers } from '@/core/users';
 import { formatAgo, formatDateTime, joinStats } from '@/lib/format';
 
 export const Route = createFileRoute('/activity')({ component: ActivityPage });
@@ -120,14 +121,14 @@ function ActivityPage() {
                 meta={
                   // Quieter than the title, since what happened is read first. The tooltip has the exact time.
                   <span className="flex items-center gap-2 text-foreground/60 text-xs" title={formatDateTime(entry.at)}>
-                    {isWarning(entry.type) ? <Badge variant="destructive">Failed</Badge> : null}
+                    {isWarning(entry.type) && <Badge variant="destructive">Failed</Badge>}
                     {formatAgo(entry.at)}
                   </span>
                 }
               />
             ))}
           />
-          {query.hasNextPage ? (
+          {query.hasNextPage && (
             <div className="flex justify-center">
               <Button
                 variant="outline"
@@ -136,7 +137,7 @@ function ActivityPage() {
                 onClick={() => query.fetchNextPage()}
               />
             </div>
-          ) : null}
+          )}
         </>
       }
     />

@@ -8,7 +8,7 @@ import { errorMessage } from '../core/errors.ts';
 import { createExpiringMap } from '../core/expiring-map.ts';
 import { authenticationOptions, relyingPartyOf, verifyAuthentication } from '../core/webauthn.ts';
 import { HttpStatus } from '../core/wire.ts';
-import { sameOriginJson } from '../http/guards.ts';
+import { sameOriginJson, sendRefusal } from '../http/guards.ts';
 import { type LoginThrottle, sendTooMany } from '../http/rate-limit.ts';
 import { type AuditEvent, type AuditLog, AuditType, actorOf } from '../store/audit.ts';
 import type { ClientStore } from '../store/clients.ts';
@@ -137,17 +137,6 @@ export interface InteractionDeps {
   upstreamFlows: UpstreamFlows;
   /** The clock, in epoch milliseconds, for how long a sign-in may wait for its second factor. */
   now?: () => number;
-}
-
-/**
- * Says why an interaction could not go on, in JSON the sign-in page shows.
- *
- * @param res - The response.
- * @param status - The HTTP status.
- * @param message - What went wrong, for a person.
- */
-function sendError(res: Response, status: HttpStatus, message: string): void {
-  res.status(status).json({ error: message });
 }
 
 /**
@@ -306,7 +295,7 @@ export function createInteractionRouter(deps: InteractionDeps): Router {
   ): Promise<boolean> => {
     const refusal = await refusalFor(provider, req, res, user, record);
     if (refusal !== null) {
-      sendError(res, HttpStatus.Forbidden, refusal);
+      sendRefusal(res, HttpStatus.Forbidden, refusal);
       return false;
     }
     return true;
@@ -395,7 +384,7 @@ export function createInteractionRouter(deps: InteractionDeps): Router {
       return;
     }
     pending.set(uid, { userId: user.id, failures, upstream: pending.get(uid)?.upstream ?? null });
-    sendError(res, HttpStatus.Unauthorized, message);
+    sendRefusal(res, HttpStatus.Unauthorized, message);
   };
 
   /**
@@ -499,7 +488,7 @@ export function createInteractionRouter(deps: InteractionDeps): Router {
         secondFactor: waiting?.upstream ? { ...choiceFor(waiting.userId), provider: waiting.upstream.name } : null,
       });
     } catch (error) {
-      sendError(res, HttpStatus.BadRequest, errorMessage(error));
+      sendRefusal(res, HttpStatus.BadRequest, errorMessage(error));
     }
   });
 
@@ -507,7 +496,7 @@ export function createInteractionRouter(deps: InteractionDeps): Router {
   router.post(`${INTERACTION_PATH}/:uid/login`, ...loginBody, async (req, res) => {
     const parsed = credentialsSchema.safeParse(req.body);
     if (parsed.success === false) {
-      sendError(res, HttpStatus.BadRequest, 'Send a username and a password.');
+      sendRefusal(res, HttpStatus.BadRequest, 'Send a username and a password.');
       return;
     }
     const { username, password } = parsed.data;
@@ -541,7 +530,7 @@ export function createInteractionRouter(deps: InteractionDeps): Router {
       if (user === null) {
         throttle.fail(ip, username);
         record(AuditType.SignInFailed);
-        sendError(res, HttpStatus.Unauthorized, 'That username and password do not match.');
+        sendRefusal(res, HttpStatus.Unauthorized, 'That username and password do not match.');
         return;
       }
       throttle.succeed(username);
@@ -557,14 +546,14 @@ export function createInteractionRouter(deps: InteractionDeps): Router {
       }
       await finish(provider, req, res, user, SignInMethod.Password);
     } catch (error) {
-      sendError(res, HttpStatus.BadRequest, errorMessage(error));
+      sendRefusal(res, HttpStatus.BadRequest, errorMessage(error));
     }
   });
 
   router.post(`${INTERACTION_PATH}/:uid/second-factor`, ...loginBody, async (req, res) => {
     const parsed = codeSchema.safeParse(req.body);
     if (parsed.success === false) {
-      sendError(res, HttpStatus.BadRequest, 'Send the code.');
+      sendRefusal(res, HttpStatus.BadRequest, 'Send the code.');
       return;
     }
     const provider = host.current();
@@ -589,7 +578,7 @@ export function createInteractionRouter(deps: InteractionDeps): Router {
       }
       secondFactorFailed(req, res, uid, user, record, 'That code is not right, or was already used.');
     } catch (error) {
-      sendError(res, HttpStatus.BadRequest, errorMessage(error));
+      sendRefusal(res, HttpStatus.BadRequest, errorMessage(error));
     }
   });
 
@@ -599,21 +588,21 @@ export function createInteractionRouter(deps: InteractionDeps): Router {
       const { uid } = await provider.interactionDetails(req, res);
       const waiting = pending.get(uid);
       if (rp.isAvailable === false) {
-        sendError(res, HttpStatus.BadRequest, 'Passkeys need this site to be served over https.');
+        sendRefusal(res, HttpStatus.BadRequest, 'Passkeys need this site to be served over https.');
         return;
       }
       const options = await authenticationOptions(rp, waiting === null ? null : factors.passkeysOf(waiting.userId));
       challenges.set(uid, options.challenge);
       res.json({ options });
     } catch (error) {
-      sendError(res, HttpStatus.BadRequest, errorMessage(error));
+      sendRefusal(res, HttpStatus.BadRequest, errorMessage(error));
     }
   });
 
   router.post(`${INTERACTION_PATH}/:uid/passkey`, ...loginBody, async (req, res) => {
     const parsed = passkeyAnswerSchema.safeParse(req.body);
     if (parsed.success === false) {
-      sendError(res, HttpStatus.BadRequest, 'Send the passkey’s answer.');
+      sendRefusal(res, HttpStatus.BadRequest, 'Send the passkey’s answer.');
       return;
     }
     const provider = host.current();
@@ -663,7 +652,7 @@ export function createInteractionRouter(deps: InteractionDeps): Router {
           ip: req.ip ?? null,
           detail: { method: SignInMethod.Passkey },
         });
-        sendError(res, HttpStatus.Unauthorized, 'That passkey is not registered here, or did not work. Try again.');
+        sendRefusal(res, HttpStatus.Unauthorized, 'That passkey is not registered here, or did not work. Try again.');
         return;
       }
       await factors.usedPasskey(found.passkey.id, check.counter);
@@ -683,7 +672,7 @@ export function createInteractionRouter(deps: InteractionDeps): Router {
         await finish(provider, req, res, owner, SignInMethod.Passkey);
       }
     } catch (error) {
-      sendError(res, HttpStatus.BadRequest, errorMessage(error));
+      sendRefusal(res, HttpStatus.BadRequest, errorMessage(error));
     }
   });
 

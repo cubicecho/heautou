@@ -8,15 +8,21 @@ import type { Api } from '../store/apis.ts';
 import type { Branding } from '../store/branding.ts';
 import { DEFAULT_GROUPS_CLAIM } from '../store/claims.ts';
 import { CLIENT_SOURCE_ADMIN, type OidcClient } from '../store/clients.ts';
-import type { FactorsDocument, UserFactors } from '../store/factors.ts';
+import type { FactorsDocument, Passkey, UserFactors } from '../store/factors.ts';
 import type { ProviderKeys } from '../store/keys.ts';
 import type { MailDocument } from '../store/mail.ts';
 import type { PairingDocument } from '../store/pairings.ts';
 import type { PasswordLinkDocument } from '../store/password-links.ts';
-import { EMPTY_PROTECTED_SITES, type ProtectedSitesDocument } from '../store/protected-sites.ts';
-import type { ProxySessionDocument } from '../store/proxy-sessions.ts';
+import { EMPTY_PROTECTED_SITES, type ProtectedSite, type ProtectedSitesDocument } from '../store/protected-sites.ts';
+import type { ProxySession, ProxySessionDocument } from '../store/proxy-sessions.ts';
 import type { SettingsDocument } from '../store/settings.ts';
-import { EMPTY_UPSTREAMS, UnknownIdentity, type UpstreamsDocument } from '../store/upstreams.ts';
+import {
+  EMPTY_UPSTREAMS,
+  UnknownIdentity,
+  type UpstreamLink,
+  type UpstreamProvider,
+  type UpstreamsDocument,
+} from '../store/upstreams.ts';
 import type { User } from '../store/users.ts';
 import type { WebSessionDocument } from '../store/web-sessions.ts';
 import { type DocumentMapping, type LooseMapping, loosen } from './document.ts';
@@ -77,6 +83,14 @@ const JSON_EXTENSION = '.json';
 export function archivePathOf(name: string): string {
   return `${name}${JSON_EXTENSION}`;
 }
+
+/**
+ * A record as an older version's file may hold it, without the fields that version did not write yet.
+ *
+ * @typeParam T - The record.
+ * @typeParam K - The fields an older file may lack.
+ */
+type Older<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
 
 /**
  * Reads an instant a document keeps as an ISO 8601 string.
@@ -153,7 +167,11 @@ function singleDocument<T>(name: string, fallback: T): DocumentMapping<T, readon
   };
 }
 
-export const USERS_DOCUMENT: DocumentMapping<User[], readonly [typeof users]> = {
+export const USERS_DOCUMENT: DocumentMapping<
+  User[],
+  readonly [typeof users],
+  Older<User, 'passwordHash' | 'email' | 'name' | 'groups' | 'claims' | 'disabled' | 'pictureVersion'>[]
+> = {
   name: DOCUMENT_NAMES.users,
   fallback: [],
   tables: [{ table: users, keys: ['id'] }],
@@ -186,7 +204,28 @@ export const USERS_DOCUMENT: DocumentMapping<User[], readonly [typeof users]> = 
     })),
 };
 
-export const CLIENTS_DOCUMENT: DocumentMapping<OidcClient[], readonly [typeof clients]> = {
+export const CLIENTS_DOCUMENT: DocumentMapping<
+  OidcClient[],
+  readonly [typeof clients],
+  Older<
+    OidcClient,
+    | 'clientSecret'
+    | 'redirectUris'
+    | 'postLogoutRedirectUris'
+    | 'allowedGroups'
+    | 'groupsClaim'
+    | 'allowClientCredentials'
+    | 'allowDeviceFlow'
+    | 'source'
+    | 'logoUri'
+    | 'tokenLifetimes'
+    | 'backchannelLogoutUri'
+    | 'backchannelLogoutSessionRequired'
+    | 'preset'
+    | 'pairingId'
+    | 'clientUri'
+  >[]
+> = {
   name: DOCUMENT_NAMES.clients,
   fallback: [],
   tables: [{ table: clients, keys: ['clientId'] }],
@@ -243,7 +282,11 @@ export const CLIENTS_DOCUMENT: DocumentMapping<OidcClient[], readonly [typeof cl
     })),
 };
 
-export const APIS_DOCUMENT: DocumentMapping<Api[], readonly [typeof apis, typeof apiClients]> = {
+export const APIS_DOCUMENT: DocumentMapping<
+  Api[],
+  readonly [typeof apis, typeof apiClients],
+  Older<Api, 'scopes' | 'accessTokenSeconds' | 'allowedClientIds'>[]
+> = {
   name: DOCUMENT_NAMES.apis,
   fallback: [],
   tables: [
@@ -283,7 +326,22 @@ export const APIS_DOCUMENT: DocumentMapping<Api[], readonly [typeof apis, typeof
 
 export const UPSTREAMS_DOCUMENT: DocumentMapping<
   UpstreamsDocument,
-  readonly [typeof upstreams, typeof upstreamGroupMappings, typeof upstreamLinks]
+  readonly [typeof upstreams, typeof upstreamGroupMappings, typeof upstreamLinks],
+  {
+    providers?: Older<
+      UpstreamProvider,
+      | 'issuer'
+      | 'clientSecret'
+      | 'scopes'
+      | 'unknownIdentity'
+      | 'createDomains'
+      | 'createGroups'
+      | 'countsAsBothFactors'
+      | 'groupsClaim'
+      | 'groupMappings'
+    >[];
+    links?: UpstreamLink[];
+  }
 > = {
   name: DOCUMENT_NAMES.upstreams,
   fallback: EMPTY_UPSTREAMS,
@@ -367,7 +425,8 @@ const NO_FACTORS: Readonly<UserFactors> = Object.freeze({ totp: null, recoveryCo
 
 export const FACTORS_DOCUMENT: DocumentMapping<
   FactorsDocument,
-  readonly [typeof totpFactors, typeof recoveryCodes, typeof passkeys]
+  readonly [typeof totpFactors, typeof recoveryCodes, typeof passkeys],
+  Record<string, Partial<Omit<UserFactors, 'passkeys'>> & { passkeys?: Older<Passkey, 'transports'>[] }>
 > = {
   name: DOCUMENT_NAMES.factors,
   fallback: {},
@@ -430,7 +489,17 @@ export const FACTORS_DOCUMENT: DocumentMapping<
   },
 };
 
-export const PAIRINGS_DOCUMENT: DocumentMapping<PairingDocument, readonly [typeof pairings]> = {
+export const PAIRINGS_DOCUMENT: DocumentMapping<
+  PairingDocument,
+  readonly [typeof pairings],
+  Record<
+    string,
+    Older<
+      PairingDocument[string],
+      'allowedGroups' | 'groupsClaim' | 'clientId' | 'clientUri' | 'deviceClientId' | 'isFinished'
+    >
+  >
+> = {
   name: DOCUMENT_NAMES.pairings,
   fallback: {},
   tables: [{ table: pairings, keys: ['id'] }],
@@ -465,37 +534,63 @@ export const PAIRINGS_DOCUMENT: DocumentMapping<PairingDocument, readonly [typeo
     ),
 };
 
+/** Tokens kept by their hash, each naming a user until it expires: the password links and the web sessions. */
+type HashedTokens = Record<string, { userId: string; expiresAt: number }>;
+
+/** A hashed token's row, in either of their tables. */
+interface HashedTokenRow {
+  tokenHash: string;
+  userId: string;
+  expiresAt: Date;
+}
+
+/**
+ * Lays out hashed tokens as rows.
+ *
+ * @param document - The tokens, by hash.
+ * @returns Their rows.
+ */
+function hashedTokenRows(document: HashedTokens): HashedTokenRow[] {
+  return Object.entries(document).map(([tokenHash, { userId, expiresAt }]) => ({
+    tokenHash,
+    userId,
+    expiresAt: new Date(expiresAt),
+  }));
+}
+
+/**
+ * Builds hashed tokens from their rows.
+ *
+ * @param rows - The rows.
+ * @returns The tokens, by hash.
+ */
+function hashedTokensOf(rows: readonly HashedTokenRow[]): HashedTokens {
+  return Object.fromEntries(
+    rows.map((row) => [row.tokenHash, { userId: row.userId, expiresAt: row.expiresAt.getTime() }]),
+  );
+}
+
 export const PASSWORD_LINKS_DOCUMENT: DocumentMapping<PasswordLinkDocument, readonly [typeof passwordLinks]> = {
   name: DOCUMENT_NAMES.passwordLinks,
   fallback: {},
   tables: [{ table: passwordLinks, keys: ['tokenHash'] }],
-  toRows: (document) => [
-    Object.entries(document).map(([tokenHash, link]) => ({
-      tokenHash,
-      userId: link.userId,
-      expiresAt: new Date(link.expiresAt),
-    })),
-  ],
-  fromRows: ([rows]) =>
-    Object.fromEntries(rows.map((row) => [row.tokenHash, { userId: row.userId, expiresAt: row.expiresAt.getTime() }])),
+  toRows: (document) => [hashedTokenRows(document)],
+  fromRows: ([rows]) => hashedTokensOf(rows),
 };
 
 export const WEB_SESSIONS_DOCUMENT: DocumentMapping<WebSessionDocument, readonly [typeof webSessions]> = {
   name: DOCUMENT_NAMES.webSessions,
   fallback: {},
   tables: [{ table: webSessions, keys: ['tokenHash'] }],
-  toRows: (document) => [
-    Object.entries(document).map(([tokenHash, session]) => ({
-      tokenHash,
-      userId: session.userId,
-      expiresAt: new Date(session.expiresAt),
-    })),
-  ],
-  fromRows: ([rows]) =>
-    Object.fromEntries(rows.map((row) => [row.tokenHash, { userId: row.userId, expiresAt: row.expiresAt.getTime() }])),
+  toRows: (document) => [hashedTokenRows(document)],
+  fromRows: ([rows]) => hashedTokensOf(rows),
 };
 
-export const PROXY_SESSIONS_DOCUMENT: DocumentMapping<ProxySessionDocument, readonly [typeof proxySessions]> = {
+export const PROXY_SESSIONS_DOCUMENT: DocumentMapping<
+  ProxySessionDocument,
+  readonly [typeof proxySessions],
+  Record<string, Older<ProxySession, 'amr'>>
+> = {
   name: DOCUMENT_NAMES.proxySessions,
   fallback: {},
   tables: [{ table: proxySessions, keys: ['tokenHash'] }],
@@ -534,7 +629,10 @@ const PROTECTED_SITES_SETTINGS = singleDocument<Omit<ProtectedSitesDocument, 'si
 
 export const PROTECTED_SITES_DOCUMENT: DocumentMapping<
   ProtectedSitesDocument,
-  readonly [typeof documents, typeof protectedSites]
+  readonly [typeof documents, typeof protectedSites],
+  Omit<ProtectedSitesDocument, 'sites'> & {
+    sites?: Older<ProtectedSite, 'pathPrefix' | 'allowedGroups' | 'requireSecondFactor'>[];
+  }
 > = {
   name: DOCUMENT_NAMES.protectedSites,
   fallback: EMPTY_PROTECTED_SITES,

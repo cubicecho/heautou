@@ -17,7 +17,7 @@
     "codegen": "node server/graphql/write-schema.ts && graphql-codegen && tsr generate",
     "check": "npm run check:biome && npm run check:types",
     "check:biome": "biome check --write .",
-    "check:types": "npm run codegen && tsc --noEmit -p server && tsc --noEmit -p web",
+    "check:types": "npm run codegen && tsc --noEmit -p server && tsc --noEmit -p web && tsc --noEmit -p tests/web",
     "test": "vitest run",
     "backup": "node --env-file-if-exists=.env server/backup.ts",
     "db:generate": "drizzle-kit generate",

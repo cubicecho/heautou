@@ -61,7 +61,7 @@ describe('audit log', () => {
 
   afterEach(() => db.close());
 
-  it('reads entries newest first, a page at a time', async () => {
+  it('reads the newest entries first, at most as many as asked', async () => {
     let time = Date.UTC(2026, 0, 1);
     const log = openAuditLog(db, () => time);
     for (let i = 0; i < 5; i++) {
@@ -69,14 +69,9 @@ describe('audit log', () => {
       time += 1000;
     }
 
-    const first = await log.list({ first: 2 });
-    expect(first.entries.map((entry) => entry.target?.id)).toEqual(['c4', 'c3']);
-    expect(first.entries[0]?.at).toBe('2026-01-01T00:00:04.000Z');
-    const second = await log.list({ first: 2, after: first.nextCursor });
-    expect(second.entries.map((entry) => entry.target?.id)).toEqual(['c2', 'c1']);
-    const last = await log.list({ first: 2, after: second.nextCursor });
-    expect(last.entries.map((entry) => entry.target?.id)).toEqual(['c0']);
-    expect(last.nextCursor).toBeNull();
+    const { entries } = await log.list({ first: 2 });
+    expect(entries.map((entry) => entry.target?.id)).toEqual(['c4', 'c3']);
+    expect(entries[0]?.at).toBe('2026-01-01T00:00:04.000Z');
   });
 
   it('keeps entries recorded in the same millisecond in the order they were recorded', async () => {
@@ -143,16 +138,6 @@ describe('audit log', () => {
     const ids = (await log.list({ first: 200 })).entries.map((entry) => entry.target?.id);
     expect(ids).toHaveLength(rows.length);
     expect(ids).toEqual(Array.from({ length: rows.length }, (_unused, index) => `u${19 - index}`));
-  });
-
-  it('ends the list at a cursor that was pruned since', async () => {
-    const log = openAuditLog(db, Date.now, { keptEntries: 1, pruneEveryEntries: 1 });
-    log.record(userUpdated('u0'));
-    log.record(userUpdated('u1'));
-    const { entries } = await log.list({});
-    expect(entries.map((entry) => entry.target?.id)).toEqual(['u1']);
-    log.record(userUpdated('u2'));
-    expect(await log.list({ after: entries[0]?.id })).toEqual({ entries: [], nextCursor: null });
   });
 
   it('logs a failed write and goes on, without throwing', async () => {

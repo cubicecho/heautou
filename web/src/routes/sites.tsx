@@ -18,7 +18,7 @@ import { CopyButton } from '@/components/ui/copy-button';
 import { FormElement } from '@/components/ui/form-element';
 import { Pencil, Plus, Trash2 } from '@/components/ui/icons';
 import { ExternalLink, ShieldCheck } from '@/core/app-icons';
-import { messageOf } from '@/core/lists';
+import { messageOf } from '@/core/errors';
 import {
   useDeleteProtectedSite,
   useForwardAuth,
@@ -96,7 +96,7 @@ function CookieDomainForm({ settings }: { settings: ForwardAuthFieldsFragment })
           <form.SubmitButton variant="outline" content="Save domain" />
         </form.AppForm>
       </FormElement>
-      {save.error === null ? null : (
+      {save.error !== null && (
         <Alert variant="destructive" title="Domain not saved" description={messageOf(save.error)} />
       )}
     </div>
@@ -123,6 +123,7 @@ function ProxySetupSection({ sites }: { sites: readonly ProtectedSiteFieldsFragm
     return null;
   }
   const hasCookieDomain = settings.cookieDomain !== null && settings.cookieDomain !== undefined;
+  const lacksCookieDomain = hasCookieDomain === false;
   const isSetUp = sites.length > 0 && hasCookieDomain;
 
   return (
@@ -186,7 +187,7 @@ function ProxySetupSection({ sites }: { sites: readonly ProtectedSiteFieldsFragm
                 ]}
               />
               <CookieDomainForm key={settings.cookieDomain ?? ''} settings={settings} />
-              {hasCookieDomain ? null : (
+              {lacksCookieDomain && (
                 <Alert
                   variant="warning"
                   title="No cookie domain"
@@ -219,6 +220,7 @@ function SitesPage() {
   const query = useProtectedSites();
   const remove = useDeleteProtectedSite();
   const sites = query.data ?? [];
+  const isLoaded = query.isPending === false;
   const [openId, setOpenId] = useState<string | null>(null);
   const [editing, setEditing] = useState<Editing>({ kind: 'closed' });
   const isFormOpen = editing.kind !== 'closed';
@@ -245,7 +247,7 @@ function SitesPage() {
       contentClassName="gap-4"
       contentSlot={
         <>
-          {remove.error === null ? null : (
+          {remove.error !== null && (
             <Alert variant="destructive" title="Site not deleted" description={messageOf(remove.error)} />
           )}
           <QueryState
@@ -272,8 +274,8 @@ function SitesPage() {
                 meta={
                   <>
                     <span className="font-mono text-foreground/60 text-xs">{addressOf(site)}</span>
-                    {site.allowedGroups.length === 0 ? null : <Badge variant="secondary">Limited</Badge>}
-                    {site.requireSecondFactor ? <Badge variant="outline">Second factor</Badge> : null}
+                    {site.allowedGroups.length > 0 && <Badge variant="secondary">Limited</Badge>}
+                    {site.requireSecondFactor && <Badge variant="outline">Second factor</Badge>}
                   </>
                 }
                 actionSlot={
@@ -324,8 +326,8 @@ function SitesPage() {
             ))}
           />
           {/* Drawn once the sites are in, since whether it starts open depends on them. */}
-          {query.isPending ? null : <ProxySetupSection sites={sites} />}
-          {isFormOpen ? (
+          {isLoaded && <ProxySetupSection sites={sites} />}
+          {isFormOpen && (
             <SiteFormDialog
               key={editing.kind === 'edit' ? editing.site.id : 'new'}
               site={editing.kind === 'edit' ? editing.site : null}
@@ -333,7 +335,7 @@ function SitesPage() {
               onOpenChange={close}
               onSaved={(saved) => setOpenId(saved.id)}
             />
-          ) : null}
+          )}
         </>
       }
     />

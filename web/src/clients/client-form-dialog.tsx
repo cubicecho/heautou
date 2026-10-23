@@ -1,7 +1,6 @@
 import { useState } from 'react';
-import type { ClientFieldsFragment, TokenLifetimeDefaultsQuery } from '@/__generated__/graphql';
+import { ClientAuthMethod, type ClientFieldsFragment, type TokenLifetimeDefaultsQuery } from '@/__generated__/graphql';
 import { AUTH_METHOD_OPTIONS, AUTH_METHODS, authMethodOf } from '@/clients/auth-methods';
-import { durationText, secondsIn } from '@/clients/durations';
 import { BLANK_PRESET, PRESET_OPTIONS, PresetLinks, SitePresetGuide } from '@/clients/preset-panel';
 import { baseUrlFrom, presetById, presetFields, sitePresetById } from '@/clients/presets';
 import { ComboboxField, InputField, SelectField, SwitchField, TextareaField, useAppForm } from '@/components/app-form';
@@ -9,11 +8,13 @@ import { DialogLayout } from '@/components/dialog-layout';
 import { Disclosure } from '@/components/disclosure';
 import { FieldRow } from '@/components/field-row';
 import { Section } from '@/components/section';
-import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { FormElement } from '@/components/ui/form-element';
-import { useCreateClient, useGroupOptions, useTokenLifetimeDefaults, useUpdateClient } from '@/core/admin';
-import { linesOf, messageOf } from '@/core/lists';
+import { useCreateClient, useTokenLifetimeDefaults, useUpdateClient } from '@/core/clients';
+import { useGroupOptions } from '@/core/groups';
+import { linesOf } from '@/core/lists';
+import { SaveFailure } from '@/core/save-failure';
+import { durationText, secondsIn } from '@/token-lifetimes/durations';
 
 const URI_ROWS = 3;
 /** The claim groups are released in unless the application reads another. */
@@ -73,7 +74,7 @@ function formDefaults(client: ClientFieldsFragment | null) {
     baseUrl: '',
     clientId: '',
     name: client?.name ?? '',
-    authMethod: client?.authMethod ?? 'CLIENT_SECRET_BASIC',
+    authMethod: client?.authMethod ?? ClientAuthMethod.ClientSecretBasic,
     redirectUris: client?.redirectUris.join('\n') ?? '',
     postLogoutRedirectUris: client?.postLogoutRedirectUris.join('\n') ?? '',
     allowedGroups: client?.allowedGroups ?? [],
@@ -119,7 +120,7 @@ function changedAdvanced(values: ClientFormValues): string[] {
   const changes = [
     { isChanged: values.clientId.trim() !== '', name: `client ID ${values.clientId.trim()}` },
     {
-      isChanged: values.authMethod !== 'CLIENT_SECRET_BASIC',
+      isChanged: values.authMethod !== ClientAuthMethod.ClientSecretBasic,
       name: AUTH_METHODS[authMethodOf(values.authMethod)].label,
     },
     { isChanged: linesOf(values.postLogoutRedirectUris).length > 0, name: 'post-logout URIs' },
@@ -159,6 +160,7 @@ interface ClientFormDialogProps {
  */
 export function ClientFormDialog({ client, open, onOpenChange, onSaved }: ClientFormDialogProps) {
   const isEdit = client !== null;
+  const isNew = isEdit === false;
   const groupOptions = useGroupOptions();
   const create = useCreateClient();
   const update = useUpdateClient();
@@ -224,7 +226,7 @@ export function ClientFormDialog({ client, open, onOpenChange, onSaved }: Client
   /** What Advanced opens onto: what most apps leave as it is. */
   const advancedFields = (
     <>
-      {isEdit ? null : (
+      {isNew && (
         <InputField
           form={form}
           name="clientId"
@@ -260,14 +262,14 @@ export function ClientFormDialog({ client, open, onOpenChange, onSaved }: Client
       />
       <form.Subscribe selector={(state) => state.values.backchannelLogoutUri.trim() !== ''}>
         {(hasBackchannelUri) =>
-          hasBackchannelUri ? (
+          hasBackchannelUri && (
             <SwitchField
               form={form}
               name="backchannelLogoutSessionRequired"
               label="Send the session ID"
               description="Puts the session ID (sid) in the logout token and the ID tokens, for an application that ends sessions by it."
             />
-          ) : null
+          )
         }
       </form.Subscribe>
       <InputField
@@ -345,7 +347,7 @@ export function ClientFormDialog({ client, open, onOpenChange, onSaved }: Client
       hasUnsavedChanges={() => form.state.isDefaultValue === false}
       contentSlot={
         <FormElement onSubmit={() => form.handleSubmit()} className="grid gap-4">
-          {isEdit ? null : (
+          {isNew && (
             <SelectField
               form={form}
               name="preset"
@@ -386,7 +388,7 @@ export function ClientFormDialog({ client, open, onOpenChange, onSaved }: Client
           </form.Subscribe>
           <form.Subscribe selector={(state) => sitePresetById(state.values.preset) === undefined}>
             {(isClient) =>
-              isClient ? (
+              isClient && (
                 <>
                   <InputField
                     form={form}
@@ -445,10 +447,10 @@ export function ClientFormDialog({ client, open, onOpenChange, onSaved }: Client
                     )}
                   </form.Subscribe>
                 </>
-              ) : null
+              )
             }
           </form.Subscribe>
-          {failure === null ? null : <Alert variant="destructive" title="Not saved" description={messageOf(failure)} />}
+          <SaveFailure error={failure} />
         </FormElement>
       }
       footerActionsSlot={(close) => (

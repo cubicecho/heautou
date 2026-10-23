@@ -1,4 +1,4 @@
-import type { ClientAuthMethod } from '@/__generated__/graphql';
+import { ClientAuthMethod } from '@/__generated__/graphql';
 
 /** What each way of proving a client's identity is called, and when to pick it. */
 export const AUTH_METHODS: Record<ClientAuthMethod, { label: string; description: string }> = {
@@ -17,7 +17,11 @@ export const AUTH_METHODS: Record<ClientAuthMethod, { label: string; description
 };
 
 /** The choices, in the order the select lists them. */
-export const AUTH_METHOD_OPTIONS = (['CLIENT_SECRET_BASIC', 'CLIENT_SECRET_POST', 'NONE'] as const).map((value) => ({
+export const AUTH_METHOD_OPTIONS = [
+  ClientAuthMethod.ClientSecretBasic,
+  ClientAuthMethod.ClientSecretPost,
+  ClientAuthMethod.None,
+].map((value) => ({
   value,
   label: AUTH_METHODS[value].label,
 }));
@@ -29,5 +33,5 @@ export const AUTH_METHOD_OPTIONS = (['CLIENT_SECRET_BASIC', 'CLIENT_SECRET_POST'
  * @returns The auth method, or the default when it is none of them.
  */
 export function authMethodOf(value: string): ClientAuthMethod {
-  return AUTH_METHOD_OPTIONS.find((option) => option.value === value)?.value ?? 'CLIENT_SECRET_BASIC';
+  return AUTH_METHOD_OPTIONS.find((option) => option.value === value)?.value ?? ClientAuthMethod.ClientSecretBasic;
 }

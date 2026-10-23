@@ -6,8 +6,9 @@ import { ListItem } from '@/components/list-item';
 import { EmptyState } from '@/components/page';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { useUnlinkUserUpstream, useUsers } from '@/core/admin';
-import { messageOf } from '@/core/lists';
+import { messageOf } from '@/core/errors';
+import { useUnlinkUserUpstream } from '@/core/upstreams';
+import { useUsers } from '@/core/users';
 import { formatAgo, joinStats } from '@/lib/format';
 
 interface LinkedAccountsDialogProps {
@@ -26,6 +27,7 @@ export function LinkedAccountsDialog({ user, open, onOpenChange }: LinkedAccount
   // The list is read again after an unlink, so the dialog follows it rather than the row it opened from.
   const current = useUsers().data?.find((each) => each.id === user.id) ?? user;
   const links = current.upstreamLinks;
+  const hasNoLinks = links.length === 0;
 
   return (
     <DialogLayout
@@ -35,7 +37,7 @@ export function LinkedAccountsDialog({ user, open, onOpenChange }: LinkedAccount
       description="Accounts at sign-in providers that sign in as this user."
       contentSlot={
         <div className="grid gap-4">
-          {links.length === 0 ? <EmptyState compact title="Nothing is linked." /> : null}
+          {hasNoLinks && <EmptyState compact title="Nothing is linked." />}
           <List
             label="Linked accounts"
             contentSlot={links.map((link) => (
@@ -65,7 +67,7 @@ export function LinkedAccountsDialog({ user, open, onOpenChange }: LinkedAccount
               />
             ))}
           />
-          {unlink.error === null ? null : (
+          {unlink.error !== null && (
             <Alert variant="destructive" title="Not unlinked" description={messageOf(unlink.error)} />
           )}
         </div>

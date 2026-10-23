@@ -22,8 +22,8 @@ import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { CodeBlock } from '@/components/ui/code';
 import { CopyButton } from '@/components/ui/copy-button';
-import { useProviderInfo } from '@/core/admin';
 import { ExternalLink, ShieldCheck } from '@/core/app-icons';
+import { useProviderInfo } from '@/core/provider';
 
 /** What the panel shows for the app's address when no redirect URI holds it any more. */
 const UNKNOWN_BASE_URL = '<app address>';
@@ -247,7 +247,7 @@ export function PresetPanel({
       }
       contentSlot={
         <div className="flex flex-col gap-3">
-          {preset.notes === undefined ? null : <Alert variant="info" description={<NoteList notes={preset.notes} />} />}
+          {preset.notes !== undefined && <Alert variant="info" description={<NoteList notes={preset.notes} />} />}
           <ConfigView
             config={config}
             secret={{ value: client.clientSecret ?? null, isShown: isSecretShown, onShownChange: onSecretShownChange }}
@@ -296,7 +296,7 @@ export function SitePresetGuide({ preset }: { preset: SitePreset }) {
         />
       </div>
       <p className="text-foreground/70 text-sm">{preset.where}</p>
-      {config === null ? null : <ConfigView config={config} />}
+      {config !== null && <ConfigView config={config} />}
     </div>
   );
 }

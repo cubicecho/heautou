@@ -24,54 +24,27 @@ export function commaListOf(text: string): string[] {
     .filter((entry) => entry !== '');
 }
 
-/**
- * Says why an action failed, for an `Alert`.
- *
- * @param error - What the mutation threw.
- * @returns Its message, or a sentence when it has none.
- */
-export function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : 'The server did not answer.';
-}
-
-/** A claim of the operator's own, as the API takes it. */
-export interface ClaimEntry {
+/** One line typed as `name=value`, split at its first separator. */
+export interface LinePair {
+  /** What comes before the separator, trimmed; the whole line when it has none. */
   name: string;
+  /** What comes after it, trimmed; empty when the line has none. */
   value: string;
 }
 
 /**
- * Reads claims typed one per line as `name=value`.
+ * Reads lines typed as `name=value`, one per line, each split at its first separator.
  *
  * @param text - The textarea's value.
- * @returns The claims, names and values trimmed; a line with no `=` has an empty value.
+ * @param separator - What separates the name from the value.
+ * @returns The non-blank lines as pairs.
  */
-export function claimsOf(text: string): ClaimEntry[] {
+export function pairsOf(text: string, separator: string): LinePair[] {
   return linesOf(text).map((line) => {
-    const at = line.indexOf('=');
-    return at === -1 ? { name: line, value: '' } : { name: line.slice(0, at).trim(), value: line.slice(at + 1).trim() };
+    const at = line.indexOf(separator);
+    const hasValue = at !== -1;
+    return hasValue
+      ? { name: line.slice(0, at).trim(), value: line.slice(at + separator.length).trim() }
+      : { name: line, value: '' };
   });
-}
-
-/**
- * Writes claims one per line, for the textarea `claimsOf` reads.
- *
- * @param claims - The claims, value by name.
- * @returns The text.
- */
-export function claimsText(claims: Readonly<Record<string, string>>): string {
-  return Object.entries(claims)
-    .map(([name, value]) => `${name}=${value}`)
-    .join('\n');
-}
-
-/**
- * Says what is wrong with typed claims.
- *
- * @param text - The textarea's value.
- * @returns The problem, or undefined when there is none.
- */
-export function claimsProblem(text: string): string | undefined {
-  const bad = linesOf(text).find((line) => line.indexOf('=') < 1);
-  return bad === undefined ? undefined : `Write "${bad}" as name=value.`;
 }

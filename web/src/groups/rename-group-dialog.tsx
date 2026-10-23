@@ -3,8 +3,8 @@ import { DialogLayout } from '@/components/dialog-layout';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { FormElement } from '@/components/ui/form-element';
-import { useRenameGroup } from '@/core/admin';
-import { messageOf } from '@/core/lists';
+import { messageOf } from '@/core/errors';
+import { useRenameGroup } from '@/core/groups';
 
 interface RenameGroupDialogProps {
   /** The group's current name. */
@@ -46,7 +46,7 @@ export function RenameGroupDialog({ name, open, onOpenChange }: RenameGroupDialo
             description="Naming it after a group that exists merges the two."
             validators={{ onChange: ({ value }) => (value.trim() ? undefined : 'Give the group a name.') }}
           />
-          {rename.error === null ? null : (
+          {rename.error !== null && (
             <Alert variant="destructive" title="Not renamed" description={messageOf(rename.error)} />
           )}
         </FormElement>

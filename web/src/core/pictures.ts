@@ -1,16 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 import { ProfilePicturesDocument } from '@/__generated__/graphql';
-import { KEYS } from '@/core/admin';
 import { request } from '@/core/gql';
 import { jsonReply, postJson } from '@/core/json-reply';
+import { QUERY_KEYS, refetching } from '@/core/query-keys';
 
 /** The image types the server takes for a picture. It checks them again by their bytes. */
 export const PICTURE_TYPES = 'image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp';
 
 const ACCOUNT_PICTURE = '/api/account/picture';
-const ACCOUNT_PICTURE_KEY = ['account', 'picture'] as const;
-const PICTURES_KEY = ['profilePictures'] as const;
 
 const accountPictureSchema = z.object({ isEnabled: z.boolean(), maxBytes: z.number(), url: z.string().nullable() });
 const pictureSchema = z.object({ url: z.string().nullable() });
@@ -50,7 +48,7 @@ function userPicturePath(id: string): string {
  */
 export function useAccountPicture() {
   return useQuery({
-    queryKey: ACCOUNT_PICTURE_KEY,
+    queryKey: QUERY_KEYS.accountPicture,
     queryFn: async () => jsonReply(await fetch(ACCOUNT_PICTURE), accountPictureSchema),
     retry: false,
   });
@@ -65,7 +63,7 @@ export function useSetAccountPicture() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (picture: PictureUpload) => postPicture(ACCOUNT_PICTURE, picture),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ACCOUNT_PICTURE_KEY }),
+    onSuccess: refetching(queryClient, QUERY_KEYS.accountPicture),
   });
 }
 
@@ -78,7 +76,7 @@ export function useRemoveAccountPicture() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async () => jsonReply(await postJson(`${ACCOUNT_PICTURE}/remove`, {}), pictureSchema),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ACCOUNT_PICTURE_KEY }),
+    onSuccess: refetching(queryClient, QUERY_KEYS.accountPicture),
   });
 }
 
@@ -89,7 +87,7 @@ export function useRemoveAccountPicture() {
  */
 export function useProfilePictures() {
   return useQuery({
-    queryKey: PICTURES_KEY,
+    queryKey: QUERY_KEYS.profilePictures,
     queryFn: async () => (await request(ProfilePicturesDocument)).profilePictures,
   });
 }
@@ -103,7 +101,7 @@ export function useSetUserPicture() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, picture }: { id: string; picture: PictureUpload }) => postPicture(userPicturePath(id), picture),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: KEYS.users }),
+    onSuccess: refetching(queryClient, QUERY_KEYS.users),
   });
 }
 
@@ -116,6 +114,6 @@ export function useRemoveUserPicture() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => jsonReply(await postJson(`${userPicturePath(id)}/remove`, {}), pictureSchema),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: KEYS.users }),
+    onSuccess: refetching(queryClient, QUERY_KEYS.users),
   });
 }

@@ -5,8 +5,8 @@ import { PasswordField } from '@/components/password-field';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { FormElement } from '@/components/ui/form-element';
-import { useSetUserPassword } from '@/core/admin';
-import { messageOf } from '@/core/lists';
+import { messageOf } from '@/core/errors';
+import { useSetUserPassword } from '@/core/users';
 import { PasswordStrengthMeter } from '@/passwords/strength-meter';
 import { passwordProblem } from '@/users/user-form-dialog';
 
@@ -51,7 +51,7 @@ export function PasswordDialog({ user, open, onOpenChange }: PasswordDialogProps
           <form.Subscribe selector={(state) => state.values.password}>
             {(password) => <PasswordStrengthMeter password={password} owner={[user.username, user.name, user.email]} />}
           </form.Subscribe>
-          {setPassword.error === null ? null : (
+          {setPassword.error !== null && (
             <Alert variant="destructive" title="Password not set" description={messageOf(setPassword.error)} />
           )}
         </FormElement>

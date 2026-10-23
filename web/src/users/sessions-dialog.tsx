@@ -8,9 +8,9 @@ import { QueryState } from '@/components/query-state';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { X } from '@/components/ui/icons';
-import { useEndUserSession, useSignOutUser, useUserSessions } from '@/core/admin';
 import { LogOut } from '@/core/app-icons';
-import { messageOf } from '@/core/lists';
+import { messageOf } from '@/core/errors';
+import { useEndUserSession, useSignOutUser, useUserSessions } from '@/core/users';
 import { formatAgo, formatDateTime, joinStats } from '@/lib/format';
 
 interface SessionsDialogProps {
@@ -70,9 +70,7 @@ export function SessionsDialog({ user, open, onOpenChange }: SessionsDialogProps
               />
             ))}
           />
-          {failure === null ? null : (
-            <Alert variant="destructive" title="Not signed out" description={messageOf(failure)} />
-          )}
+          {failure !== null && <Alert variant="destructive" title="Not signed out" description={messageOf(failure)} />}
         </div>
       }
       footerActionsSlot={(close) => (

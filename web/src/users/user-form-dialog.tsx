@@ -2,11 +2,12 @@ import type { UserFieldsFragment } from '@/__generated__/graphql';
 import { ComboboxField, InputField, TextareaField, useAppForm } from '@/components/app-form';
 import { DialogLayout } from '@/components/dialog-layout';
 import { PasswordField } from '@/components/password-field';
-import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { FormElement } from '@/components/ui/form-element';
-import { useCreateUser, useGroupOptions, useUpdateUser } from '@/core/admin';
-import { claimsOf, claimsProblem, claimsText, messageOf } from '@/core/lists';
+import { claimsOf, claimsProblem, claimsText } from '@/core/claims';
+import { useGroupOptions } from '@/core/groups';
+import { SaveFailure } from '@/core/save-failure';
+import { useCreateUser, useUpdateUser } from '@/core/users';
 import { PasswordStrengthMeter } from '@/passwords/strength-meter';
 
 /** The shortest password the form takes. The server takes any; this is a typo guard. */
@@ -40,6 +41,7 @@ export function passwordProblem(value: string): string | undefined {
  */
 export function UserFormDialog({ user, open, onOpenChange, onInvited }: UserFormDialogProps) {
   const isEdit = user !== null;
+  const isNew = isEdit === false;
   const groupOptions = useGroupOptions();
   const create = useCreateUser();
   const update = useUpdateUser();
@@ -92,7 +94,7 @@ export function UserFormDialog({ user, open, onOpenChange, onInvited }: UserForm
             autoComplete="off"
             validators={{ onChange: ({ value }) => (value.trim() ? undefined : 'Give the user a username.') }}
           />
-          {isEdit ? null : (
+          {isNew && (
             <PasswordField
               form={form}
               name="password"
@@ -102,7 +104,7 @@ export function UserFormDialog({ user, open, onOpenChange, onInvited }: UserForm
               validators={{ onChange: ({ value }) => (value === '' ? undefined : passwordProblem(value)) }}
             />
           )}
-          {isEdit ? null : (
+          {isNew && (
             <form.Subscribe selector={(state) => state.values}>
               {({ password, username, name, email }) => (
                 <PasswordStrengthMeter password={password} owner={[username, name, email]} />
@@ -130,7 +132,7 @@ export function UserFormDialog({ user, open, onOpenChange, onInvited }: UserForm
             placeholder="quota=50GB"
             validators={{ onChange: ({ value }) => claimsProblem(value) }}
           />
-          {failure === null ? null : <Alert variant="destructive" title="Not saved" description={messageOf(failure)} />}
+          <SaveFailure error={failure} />
         </FormElement>
       }
       footerActionsSlot={(close) => (

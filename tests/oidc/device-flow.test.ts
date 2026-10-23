@@ -1,11 +1,12 @@
+import { z } from 'zod';
 import { DEVICE_FLOW_DEFAULTS, TOKEN_LIFETIME_DEFAULTS } from '../../server/core/defaults.ts';
 import { HttpStatus } from '../../server/core/wire.ts';
 import { DEVICE_CODE_GRANT } from '../../server/oidc/adapter.ts';
 import { AuditType, SIGN_IN_TYPES } from '../../server/store/audit.ts';
 import { ClientAuthMethod, type OidcClient } from '../../server/store/clients.ts';
 import type { PublicUser } from '../../server/store/users.ts';
-import { startTestApp, type TestApp } from '../helpers.ts';
-import { type Browser, createBrowser, PASSWORD, payloadOf } from './browser.ts';
+import { type Browser, createBrowser, locationOf, PASSWORD, payloadOf } from '../browser.ts';
+import { createTestUser, startTestApp, type TestApp } from '../helpers.ts';
 
 const TELOS_API = 'https://telos.home.lan/api';
 /** An access token lifetime the API sets, unlike any default. */
@@ -16,14 +17,15 @@ const SCOPE = 'openid email offline_access';
 const MAX_HOPS = 12;
 
 /** The device authorization response (RFC 8628, section 3.2). */
-interface DeviceAuthorization {
-  device_code: string;
-  user_code: string;
-  verification_uri: string;
-  verification_uri_complete: string;
-  expires_in: number;
-  interval: number;
-}
+const deviceAuthorizationSchema = z.object({
+  device_code: z.string(),
+  user_code: z.string(),
+  verification_uri: z.string(),
+  verification_uri_complete: z.string(),
+  expires_in: z.number(),
+  interval: z.number(),
+});
+type DeviceAuthorization = z.infer<typeof deviceAuthorizationSchema>;
 
 /**
  * POSTs a form to the provider, as a device does.
@@ -47,15 +49,17 @@ async function postForm(
 }
 
 /**
- * Starts the device flow for a public client.
+ * Starts the device flow for a public client, which the provider must accept.
  *
  * @param app - The running app.
  * @param client - The client.
- * @param [resource] - The API asked for.
- * @returns The status and the reply.
+ * @param [scope] - What the device asks for.
+ * @returns The device authorization response.
  */
-function startDevice(app: TestApp, client: OidcClient, resource: string = TELOS_API) {
-  return postForm(app, '/device/auth', { client_id: client.clientId, scope: SCOPE, resource });
+async function startDevice(app: TestApp, client: OidcClient, scope = SCOPE): Promise<DeviceAuthorization> {
+  const started = await postForm(app, '/device/auth', { client_id: client.clientId, scope, resource: TELOS_API });
+  expect(started.status).toBe(HttpStatus.Ok);
+  return deviceAuthorizationSchema.parse(started.body);
 }
 
 /**
@@ -72,21 +76,6 @@ function poll(app: TestApp, client: OidcClient, deviceCode: string) {
     device_code: deviceCode,
     client_id: client.clientId,
   });
-}
-
-/**
- * Reads a redirect's target as a URL on the app.
- *
- * @param app - The running app.
- * @param res - The response.
- * @returns The URL it sends the browser to.
- */
-function locationOf(app: TestApp, res: Response): URL {
-  const location = res.headers.get('location');
-  if (location === null) {
-    throw new Error(`Expected a redirect, got ${res.status}.`);
-  }
-  return new URL(location, app.base);
 }
 
 /**
@@ -184,13 +173,7 @@ describe('device flow', () => {
 
   beforeEach(async () => {
     app = await startTestApp();
-    ada = await app.services.users.create({
-      username: 'ada',
-      password: PASSWORD,
-      name: 'Ada Lovelace',
-      email: 'ada@example.com',
-      groups: [],
-    });
+    ada = await createTestUser(app, { username: 'ada', name: 'Ada Lovelace', email: 'ada@example.com' });
     hub = await app.services.clients.create({
       name: 'Home Assistant',
       authMethod: ClientAuthMethod.None,
@@ -215,9 +198,7 @@ describe('device flow', () => {
   });
 
   it('answers pending, then slow_down, then gives a JWT for the API, an ID token and a refresh token', async () => {
-    const started = await startDevice(app, hub);
-    expect(started.status).toBe(HttpStatus.Ok);
-    const device = started.body as unknown as DeviceAuthorization;
+    const device = await startDevice(app, hub);
     expect(device).toMatchObject({
       device_code: expect.any(String),
       user_code: expect.stringMatching(/^[A-Z]{4}-[A-Z]{4}$/),
@@ -293,12 +274,7 @@ describe('device flow', () => {
       allowedClientIds: [hub.clientId],
       accessTokenSeconds: API_SECONDS,
     });
-    const started = await postForm(app, '/device/auth', {
-      client_id: hub.clientId,
-      scope: `${SCOPE} todos`,
-      resource: TELOS_API,
-    });
-    const device = started.body as unknown as DeviceAuthorization;
+    const device = await startDevice(app, hub, `${SCOPE} todos`);
     const browser = createBrowser(app.base);
     await approve(app, browser, await enterCode(app, browser, device.user_code), 'ada');
     const tokens = await poll(app, hub, device.device_code);
@@ -310,7 +286,7 @@ describe('device flow', () => {
   });
 
   it('opens the confirm step from verification_uri_complete', async () => {
-    const device = (await startDevice(app, hub)).body as unknown as DeviceAuthorization;
+    const device = await startDevice(app, hub);
     const browser = createBrowser(app.base);
     // The page has no form secret yet, so it goes to the provider's /device with the code, which posts it on.
     const res = await browser.send(`/oidc/device?user_code=${encodeURIComponent(device.user_code)}`);
@@ -326,7 +302,7 @@ describe('device flow', () => {
   });
 
   it('tells the device access_denied when the user cancels', async () => {
-    const device = (await startDevice(app, hub)).body as unknown as DeviceAuthorization;
+    const device = await startDevice(app, hub);
     const browser = createBrowser(app.base);
     const confirm = await enterCode(app, browser, device.user_code);
     const cancelled = await press(app, browser, confirm, 'abort');
@@ -336,7 +312,7 @@ describe('device flow', () => {
   });
 
   it('audits the code shown and the approval, never with the code', async () => {
-    const device = (await startDevice(app, hub)).body as unknown as DeviceAuthorization;
+    const device = await startDevice(app, hub);
     const [issued] = (await app.services.audit.list({ types: [AuditType.DeviceCodeIssued] })).entries;
     expect(issued).toMatchObject({
       actor: null,
@@ -363,7 +339,7 @@ describe('device flow', () => {
   });
 
   it('audits a cancelled code as refused, once', async () => {
-    const device = (await startDevice(app, hub)).body as unknown as DeviceAuthorization;
+    const device = await startDevice(app, hub);
     const browser = createBrowser(app.base);
     const cancelled = await press(app, browser, await enterCode(app, browser, device.user_code), 'abort');
     // Entering the code again only says it was used; that is not a second refusal.
@@ -385,7 +361,7 @@ describe('device flow', () => {
   });
 
   it('tells the device expired_token once its code has run out', async () => {
-    const device = (await startDevice(app, hub)).body as unknown as DeviceAuthorization;
+    const device = await startDevice(app, hub);
     const provider = app.services.host.current();
     const code = await provider.DeviceCode.find(device.device_code);
     if (code === undefined) {
@@ -415,13 +391,17 @@ describe('device flow', () => {
 
   it('refuses an API that does not list the client', async () => {
     await app.services.apis.create({ identifier: 'https://notes.home.lan', name: 'Notes', scopes: [] });
-    const refused = await startDevice(app, hub, 'https://notes.home.lan');
+    const refused = await postForm(app, '/device/auth', {
+      client_id: hub.clientId,
+      scope: SCOPE,
+      resource: 'https://notes.home.lan',
+    });
     expect(refused).toMatchObject({ status: HttpStatus.BadRequest, body: { error: 'invalid_target' } });
   });
 
   it('refuses a user outside the client’s groups at sign-in', async () => {
     await app.services.clients.update(hub.clientId, { ...hub, allowedGroups: ['family'] });
-    const device = (await startDevice(app, hub)).body as unknown as DeviceAuthorization;
+    const device = await startDevice(app, hub);
     const browser = createBrowser(app.base);
     const confirm = await enterCode(app, browser, device.user_code);
     await expect(approve(app, browser, confirm, 'ada')).rejects.toThrow(`answered ${HttpStatus.Forbidden}`);
@@ -429,7 +409,7 @@ describe('device flow', () => {
   });
 
   it('revokes the refresh token when the user’s session is ended', async () => {
-    const device = (await startDevice(app, hub)).body as unknown as DeviceAuthorization;
+    const device = await startDevice(app, hub);
     const browser = createBrowser(app.base);
     await approve(app, browser, await enterCode(app, browser, device.user_code), 'ada');
     const tokens = await poll(app, hub, device.device_code);

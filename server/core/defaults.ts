@@ -12,7 +12,7 @@ export interface HttpSettings {
   trustProxy: boolean | number | string;
 }
 
-export const HTTP_DEFAULTS: Readonly<HttpSettings> = Object.freeze({
+export const HTTP_DEFAULTS: Readonly<HttpSettings> = /* @__PURE__ */ Object.freeze({
   port: 3000,
   bodyLimit: '1mb',
   drainSeconds: 5,
@@ -48,7 +48,7 @@ export interface DatabaseSettings {
   lockStaleMs: number;
 }
 
-export const DATABASE_DEFAULTS: Readonly<DatabaseSettings> = Object.freeze({
+export const DATABASE_DEFAULTS: Readonly<DatabaseSettings> = /* @__PURE__ */ Object.freeze({
   connectTimeoutMs: 60_000,
   firstRetryDelayMs: 500,
   maxRetryDelayMs: 5_000,
@@ -78,7 +78,7 @@ export interface OperationLimitSettings {
   relationPageSize: number;
 }
 
-export const OPERATION_LIMIT_DEFAULTS: Readonly<OperationLimitSettings> = Object.freeze({
+export const OPERATION_LIMIT_DEFAULTS: Readonly<OperationLimitSettings> = /* @__PURE__ */ Object.freeze({
   maxDepth: 8,
   maxAliases: 15,
   // A full page of users, each with a page of linked identities, is the dearest screen.
@@ -112,7 +112,7 @@ export interface TokenLifetimeSettings {
   deviceCodeSeconds: number;
 }
 
-export const TOKEN_LIFETIME_DEFAULTS: Readonly<TokenLifetimeSettings> = Object.freeze({
+export const TOKEN_LIFETIME_DEFAULTS: Readonly<TokenLifetimeSettings> = /* @__PURE__ */ Object.freeze({
   accessTokenSeconds: 3600,
   idTokenSeconds: 3600,
   refreshTokenSeconds: 1_209_600,
@@ -131,7 +131,7 @@ export interface ClientTokenLifetimeSettings {
   maxSeconds: number;
 }
 
-export const CLIENT_TOKEN_LIFETIME_DEFAULTS: Readonly<ClientTokenLifetimeSettings> = Object.freeze({
+export const CLIENT_TOKEN_LIFETIME_DEFAULTS: Readonly<ClientTokenLifetimeSettings> = /* @__PURE__ */ Object.freeze({
   minSeconds: 60,
   maxSeconds: 31_536_000,
 });
@@ -152,7 +152,7 @@ export interface CredentialSettings {
   passwordLinkBytes: number;
 }
 
-export const CREDENTIAL_DEFAULTS: Readonly<CredentialSettings> = Object.freeze({
+export const CREDENTIAL_DEFAULTS: Readonly<CredentialSettings> = /* @__PURE__ */ Object.freeze({
   clientSecretBytes: 32,
   passwordSaltBytes: 16,
   passwordHashBytes: 64,
@@ -173,7 +173,7 @@ export interface PasswordRuleSettings {
   breachTimeoutMs: number;
 }
 
-export const PASSWORD_RULE_DEFAULTS: Readonly<PasswordRuleSettings> = Object.freeze({
+export const PASSWORD_RULE_DEFAULTS: Readonly<PasswordRuleSettings> = /* @__PURE__ */ Object.freeze({
   minScore: 3,
   checkBreaches: false,
   breachRangeUrl: 'https://api.pwnedpasswords.com/range/',
@@ -195,7 +195,7 @@ export interface KeySettings {
   keptKeys: number;
 }
 
-export const KEY_DEFAULTS: Readonly<KeySettings> = Object.freeze({
+export const KEY_DEFAULTS: Readonly<KeySettings> = /* @__PURE__ */ Object.freeze({
   signingKeyBits: 2048,
   cookieKeyBytes: 32,
   rotationDays: 90,
@@ -221,7 +221,7 @@ export interface AdminSettings {
   setupWindowSeconds: number;
 }
 
-export const ADMIN_DEFAULTS: Readonly<AdminSettings> = Object.freeze({
+export const ADMIN_DEFAULTS: Readonly<AdminSettings> = /* @__PURE__ */ Object.freeze({
   clientId: 'heautou-admin',
   group: 'heautou-admin',
   sessionSeconds: 43_200,
@@ -246,7 +246,7 @@ export interface RateLimitSettings {
   maxKeys: number;
 }
 
-export const RATE_LIMIT_DEFAULTS: Readonly<RateLimitSettings> = Object.freeze({
+export const RATE_LIMIT_DEFAULTS: Readonly<RateLimitSettings> = /* @__PURE__ */ Object.freeze({
   failuresPerIp: 10,
   failuresPerUsername: 5,
   failureWindowSeconds: 900,
@@ -267,7 +267,7 @@ export interface BrandingSettings {
   logoCacheSeconds: number;
 }
 
-export const BRANDING_DEFAULTS: Readonly<BrandingSettings> = Object.freeze({
+export const BRANDING_DEFAULTS: Readonly<BrandingSettings> = /* @__PURE__ */ Object.freeze({
   name: 'Heautou',
   maxNameLength: 60,
   maxLogoBytes: 262_144,
@@ -294,7 +294,7 @@ export interface PairingSettings {
   discoveryRetrySeconds: number;
 }
 
-export const PAIRING_DEFAULTS: Readonly<PairingSettings> = Object.freeze({
+export const PAIRING_DEFAULTS: Readonly<PairingSettings> = /* @__PURE__ */ Object.freeze({
   linkSeconds: 600,
   reviewSeconds: 1800,
   discoveryTimeoutMs: 5000,
@@ -308,19 +308,13 @@ export interface AuditSettings {
   keptEntries: number;
   /** How many entries are recorded between two checks for ones past `keptEntries`. */
   pruneEveryEntries: number;
-  /** Entries in one page of the admin's activity list, unless the request asks for fewer. */
-  pageSize: number;
-  /** Most entries one page may ask for. */
-  maxPageSize: number;
   /** How many of their own sign-ins a user sees on their account page. */
   accountEntries: number;
 }
 
-export const AUDIT_DEFAULTS: Readonly<AuditSettings> = Object.freeze({
+export const AUDIT_DEFAULTS: Readonly<AuditSettings> = /* @__PURE__ */ Object.freeze({
   keptEntries: 20_000,
   pruneEveryEntries: 100,
-  pageSize: 50,
-  maxPageSize: 200,
   accountEntries: 20,
 });
 
@@ -350,7 +344,7 @@ export interface TwoFactorSettings {
   maxPasskeyNameLength: number;
 }
 
-export const TWO_FACTOR_DEFAULTS: Readonly<TwoFactorSettings> = Object.freeze({
+export const TWO_FACTOR_DEFAULTS: Readonly<TwoFactorSettings> = /* @__PURE__ */ Object.freeze({
   totpDigits: 6,
   totpPeriodSeconds: 30,
   totpDriftSteps: 1,
@@ -370,7 +364,7 @@ export interface BackchannelLogoutSettings {
   timeoutMs: number;
 }
 
-export const BACKCHANNEL_LOGOUT_DEFAULTS: Readonly<BackchannelLogoutSettings> = Object.freeze({
+export const BACKCHANNEL_LOGOUT_DEFAULTS: Readonly<BackchannelLogoutSettings> = /* @__PURE__ */ Object.freeze({
   timeoutMs: 5000,
 });
 
@@ -382,7 +376,7 @@ export interface BackupSettings {
   maxUnpackedBytes: number;
 }
 
-export const BACKUP_DEFAULTS: Readonly<BackupSettings> = Object.freeze({
+export const BACKUP_DEFAULTS: Readonly<BackupSettings> = /* @__PURE__ */ Object.freeze({
   maxArchiveBytes: 33_554_432,
   maxUnpackedBytes: 268_435_456,
 });
@@ -405,12 +399,12 @@ export interface UpstreamSettings {
   maxIdLength: number;
 }
 
-export const UPSTREAM_DEFAULTS: Readonly<UpstreamSettings> = Object.freeze({
+export const UPSTREAM_DEFAULTS: Readonly<UpstreamSettings> = /* @__PURE__ */ Object.freeze({
   flowSeconds: 600,
   discoverySeconds: 3600,
   requestTimeoutSeconds: 10,
-  oidcScopes: Object.freeze(['openid', 'profile', 'email']),
-  githubScopes: Object.freeze(['read:user', 'user:email']),
+  oidcScopes: /* @__PURE__ */ Object.freeze(['openid', 'profile', 'email']),
+  githubScopes: /* @__PURE__ */ Object.freeze(['read:user', 'user:email']),
   maxNameLength: 60,
   maxIdLength: 40,
 });
@@ -427,7 +421,7 @@ export interface ApiSettings {
   maxScopes: number;
 }
 
-export const API_DEFAULTS: Readonly<ApiSettings> = Object.freeze({
+export const API_DEFAULTS: Readonly<ApiSettings> = /* @__PURE__ */ Object.freeze({
   minAccessTokenSeconds: 60,
   maxAccessTokenSeconds: 86_400,
   maxNameLength: 60,
@@ -453,7 +447,7 @@ export interface DeviceFlowSettings {
   mask: string;
 }
 
-export const DEVICE_FLOW_DEFAULTS: Readonly<DeviceFlowSettings> = Object.freeze({
+export const DEVICE_FLOW_DEFAULTS: Readonly<DeviceFlowSettings> = /* @__PURE__ */ Object.freeze({
   pollSeconds: 5,
   expiredKeptSeconds: 3600,
   charset: 'base-20',
@@ -482,7 +476,7 @@ export interface MailSettings {
   maxFieldLength: number;
 }
 
-export const MAIL_DEFAULTS: Readonly<MailSettings> = Object.freeze({
+export const MAIL_DEFAULTS: Readonly<MailSettings> = /* @__PURE__ */ Object.freeze({
   port: 587,
   implicitTlsPort: 465,
   connectionTimeoutMs: 10_000,
@@ -510,7 +504,7 @@ export interface ProfileSettings {
   keyPrefix: string;
 }
 
-export const PROFILE_DEFAULTS: Readonly<ProfileSettings> = Object.freeze({
+export const PROFILE_DEFAULTS: Readonly<ProfileSettings> = /* @__PURE__ */ Object.freeze({
   maxPictureBytes: 5_242_880,
   maxInputPixels: 40_000_000,
   pictureSidePx: 256,
@@ -527,7 +521,7 @@ export interface ObjectStorageSettings {
   timeoutMs: number;
 }
 
-export const OBJECT_STORAGE_DEFAULTS: Readonly<ObjectStorageSettings> = Object.freeze({
+export const OBJECT_STORAGE_DEFAULTS: Readonly<ObjectStorageSettings> = /* @__PURE__ */ Object.freeze({
   region: 'us-east-1',
   timeoutMs: 10_000,
 });
@@ -552,7 +546,7 @@ export interface ForwardAuthSettings {
   maxNameLength: number;
 }
 
-export const FORWARD_AUTH_DEFAULTS: Readonly<ForwardAuthSettings> = Object.freeze({
+export const FORWARD_AUTH_DEFAULTS: Readonly<ForwardAuthSettings> = /* @__PURE__ */ Object.freeze({
   clientId: 'heautou-proxy',
   sessionSeconds: 43_200,
   idleSeconds: 7200,

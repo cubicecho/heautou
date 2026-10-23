@@ -2,6 +2,9 @@ import path from 'node:path';
 import { defineConfig } from 'vitest/config';
 
 const alias = [
+  // The web app's own aliases (`vite.config.ts`), for the tests that load its modules.
+  { find: /^@\//, replacement: `${path.resolve(import.meta.dirname, './web/src')}/` },
+  { find: /^@server\//, replacement: `${path.resolve(import.meta.dirname, './server')}/` },
   // graphql ships no exports map: Vite follows `module` to index.mjs while Node follows `main`
   // to index.js, and the two copies fail each other's instanceof checks.
   { find: /^graphql$/, replacement: path.resolve(import.meta.dirname, './node_modules/graphql/index.js') },

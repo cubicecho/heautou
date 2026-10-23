@@ -4,8 +4,8 @@ import { HttpStatus } from '../../server/core/wire.ts';
 import { TOKEN_FORMAT_OPAQUE } from '../../server/store/apis.ts';
 import { AuditType } from '../../server/store/audit.ts';
 import { ClientAuthMethod, type OidcClient } from '../../server/store/clients.ts';
-import { startTestApp, type TestApp } from '../helpers.ts';
-import { adminGql, basicAuth, PASSWORD, payloadOf, REDIRECT_URI, signIn, signInAsAdmin } from './browser.ts';
+import { adminGql, basicAuth, PASSWORD, payloadOf, REDIRECT_URI, signIn, signInAsAdmin } from '../browser.ts';
+import { createTestUser, startTestApp, type TestApp } from '../helpers.ts';
 
 const PHOTOS_API = 'https://photos-api.home.lan';
 const NOTES_API = 'https://notes-api.home.lan';
@@ -86,7 +86,7 @@ describe('access tokens for a named API (resource indicators)', () => {
 
   beforeEach(async () => {
     app = await startTestApp();
-    await app.services.users.create({ username: 'ada', password: PASSWORD, email: '', name: 'Ada', groups: [] });
+    await createTestUser(app, { username: 'ada', name: 'Ada' });
     client = await app.services.clients.create({
       name: 'Photos',
       authMethod: ClientAuthMethod.SecretBasic,

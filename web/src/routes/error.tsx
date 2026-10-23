@@ -44,9 +44,7 @@ function ErrorPage() {
       contentSlot={rows.length === 0 ? undefined : <DescriptionList contentSlot={rows} />}
       footerActionsSlot={
         <>
-          {copy.isClientSetup ? (
-            <Button variant="outline" content="Open clients" linkSlot={<Link to="/clients" />} />
-          ) : null}
+          {copy.isClientSetup && <Button variant="outline" content="Open clients" linkSlot={<Link to="/clients" />} />}
           <Button variant="info" content="Go back" onClick={goBack} />
         </>
       }

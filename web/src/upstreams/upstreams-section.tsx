@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { UpstreamFieldsFragment } from '@/__generated__/graphql';
+import { UnknownIdentity, type UpstreamFieldsFragment } from '@/__generated__/graphql';
 import { ConfirmButton } from '@/components/confirm-button';
 import { List } from '@/components/list';
 import { ListItem } from '@/components/list-item';
@@ -9,9 +9,10 @@ import { Section } from '@/components/section';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Pencil, Plus, Trash2 } from '@/components/ui/icons';
-import { useDeleteUpstream, useUpstreams } from '@/core/admin';
-import { messageOf } from '@/core/lists';
+import { messageOf } from '@/core/errors';
+import { useDeleteUpstream, useUpstreams } from '@/core/upstreams';
 import { joinStats } from '@/lib/format';
+import { UPSTREAM_KINDS } from '@/upstreams/kinds';
 import { UpstreamFormDialog } from '@/upstreams/upstream-form-dialog';
 
 /** Which provider the dialog is open on: none, a new one, or one to edit. */
@@ -25,6 +26,8 @@ export function UpstreamsSection() {
   const remove = useDeleteUpstream();
   const [dialog, setDialog] = useState<UpstreamDialog>({ kind: 'closed' });
   const list = upstreams.data ?? [];
+  const hasNoProviders = upstreams.isSuccess && list.length === 0;
+  const isFormOpen = dialog.kind === 'open';
 
   return (
     <Section
@@ -42,12 +45,10 @@ export function UpstreamsSection() {
       }
       contentSlot={
         <div className="grid gap-2">
-          {upstreams.isError ? (
+          {upstreams.isError && (
             <QueryError error={upstreams.error} onRetry={upstreams.refetch} what="the sign-in providers" />
-          ) : null}
-          {upstreams.isSuccess && list.length === 0 ? (
-            <EmptyState compact title="Users sign in with a password or a passkey only." />
-          ) : null}
+          )}
+          {hasNoProviders && <EmptyState compact title="Users sign in with a password or a passkey only." />}
           <List
             label="Sign-in providers"
             contentSlot={list.map((upstream) => (
@@ -55,8 +56,8 @@ export function UpstreamsSection() {
                 key={upstream.id}
                 title={upstream.name}
                 description={joinStats(
-                  upstream.kind === 'GITHUB' ? 'GitHub' : upstream.issuer,
-                  upstream.unknownIdentity === 'CREATE' ? 'makes users' : 'linked accounts only',
+                  UPSTREAM_KINDS[upstream.kind].summaryOf(upstream.issuer),
+                  upstream.unknownIdentity === UnknownIdentity.Create ? 'makes users' : 'linked accounts only',
                   upstream.countsAsBothFactors && 'counts as both factors',
                 )}
                 meta={`${upstream.linksAggregate.count} linked`}
@@ -84,16 +85,16 @@ export function UpstreamsSection() {
               />
             ))}
           />
-          {remove.error === null ? null : (
+          {remove.error !== null && (
             <Alert variant="destructive" title="Provider not removed" description={messageOf(remove.error)} />
           )}
-          {dialog.kind === 'open' ? (
+          {isFormOpen && (
             <UpstreamFormDialog
               upstream={dialog.upstream}
               open
               onOpenChange={(open) => (open ? undefined : setDialog({ kind: 'closed' }))}
             />
-          ) : null}
+          )}
         </div>
       }
     />

@@ -11,9 +11,9 @@ import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Pencil, Trash2 } from '@/components/ui/icons';
-import { useDeleteGroup, useGroups } from '@/core/admin';
 import { Tags } from '@/core/app-icons';
-import { messageOf } from '@/core/lists';
+import { messageOf } from '@/core/errors';
+import { useDeleteGroup, useGroups } from '@/core/groups';
 import { RenameGroupDialog } from '@/groups/rename-group-dialog';
 import { formatCount, joinStats } from '@/lib/format';
 
@@ -64,7 +64,7 @@ function GroupsPage() {
       contentClassName="gap-4"
       contentSlot={
         <>
-          {remove.error === null ? null : (
+          {remove.error !== null && (
             <Alert variant="destructive" title="Group not deleted" description={messageOf(remove.error)} />
           )}
           <QueryState
@@ -113,7 +113,7 @@ function GroupsPage() {
               );
             })}
           />
-          {renaming === null ? null : (
+          {renaming !== null && (
             <RenameGroupDialog
               key={renaming}
               name={renaming}

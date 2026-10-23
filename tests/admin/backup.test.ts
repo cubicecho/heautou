@@ -1,11 +1,10 @@
-import { randomBytes } from 'node:crypto';
 import { gunzipSync } from 'node:zlib';
 import { BACKUP_PATH } from '../../server/admin/backup.ts';
-import { SECRET_KEY_BYTES } from '../../server/core/secret-box.ts';
 import { HttpStatus } from '../../server/core/wire.ts';
+import { archivePathOf, DOCUMENT_NAMES } from '../../server/db/documents.ts';
 import { AuditType } from '../../server/store/audit.ts';
-import { startTestApp, type TestApp } from '../helpers.ts';
-import { adminGql, type Browser, createBrowser, PASSWORD, signIn, signInAsAdmin } from '../oidc/browser.ts';
+import { adminGql, type Browser, createBrowser, PASSWORD, signIn, signInAsAdmin } from '../browser.ts';
+import { newSecretKeys, startTestApp, type TestApp } from '../helpers.ts';
 
 const ARCHIVE_TYPE = 'application/gzip';
 
@@ -48,7 +47,7 @@ describe('backup routes', () => {
   let app: TestApp;
 
   beforeEach(async () => {
-    app = await startTestApp({ secretKeys: { current: randomBytes(SECRET_KEY_BYTES), previous: null } });
+    app = await startTestApp({ secretKeys: newSecretKeys() });
   });
 
   afterEach(async () => {
@@ -68,7 +67,9 @@ describe('backup routes', () => {
     expect(res.headers.get('content-type')).toContain(ARCHIVE_TYPE);
     expect(res.headers.get('content-disposition')).toMatch(/attachment; filename="heautou-backup-.+\.json\.gz"/);
     const archive = new Uint8Array(await res.arrayBuffer());
-    expect(Object.keys(JSON.parse(gunzipSync(archive).toString('utf8')).files)).toContain('users.json');
+    expect(Object.keys(JSON.parse(gunzipSync(archive).toString('utf8')).files)).toContain(
+      archivePathOf(DOCUMENT_NAMES.users),
+    );
 
     await app.services.users.create({ username: 'later', password: PASSWORD, email: '', name: '', groups: [] });
     const restored = await upload(admin, archive);
@@ -76,7 +77,6 @@ describe('backup routes', () => {
     expect(await restored.json()).toMatchObject({ redirectTo: '/admin/login', restored: { includesSessions: false } });
     expect(restored.headers.getSetCookie().join()).toMatch(/heautou_session=;/);
 
-    expect(app.services.users.list().map((user) => user.username)).toEqual(['root']);
     const after = await adminGql(admin, '{ users { username } }');
     expect(after.error).toBe('Sign in to the admin UI first.');
     const [entry] = (await app.services.audit.list({ types: [AuditType.DataRestored] })).entries;

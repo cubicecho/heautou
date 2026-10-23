@@ -12,15 +12,20 @@ import { CodeBlock } from '@/components/ui/code';
 import { CopyButton } from '@/components/ui/copy-button';
 import { FormElement } from '@/components/ui/form-element';
 import { BrandIcon } from '@/core/brand';
-import { jsonReply, postJson } from '@/core/json-reply';
-import { messageOf } from '@/core/lists';
+import { messageOf } from '@/core/errors';
+import { jsonReply, postJson, redirectReplySchema } from '@/core/json-reply';
+import { SIGN_IN_PATH } from '@/core/paths';
+import { QUERY_KEYS } from '@/core/query-keys';
+import { fragmentParam } from '@/core/url-fragment';
 import { PasswordStrengthMeter } from '@/passwords/strength-meter';
 
 export const Route = createFileRoute('/setup')({ component: SetupPage });
 
+/** The fragment parameter (`fragmentParam`) holding the link's token. */
+const TOKEN_PARAM = 'token';
+
 const FORM_ID = 'setup-form';
 const SETUP_URL = '/admin/setup';
-const ADMIN_LOGIN = '/admin/login';
 
 const statusSchema = z.object({ needed: z.boolean(), tokenRequired: z.boolean() });
 /** How the operator reads the setup link and its token, in the quick start's setup. */
@@ -34,16 +39,6 @@ function LogCommand() {
     <CodeBlock content={LOG_COMMAND} wrap actionSlot={<CopyButton value={LOG_COMMAND} label="Copy the command" />} />
   );
 }
-const resultSchema = z.object({ redirectTo: z.string() });
-
-/**
- * Reads the setup token from the link's fragment, which never reaches the server's logs or a proxy's.
- *
- * @returns The token, or null when the link had none.
- */
-function tokenFromLink(): string | null {
-  return new URLSearchParams(window.location.hash.slice(1)).get('token');
-}
 
 /**
  * Makes the first admin, where the app sends a browser while there is none. For a few minutes after boot a new
@@ -51,10 +46,10 @@ function tokenFromLink(): string | null {
  * token the server logs, which arrives in this page's link or is pasted in.
  */
 function SetupPage() {
-  const [linkToken] = useState(tokenFromLink);
+  const [linkToken] = useState(() => fragmentParam(TOKEN_PARAM));
   const [failure, setFailure] = useState<string | null>(null);
   const status = useQuery({
-    queryKey: ['setup'],
+    queryKey: QUERY_KEYS.setup,
     queryFn: async () => jsonReply(await fetch(SETUP_URL), statusSchema),
     retry: false,
   });
@@ -65,7 +60,7 @@ function SetupPage() {
       setFailure(null);
       try {
         const body = { ...value, token: linkToken ?? value.token };
-        const { redirectTo } = await jsonReply(await postJson(SETUP_URL, body), resultSchema);
+        const { redirectTo } = await jsonReply(await postJson(SETUP_URL, body), redirectReplySchema);
         window.location.assign(redirectTo);
       } catch (error) {
         setFailure(messageOf(error));
@@ -92,7 +87,7 @@ function SetupPage() {
       <form.Subscribe selector={(state) => state.values}>
         {({ password, username }) => <PasswordStrengthMeter password={password} owner={[username]} />}
       </form.Subscribe>
-      {asksForToken ? (
+      {asksForToken && (
         <>
           <InputField
             form={form}
@@ -105,8 +100,8 @@ function SetupPage() {
           />
           <LogCommand />
         </>
-      ) : null}
-      {failure === null ? null : <Alert variant="destructive" title="No admin made" description={failure} />}
+      )}
+      {failure !== null && <Alert variant="destructive" title="No admin made" description={failure} />}
     </FormElement>
   );
   const done = (
@@ -136,7 +131,7 @@ function SetupPage() {
   ) : (
     <div className="grid gap-6">
       {setupForm}
-      {isFresh ? existingUser : null}
+      {isFresh && existingUser}
     </div>
   );
   const description = isFresh
@@ -162,7 +157,7 @@ function SetupPage() {
             <form.SubmitButton content="Make admin" />
           </form.AppForm>
         ) : isDone ? (
-          <Button content="Sign in" onClick={() => window.location.assign(ADMIN_LOGIN)} />
+          <Button content="Sign in" onClick={() => window.location.assign(SIGN_IN_PATH)} />
         ) : undefined
       }
     />

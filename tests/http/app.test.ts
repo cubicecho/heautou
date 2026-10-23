@@ -3,8 +3,8 @@ import { ErrorCode } from '../../server/core/errors.ts';
 import { HttpStatus } from '../../server/core/wire.ts';
 import { AuditType } from '../../server/store/audit.ts';
 import { MAX_PASSWORD_SCORE } from '../../server/store/settings.ts';
-import { startTestApp, type TestApp } from '../helpers.ts';
-import { adminGql, type Browser, signInAsAdmin } from '../oidc/browser.ts';
+import { adminGql, type Browser, signInAsAdmin } from '../browser.ts';
+import { createTestUser, startTestApp, type TestApp } from '../helpers.ts';
 
 const CLIENT_FIELDS = '{ clientId name clientSecret authMethod redirectUris }';
 const CREATE_USER = 'mutation ($input: NewUserInput!) { createUser(input: $input) { id } }';
@@ -99,7 +99,7 @@ describe('app', () => {
     expect(created.errors[0].message).toMatch(/too easy to guess/);
     expect(app.services.users.list().some((user) => user.username === 'cy')).toBe(false);
 
-    const { id } = await app.services.users.create({ username: 'dee', email: '', name: '', groups: [] });
+    const { id } = await createTestUser(app, { username: 'dee', password: '' });
     const set = await gql(SET_PASSWORD, { id, password: 'password1' });
     expect(set.errors[0].extensions.code).toBe(ErrorCode.BadUserInput);
     expect(app.services.users.find(id)?.hasPassword).toBe(false);
@@ -111,11 +111,11 @@ describe('app', () => {
       minScore: PASSWORD_RULE_DEFAULTS.minScore,
       checkBreaches: PASSWORD_RULE_DEFAULTS.checkBreaches,
     });
-    const { id } = await app.services.users.create({ username: 'eve', email: '', name: '', groups: [] });
+    const { id } = await createTestUser(app, { username: 'eve', password: '' });
     const changed = await gql(SET_RULES, { minScore: MAX_PASSWORD_SCORE });
     expect(changed.data.setPasswordRules).toEqual({ minScore: MAX_PASSWORD_SCORE, checkBreaches: false });
     expect((await gql(SET_PASSWORD, { id, password: HARD })).errors[0].extensions.code).toBe(ErrorCode.BadUserInput);
-    expect(await (await fetch(`${app.base}/admin/password-rules`)).json()).toEqual({ minScore: MAX_PASSWORD_SCORE });
+    expect(await (await fetch(`${app.base}/api/password-rules`)).json()).toEqual({ minScore: MAX_PASSWORD_SCORE });
     const [entry] = (await app.services.audit.list({ first: 1, types: [AuditType.PasswordRulesSet] })).entries;
     expect(entry?.detail).toEqual({ minScore: String(MAX_PASSWORD_SCORE), breachCheck: 'off' });
 

@@ -2,8 +2,7 @@ import { type PublicKeyCredentialCreationOptionsJSON, startRegistration } from '
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 import { jsonReply, postJson } from '@/core/json-reply';
-
-const KEY = ['account', 'factors'] as const;
+import { QUERY_KEYS, refetching } from '@/core/query-keys';
 
 const passkeySchema = z.object({
   id: z.string(),
@@ -38,7 +37,7 @@ export type PasskeyInfo = z.infer<typeof passkeySchema>;
  */
 export function useFactors() {
   return useQuery({
-    queryKey: KEY,
+    queryKey: QUERY_KEYS.accountFactors,
     queryFn: async () => jsonReply(await fetch('/api/account/factors'), factorsSchema),
     retry: false,
   });
@@ -50,8 +49,7 @@ export function useFactors() {
  * @returns The handler.
  */
 function useRefetchFactors() {
-  const queryClient = useQueryClient();
-  return () => queryClient.invalidateQueries({ queryKey: KEY });
+  return refetching(useQueryClient(), QUERY_KEYS.accountFactors);
 }
 
 /**
