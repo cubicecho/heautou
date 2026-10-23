@@ -1,16 +1,37 @@
 import { eq } from 'drizzle-orm';
-import { isSealed, SecretKeyErrorCode, type SecretKeys } from '../../server/core/secret-box.ts';
+import {
+  createSecretBox,
+  isSealed,
+  type SecretBox,
+  SecretKeyErrorCode,
+  type SecretKeys,
+} from '../../server/core/secret-box.ts';
 import { openServices, type Services } from '../../server/core/services.ts';
 import type { Database, OpenDatabase } from '../../server/db/client.ts';
 import { createWriteQueue, openDocument } from '../../server/db/document.ts';
 import { DOCUMENT_NAMES, KEYS_DOCUMENT } from '../../server/db/documents.ts';
-import { clients, documents } from '../../server/db/schema.ts';
+import { clients, documents, totpFactors, upstreams } from '../../server/db/schema.ts';
 import { ClientAuthMethod } from '../../server/store/clients.ts';
+import { UpstreamKind } from '../../server/store/upstreams.ts';
 import { createTestDatabase } from '../db.ts';
 import { newSecretKey, newSecretKeys, startTestApp } from '../helpers.ts';
 import { PASSWORD, payloadOf, REDIRECT_URI, signInForTokens } from '../oidc/browser.ts';
 
 const ISSUER = 'http://127.0.0.1:1/oidc';
+const TOTP_SECRET = 'JBSWY3DPEHPK3PXP';
+const UPSTREAM_SECRET = 'g-secret';
+
+/** The two sealed stores besides clients, keys and mail, and how to seal each one's secret under another key. */
+const OTHER_SEALED_STORES: { store: string; reseal: (db: Database, box: SecretBox) => Promise<unknown> }[] = [
+  {
+    store: 'second factors',
+    reseal: async (db, box) => db.update(totpFactors).set({ secret: box.seal(TOTP_SECRET) }),
+  },
+  {
+    store: 'upstream providers',
+    reseal: async (db, box) => db.update(upstreams).set({ clientSecret: box.seal(UPSTREAM_SECRET) }),
+  },
+];
 
 /**
  * Opens the services on a database, as a boot does, and waits for what the boot writes.
@@ -110,6 +131,36 @@ describe('secrets at rest', () => {
     await expect(boot(db)).rejects.toMatchObject({ code: SecretKeyErrorCode.Missing });
     expect(await storedSecrets(db)).toBe(before);
   });
+
+  it.each(OTHER_SEALED_STORES)(
+    'refuses a key that does not open the $store, without changing them',
+    async ({ reseal }) => {
+      const { db } = database;
+      const key = newSecretKey();
+      const services = await boot(db, key);
+      await services.factors.setTotp('u1', TOTP_SECRET, 0);
+      await services.upstreams.create({
+        id: 'google',
+        name: 'Google',
+        kind: UpstreamKind.Oidc,
+        issuer: 'https://accounts.google.com/',
+        clientId: 'id.apps.googleusercontent.com',
+        clientSecret: UPSTREAM_SECRET,
+      });
+      await services.settled();
+      await reseal(db, createSecretBox(newSecretKeys()));
+      /**
+       * Reads the second factors and upstream providers as the database has them.
+       *
+       * @returns Their rows, as JSON.
+       */
+      const storedRows = async (): Promise<string> =>
+        JSON.stringify([await db.select().from(totpFactors), await db.select().from(upstreams)]);
+      const before = await storedRows();
+      await expect(boot(db, key)).rejects.toMatchObject({ code: SecretKeyErrorCode.Wrong });
+      expect(await storedRows()).toBe(before);
+    },
+  );
 
   it('re-seals under a new key while the old one is the previous key', async () => {
     const { db } = database;
