@@ -209,13 +209,17 @@ describe('the audit log', () => {
   });
 
   it('records a failed sign-in, by the account it named or by the username typed', async () => {
-    await expect(signIn(app, authorizePath(), 'ada', 'wrong horse')).rejects.toThrow(/expected 401 to be 200/);
+    await expect(signIn(app, authorizePath(), 'ada', 'wrong horse')).rejects.toMatchObject({
+      actual: HttpStatus.Unauthorized,
+    });
     expect((await everything()).entries[0]).toMatchObject({
       type: AuditType.SignInFailed,
       actor: { username: 'ada' },
       target: { id: client.clientId },
     });
-    await expect(signIn(app, authorizePath(), 'nobody', 'guess one')).rejects.toThrow(/expected 401 to be 200/);
+    await expect(signIn(app, authorizePath(), 'nobody', 'guess one')).rejects.toMatchObject({
+      actual: HttpStatus.Unauthorized,
+    });
     const { entries, text } = await everything();
     expect(entries[0]).toMatchObject({ type: AuditType.SignInFailed, actor: null, detail: { username: 'nobody' } });
     expect(text).not.toContain('wrong horse');
