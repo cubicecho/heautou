@@ -18,7 +18,7 @@ import { CopyButton } from '@/components/ui/copy-button';
 import { FormElement } from '@/components/ui/form-element';
 import { Pencil, Plus, Trash2 } from '@/components/ui/icons';
 import { ExternalLink, ShieldCheck } from '@/core/app-icons';
-import { messageOf } from '@/core/lists';
+import { messageOf } from '@/core/errors';
 import {
   useDeleteProtectedSite,
   useForwardAuth,

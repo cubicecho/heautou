@@ -16,8 +16,10 @@ import { FieldSeparator } from '@/components/ui/field';
 import { FormElement } from '@/components/ui/form-element';
 import { KeyRound } from '@/components/ui/icons';
 import { BrandIcon, useBrandName } from '@/core/brand';
-import { messageOf } from '@/core/lists';
+import { messageOf } from '@/core/errors';
+import { redirectReplySchema } from '@/core/json-reply';
 import { useForgotPasswordAvailable } from '@/core/mail';
+import { QUERY_KEYS } from '@/core/query-keys';
 import { ForgotPassword } from '@/mail/forgot-password';
 
 export const Route = createFileRoute('/login/$uid')({ component: LoginPage });
@@ -37,8 +39,7 @@ const detailsSchema = z.object({
 /** Where the server says why a sign-in through a provider did not work: `/login/:uid?error=`. */
 const ERROR_PARAM = 'error';
 /** The login POST's reply: where to go next, or which second factors to ask for. */
-const loginSchema = z.union([z.object({ redirectTo: z.string() }), z.object({ secondFactor: choiceSchema })]);
-const resultSchema = z.object({ redirectTo: z.string() });
+const loginSchema = z.union([redirectReplySchema, z.object({ secondFactor: choiceSchema })]);
 const failureSchema = z.object({ error: z.string(), restart: z.boolean().optional() });
 const passkeyOptionsSchema = z.object({
   options: z.custom<PublicKeyCredentialRequestOptionsJSON>(
@@ -50,7 +51,7 @@ const passkeyOptionsSchema = z.object({
 type SecondFactorChoice = z.infer<typeof choiceSchema>;
 
 /** A refusal from an interaction route: what to show, and whether the sign-in has to start again. */
-class SignInRefusal extends Error {
+export class SignInRefusal extends Error {
   readonly restart: boolean;
 
   /**
@@ -73,7 +74,7 @@ class SignInRefusal extends Error {
  * @returns The reply.
  * @throws SignInRefusal with the server's message when it refuses.
  */
-async function post<T>(url: string, body: unknown, schema: z.ZodType<T>): Promise<T> {
+export async function post<T>(url: string, body: unknown, schema: z.ZodType<T>): Promise<T> {
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -121,7 +122,7 @@ function LoginPage() {
   const canReset = useForgotPasswordAvailable(uid).data === true;
 
   const details = useQuery({
-    queryKey: ['interaction', uid],
+    queryKey: [...QUERY_KEYS.interaction, uid],
     queryFn: async () => {
       const response = await fetch(`${base}/details`);
       const reply: unknown = await response.json().catch(() => null);
@@ -160,7 +161,7 @@ function LoginPage() {
     try {
       const { options } = await post(`${base}/passkey/options`, {}, passkeyOptionsSchema);
       const response = await startAuthentication({ optionsJSON: options });
-      const { redirectTo } = await post(`${base}/passkey`, { response }, resultSchema);
+      const { redirectTo } = await post(`${base}/passkey`, { response }, redirectReplySchema);
       window.location.assign(redirectTo);
     } catch (error) {
       refused(error);
@@ -191,7 +192,7 @@ function LoginPage() {
     onSubmit: async ({ value, formApi }) => {
       setFailure(null);
       try {
-        const { redirectTo } = await post(`${base}/second-factor`, value, resultSchema);
+        const { redirectTo } = await post(`${base}/second-factor`, value, redirectReplySchema);
         window.location.assign(redirectTo);
       } catch (error) {
         formApi.reset();

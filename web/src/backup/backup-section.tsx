@@ -11,7 +11,7 @@ import type { PickedFile } from '@/components/ui/file-picker-base';
 import { Download, Upload } from '@/components/ui/icons';
 import { Switch } from '@/components/ui/switch';
 import { useBackupInfo, useDownloadBackup, useRestoreBackup } from '@/core/backup';
-import { messageOf } from '@/core/lists';
+import { messageOf } from '@/core/errors';
 import { formatBytes } from '@/lib/format';
 
 /** What the restore picker offers: the gzipped archives a download saves. */
@@ -37,7 +37,7 @@ function SealingNote({ isSealed }: { isSealed: boolean }) {
       <Alert
         variant="info"
         title="Secrets stay sealed"
-        description="Client secrets, signing keys and authenticator app secrets go into the archive sealed under SECRET_KEY, as they are on disk, so restoring it needs the same key. Password hashes are in it too: keep it as safe as the data directory."
+        description="Client secrets, signing and cookie keys, authenticator app secrets, sign-in providers’ client secrets and the saved SMTP password go into the archive sealed under SECRET_KEY, as the database holds them, so restoring it needs the same key. Password hashes are in it too: keep it as safe as the database."
       />
     );
   }
@@ -45,7 +45,7 @@ function SealingNote({ isSealed }: { isSealed: boolean }) {
     <Alert
       variant="warning"
       title="SECRET_KEY is not set"
-      description="Client secrets, signing keys and authenticator app secrets go into the archive in plain text. Set SECRET_KEY to seal them, and keep the archive where only you can read it."
+      description="Client secrets, signing and cookie keys, authenticator app secrets, sign-in providers’ client secrets and the saved SMTP password go into the archive in plain text. Set SECRET_KEY to seal them, and keep the archive where only you can read it."
     />
   );
 }
@@ -82,7 +82,7 @@ export function BackupSection() {
   return (
     <Section
       title="Backup"
-      description="An archive of the data directory: clients, users, groups, keys, branding, settings, pairings, second factors and the audit log."
+      description="An archive of the database: clients, APIs, users and their groups, second factors, invite and reset links, sign-in providers, protected sites, keys, branding, settings, email settings, pairings and the audit log. Profile pictures stay in their bucket, and sign-ins to this site and to protected sites are never in it."
       surface="card"
       contentSlot={
         <div className="grid gap-4">

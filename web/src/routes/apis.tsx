@@ -2,7 +2,6 @@ import { createFileRoute } from '@tanstack/react-router';
 import { useState } from 'react';
 import type { ApiFieldsFragment } from '@/__generated__/graphql';
 import { ApiFormDialog, TOKEN_FORMATS } from '@/apis/api-form-dialog';
-import { durationText } from '@/clients/durations';
 import { ConfirmButton } from '@/components/confirm-button';
 import { DescriptionList, PropertyRow } from '@/components/description-list';
 import { DisclosureRow } from '@/components/disclosure-row';
@@ -15,10 +14,11 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { CopyButton } from '@/components/ui/copy-button';
 import { Pencil, Plus, Trash2 } from '@/components/ui/icons';
-import { useProviderInfo } from '@/core/admin';
 import { useApis, useDeleteApi } from '@/core/apis';
 import { Server } from '@/core/app-icons';
-import { messageOf } from '@/core/lists';
+import { messageOf } from '@/core/errors';
+import { useProviderInfo } from '@/core/provider';
+import { durationText } from '@/token-lifetimes/durations';
 
 export const Route = createFileRoute('/apis')({ component: ApisPage });
 

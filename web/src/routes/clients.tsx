@@ -3,7 +3,6 @@ import { useState } from 'react';
 import type { ClientFieldsFragment } from '@/__generated__/graphql';
 import { AUTH_METHODS } from '@/clients/auth-methods';
 import { ClientFormDialog } from '@/clients/client-form-dialog';
-import { durationText } from '@/clients/durations';
 import { PairDialog } from '@/clients/pair-dialog';
 import { PresetPanel } from '@/clients/preset-panel';
 import { presetById } from '@/clients/presets';
@@ -21,10 +20,12 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { CopyButton } from '@/components/ui/copy-button';
 import { Pencil, Plug, Plus, RefreshCw, Trash2 } from '@/components/ui/icons';
-import { useClients, useDeleteClient, useProviderInfo, useRotateClientSecret } from '@/core/admin';
 import { AppWindow } from '@/core/app-icons';
-import { messageOf } from '@/core/lists';
+import { useClients, useDeleteClient, useRotateClientSecret } from '@/core/clients';
+import { messageOf } from '@/core/errors';
+import { useProviderInfo } from '@/core/provider';
 import type { SlotNode } from '@/lib/utils';
+import { durationText } from '@/token-lifetimes/durations';
 
 export const Route = createFileRoute('/clients')({ component: ClientsPage });
 

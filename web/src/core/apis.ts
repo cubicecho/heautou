@@ -9,24 +9,10 @@ import {
   UpdateApiDocument,
 } from '@/__generated__/graphql';
 import { request } from '@/core/gql';
+import { QUERY_KEYS, refetching } from '@/core/query-keys';
 
-/** The react-query key of the API list. A client's change or removal refetches it too, since APIs name clients. */
-export const APIS_KEY = ['apis'] as const;
-/** The client list's key (`KEYS.clients` in admin.ts, which imports this file): each client shows the APIs it may use. */
-const CLIENTS_KEY = ['clients'] as const;
-
-/**
- * Fetches the APIs, and the clients that show them, again after one changed.
- *
- * @param queryClient - The query client.
- * @returns When both are fetched.
- */
-const refetchApisAndClients = (queryClient: ReturnType<typeof useQueryClient>) =>
-  Promise.all([
-    queryClient.invalidateQueries({ queryKey: APIS_KEY }),
-    queryClient.invalidateQueries({ queryKey: CLIENTS_KEY }),
-  ]);
-const BOUNDS_KEY = ['apiLifetimeBounds'] as const;
+/** What an API's change refetches: the APIs, and the clients, which show the APIs they may use. */
+const API_LISTS = [QUERY_KEYS.apis, QUERY_KEYS.clients] as const;
 
 /**
  * Reads every API.
@@ -34,7 +20,7 @@ const BOUNDS_KEY = ['apiLifetimeBounds'] as const;
  * @returns The query.
  */
 export function useApis() {
-  return useQuery({ queryKey: APIS_KEY, queryFn: async () => (await request(ApisDocument)).apis });
+  return useQuery({ queryKey: QUERY_KEYS.apis, queryFn: async () => (await request(ApisDocument)).apis });
 }
 
 /**
@@ -44,7 +30,7 @@ export function useApis() {
  */
 export function useApiLifetimeBounds() {
   return useQuery({
-    queryKey: BOUNDS_KEY,
+    queryKey: QUERY_KEYS.apiLifetimeBounds,
     queryFn: async () => (await request(ApiLifetimeBoundsDocument)).apiLifetimeBounds,
   });
 }
@@ -58,7 +44,7 @@ export function useCreateApi() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (input: NewApiInput) => (await request(CreateApiDocument, { input })).createApi,
-    onSuccess: () => refetchApisAndClients(queryClient),
+    onSuccess: refetching(queryClient, ...API_LISTS),
   });
 }
 
@@ -72,7 +58,7 @@ export function useUpdateApi() {
   return useMutation({
     mutationFn: async (vars: { identifier: string; input: ApiInput }) =>
       (await request(UpdateApiDocument, vars)).updateApi,
-    onSuccess: () => refetchApisAndClients(queryClient),
+    onSuccess: refetching(queryClient, ...API_LISTS),
   });
 }
 
@@ -85,6 +71,6 @@ export function useDeleteApi() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (identifier: string) => (await request(DeleteApiDocument, { identifier })).deleteApi,
-    onSuccess: () => refetchApisAndClients(queryClient),
+    onSuccess: refetching(queryClient, ...API_LISTS),
   });
 }

@@ -2,12 +2,11 @@ import { HOST_PATTERN } from '@server/store/site-host.ts';
 import type { ProtectedSiteFieldsFragment } from '@/__generated__/graphql';
 import { ComboboxField, InputField, SwitchField, useAppForm } from '@/components/app-form';
 import { DialogLayout } from '@/components/dialog-layout';
-import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { FormElement } from '@/components/ui/form-element';
-import { useGroupOptions } from '@/core/admin';
-import { messageOf } from '@/core/lists';
+import { useGroupOptions } from '@/core/groups';
 import { useCreateProtectedSite, useUpdateProtectedSite } from '@/core/protected-sites';
+import { SaveFailure } from '@/core/save-failure';
 
 interface SiteFormDialogProps {
   /** The site to edit, or null to add one. */
@@ -102,7 +101,7 @@ export function SiteFormDialog({ site, open, onOpenChange, onSaved }: SiteFormDi
             label="Require a second factor"
             description="A user who signed in with a password alone is asked to sign in again with their authenticator app or passkey. One with no second factor is turned away."
           />
-          {failure === null ? null : <Alert variant="destructive" title="Not saved" description={messageOf(failure)} />}
+          <SaveFailure error={failure} />
         </FormElement>
       }
       footerActionsSlot={(close) => (

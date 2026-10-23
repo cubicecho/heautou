@@ -1,13 +1,12 @@
 import type { ApiFieldsFragment, ApiLifetimeBoundsQuery, TokenFormat } from '@/__generated__/graphql';
-import { durationText, secondsIn } from '@/clients/durations';
 import { ComboboxField, InputField, SelectField, useAppForm } from '@/components/app-form';
 import { DialogLayout } from '@/components/dialog-layout';
-import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { FormElement } from '@/components/ui/form-element';
-import { useClients } from '@/core/admin';
 import { useApiLifetimeBounds, useCreateApi, useUpdateApi } from '@/core/apis';
-import { messageOf } from '@/core/lists';
+import { useClients } from '@/core/clients';
+import { SaveFailure } from '@/core/save-failure';
+import { durationText, secondsIn } from '@/token-lifetimes/durations';
 
 /** What each token format is called, and what it means for the API. */
 export const TOKEN_FORMATS: Record<TokenFormat, { label: string; description: string }> = {
@@ -179,7 +178,7 @@ export function ApiFormDialog({ api, open, onOpenChange, onSaved }: ApiFormDialo
             options={clientOptions}
             placeholder="No client yet"
           />
-          {failure === null ? null : <Alert variant="destructive" title="Not saved" description={messageOf(failure)} />}
+          <SaveFailure error={failure} />
         </FormElement>
       }
       footerActionsSlot={(close) => (

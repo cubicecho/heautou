@@ -17,8 +17,9 @@ import { PageLayout } from '@/components/page-layout';
 import { QueryState } from '@/components/query-state';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { type AuditFilters, useAuditFeed, useAuditLog, useUsers } from '@/core/admin';
 import { Activity } from '@/core/app-icons';
+import { type AuditFilters, useAuditFeed, useAuditLog } from '@/core/audit';
+import { useUsers } from '@/core/users';
 import { formatAgo, formatDateTime, joinStats } from '@/lib/format';
 
 export const Route = createFileRoute('/activity')({ component: ActivityPage });

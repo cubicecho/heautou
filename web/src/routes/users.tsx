@@ -12,7 +12,6 @@ import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Ellipsis, KeyRound, Pencil, Plus, Trash2 } from '@/components/ui/icons';
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '@/components/ui/menu';
-import { useDeleteUser, useGroups, useResetSecondFactors, useSetUserDisabled, useUsers } from '@/core/admin';
 import {
   Ban,
   ImageUp,
@@ -23,8 +22,10 @@ import {
   UserRoundCheck,
   UsersRound,
 } from '@/core/app-icons';
-import { messageOf } from '@/core/lists';
+import { messageOf } from '@/core/errors';
+import { useGroups } from '@/core/groups';
 import { useProfilePictures } from '@/core/pictures';
+import { useDeleteUser, useResetSecondFactors, useSetUserDisabled, useUsers } from '@/core/users';
 import { UpstreamsSection } from '@/upstreams/upstreams-section';
 import { LinkedAccountsDialog } from '@/users/linked-accounts-dialog';
 import { PasswordDialog } from '@/users/password-dialog';

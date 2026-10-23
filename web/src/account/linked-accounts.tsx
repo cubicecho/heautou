@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { useAccountUpstreams, useFinishLink, useStartLink, useUnlink } from '@/core/account';
 import { Link2 } from '@/core/app-icons';
-import { messageOf } from '@/core/lists';
+import { messageOf } from '@/core/errors';
 import { formatAgo, joinStats } from '@/lib/format';
 
 /** Where a provider sends the browser back with the account to link: `/account?upstreamLink=`. */

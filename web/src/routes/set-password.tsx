@@ -8,28 +8,24 @@ import { FormElement } from '@/components/ui/form-element';
 import { Spinner } from '@/components/ui/spinner';
 import { usePasswordLink, useSetPasswordWithLink } from '@/core/account';
 import { BrandIcon, useBrandName } from '@/core/brand';
-import { messageOf } from '@/core/lists';
+import { messageOf } from '@/core/errors';
 import { signInAfterReset } from '@/core/mail';
+import { fragmentParam } from '@/core/url-fragment';
 import { PasswordStrengthMeter } from '@/passwords/strength-meter';
 import { passwordProblem } from '@/users/user-form-dialog';
 
 export const Route = createFileRoute('/set-password')({ component: SetPasswordPage });
 
+/** The fragment parameter (`fragmentParam`) holding the link's token. */
+const TOKEN_PARAM = 'token';
+
 const FORM_ID = 'set-password-form';
 
-/**
- * Reads the link's token from the fragment, which never reaches the server's logs or a proxy's.
- *
- * @returns The token, or null when the link had none.
- */
-function tokenFromLink(): string | null {
-  return new URLSearchParams(window.location.hash.slice(1)).get('token');
-}
 /**
  * Where an invite or a reset link opens: the user chooses a password, then signs in with it.
  */
 function SetPasswordPage() {
-  const [token] = useState(tokenFromLink);
+  const [token] = useState(() => fragmentParam(TOKEN_PARAM));
   const link = usePasswordLink(token);
   const setPassword = useSetPasswordWithLink();
   const brandName = useBrandName();

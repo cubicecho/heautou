@@ -7,8 +7,9 @@ import { Button } from '@/components/ui/button';
 import { CopyButton } from '@/components/ui/copy-button';
 import { FormElement } from '@/components/ui/form-element';
 import { Spinner } from '@/components/ui/spinner';
-import { useCancelPairing, useFinishPairing, useGroupOptions, usePairing, useStartPairing } from '@/core/admin';
-import { messageOf } from '@/core/lists';
+import { messageOf } from '@/core/errors';
+import { useGroupOptions } from '@/core/groups';
+import { useCancelPairing, useFinishPairing, usePairing, useStartPairing } from '@/core/pairing';
 import { formatDateTime } from '@/lib/format';
 
 /** The claim groups are released in unless the application reads another. */

@@ -1,6 +1,7 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { z } from 'zod';
-import { jsonReply, postJson } from '@/core/json-reply';
+import { jsonReply, postJson, redirectReplySchema } from '@/core/json-reply';
+import { QUERY_KEYS } from '@/core/query-keys';
 
 /** The server's backup routes. */
 const BACKUP_URL = '/admin/backup';
@@ -13,7 +14,6 @@ const FALLBACK_NAME = 'heautou-backup.json.gz';
 const FILE_NAME = /filename="([^"]+)"/;
 
 const infoSchema = z.object({ isSealed: z.boolean() });
-const restoredSchema = z.object({ redirectTo: z.string() });
 
 /**
  * Reads whether this server seals secrets, so the backup section can say what the archive holds.
@@ -22,7 +22,7 @@ const restoredSchema = z.object({ redirectTo: z.string() });
  */
 export function useBackupInfo() {
   return useQuery({
-    queryKey: ['backup'],
+    queryKey: QUERY_KEYS.backup,
     queryFn: async () => jsonReply(await fetch(BACKUP_URL), infoSchema),
   });
 }
@@ -71,7 +71,7 @@ export function useRestoreBackup() {
     mutationFn: async (archive: Blob) =>
       jsonReply(
         await fetch(RESTORE_URL, { method: 'POST', headers: { 'content-type': ARCHIVE_TYPE }, body: archive }),
-        restoredSchema,
+        redirectReplySchema,
       ),
     onSuccess: ({ redirectTo }) => {
       window.location.assign(redirectTo);

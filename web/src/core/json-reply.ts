@@ -2,6 +2,12 @@ import { z } from 'zod';
 
 const errorSchema = z.object({ error: z.string() });
 
+/** The reply of a route that only did what it was asked. */
+export const okReplySchema = z.object({ ok: z.literal(true) });
+
+/** The reply of a route that sends the browser on: where it goes next. */
+export const redirectReplySchema = z.object({ redirectTo: z.string() });
+
 /**
  * Reads a JSON reply from one of the server's own routes, turning its `{error}` into a thrown Error.
  *

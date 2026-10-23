@@ -16,6 +16,8 @@ import { FormElement } from '@/components/ui/form-element';
 import { KeyRound, Plus, Trash2 } from '@/components/ui/icons';
 import { Spinner } from '@/components/ui/spinner';
 import { ShieldCheck } from '@/core/app-icons';
+import { QR_CODE_DEFAULTS } from '@/core/defaults';
+import { messageOf } from '@/core/errors';
 import {
   type PasskeyInfo,
   useAddPasskey,
@@ -26,11 +28,9 @@ import {
   useRemoveTotp,
   useStartTotp,
 } from '@/core/factors';
-import { messageOf } from '@/core/lists';
+import { QUERY_KEYS } from '@/core/query-keys';
 import { formatAgo, formatDate, joinStats } from '@/lib/format';
 
-/** The QR code's width and height, in CSS pixels. */
-const QR_SIZE = 192;
 /** What a new passkey is called until the user names it. */
 const DEFAULT_PASSKEY_NAME = 'Passkey';
 
@@ -94,8 +94,9 @@ function TotpSetupDialog({ onOpenChange, onCodes }: TotpSetupDialogProps) {
   }, [mutate]);
   const uri = start.data?.uri;
   const qr = useQuery({
-    queryKey: ['totp-qr', uri],
-    queryFn: async () => (await import('qrcode')).toDataURL(uri ?? '', { width: QR_SIZE, margin: 1 }),
+    queryKey: [...QUERY_KEYS.totpQr, uri],
+    queryFn: async () =>
+      (await import('qrcode')).toDataURL(uri ?? '', { width: QR_CODE_DEFAULTS.sizePixels, margin: 1 }),
     enabled: uri !== undefined,
     staleTime: Number.POSITIVE_INFINITY,
   });
@@ -125,8 +126,8 @@ function TotpSetupDialog({ onOpenChange, onCodes }: TotpSetupDialogProps) {
             ) : (
               <img
                 src={qr.data}
-                width={QR_SIZE}
-                height={QR_SIZE}
+                width={QR_CODE_DEFAULTS.sizePixels}
+                height={QR_CODE_DEFAULTS.sizePixels}
                 alt="QR code for your authenticator app"
                 className="justify-self-center rounded-md"
               />
