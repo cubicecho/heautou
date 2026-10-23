@@ -2,7 +2,7 @@ import type { GraphQLResolveInfo } from 'graphql';
 import type { Context } from '../core/context.ts';
 import { API_DEFAULTS } from '../core/defaults.ts';
 import type { Api, ApiFields, NewApi } from '../store/apis.ts';
-import { type AuditTarget, AuditTargetKind, AuditType, actorOf } from '../store/audit.ts';
+import { type AuditTarget, AuditTargetKind, AuditType, recordAdminChange } from '../store/audit.ts';
 import { GeneratedTable, requiredRow, rowWhere } from './rows.ts';
 
 /**
@@ -24,7 +24,7 @@ function apiTarget(api: Api): AuditTarget {
  * @returns The API.
  */
 function auditedApi(ctx: Context, type: AuditType, api: Api): Api {
-  ctx.audit.record({ type, actor: actorOf(ctx.viewer), ip: ctx.ip, target: apiTarget(api) });
+  recordAdminChange(ctx, type, apiTarget(api));
   return api;
 }
 

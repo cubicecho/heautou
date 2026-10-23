@@ -52,7 +52,7 @@ average 13); every failing file passes alone. See T5 and T6.
 | B2 | Bug (question) | Asks whether a paired app's registration entries should name the client the way every other entry does | Settles the one differing copy before R4 merges them | — | done |
 | R4 | Refactor [reuse] | Replaces the five client-name copies with one function | M2 | M2, B2 | done |
 | M3 | Model change | Makes the audit module the owner of audit targets and of "record what the signed-in admin did" | One place to look when an entry reads wrong | — | approved |
-| R5 | Refactor [reuse] | Replaces four copies of the admin-change recorder in the GraphQL modules with one | M3; removes copies in the most-changed folder | M3 | approved |
+| R5 | Refactor [reuse] | Replaces four copies of the admin-change recorder in the GraphQL modules with one | M3; removes copies in the most-changed folder | M3 | done |
 | R6 | Refactor [pattern] | Moves the target builders (client, API, site, group, pairing, settings, branding, mail, cookie domain) beside `userTarget` | M3 | M3, R4 | approved |
 | M4 | Model change | Makes backup and restore one operation of the backup module that the CLI and the server share; reading an older data directory moves to the import | Removes a copied restore and a CLI that imports all the services | — | approved |
 | T1 | Test [pin] | Pins that a restore brings back every store, not only the six checked today | Protects M4 and any services.ts change | — | done |

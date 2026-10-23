@@ -41,6 +41,32 @@ export function userTarget(user: { id: string; username: string }): AuditTarget 
   return { kind: AuditTargetKind.User, id: user.id, name: user.username };
 }
 
+/** Who made an admin change and where it is recorded: a GraphQL resolver's context. */
+export interface AdminChangeContext {
+  audit: AuditLog;
+  /** The signed-in admin. */
+  viewer: { id: string; username: string };
+  /** Their address. */
+  ip: string | null;
+}
+
+/**
+ * Records what the signed-in admin did. Only changes that worked get here.
+ *
+ * @param ctx - Who did it, and the log.
+ * @param type - What they did.
+ * @param target - What they did it to.
+ * @param [detail] - What else to keep. Never a password, token, secret or setup URL.
+ */
+export function recordAdminChange(
+  ctx: AdminChangeContext,
+  type: AuditType,
+  target: AuditTarget,
+  detail?: AuditEvent['detail'],
+): void {
+  ctx.audit.record({ type, actor: actorOf(ctx.viewer), ip: ctx.ip, target, detail });
+}
+
 /** What it was done to. The name is as it was then, so an entry still reads after a rename or delete. */
 export interface AuditTarget {
   kind: AuditTargetKind;

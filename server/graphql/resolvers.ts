@@ -14,13 +14,12 @@ import type { SessionInfo } from '../oidc/sessions.ts';
 import { TOKEN_FORMAT_JWT } from '../store/apis.ts';
 import {
   type AuditEntry,
-  type AuditEvent,
   type AuditTarget,
   AuditTargetKind,
   AuditType,
-  actorOf,
   KEYS_TARGET,
   matchesQuery,
+  recordAdminChange,
   userTarget,
 } from '../store/audit.ts';
 import { withoutBlanks } from '../store/claims.ts';
@@ -249,27 +248,10 @@ async function setUpOffers(ctx: Context, pairing: Pairing, input: FinishPairingI
         ? await ctx.apis.create({ ...offered, tokenFormat: TOKEN_FORMAT_JWT, allowedClientIds })
         : await ctx.apis.update(offered.identifier, { allowedClientIds });
     const type = existing === null ? AuditType.ApiCreated : AuditType.ApiUpdated;
-    ctx.audit.record({
-      type,
-      actor: actorOf(ctx.viewer),
-      ip: ctx.ip,
-      target: { kind: AuditTargetKind.Api, id: api.identifier, name: api.name },
-    });
+    recordAdminChange(ctx, type, { kind: AuditTargetKind.Api, id: api.identifier, name: api.name });
     done.api = api.identifier;
   }
   return done;
-}
-
-/**
- * Records what the signed-in admin did. Only changes that worked get here.
- *
- * @param ctx - Request context.
- * @param type - What they did.
- * @param target - What they did it to.
- * @param [detail] - What else to keep. Never a password, token, secret or setup URL.
- */
-function audit(ctx: Context, type: AuditType, target: AuditTarget, detail?: AuditEvent['detail']): void {
-  ctx.audit.record({ type, actor: actorOf(ctx.viewer), ip: ctx.ip, target, detail });
 }
 
 /**
@@ -839,7 +821,7 @@ export const resolvers = {
     createClient: async (_parent: unknown, args: { input: NewClient }, ctx: Context, info: GraphQLResolveInfo) => {
       const client = await ctx.clients.create(args.input);
       ctx.host.refresh();
-      audit(ctx, AuditType.ClientCreated, clientTarget(client));
+      recordAdminChange(ctx, AuditType.ClientCreated, clientTarget(client));
       return requiredRow(ctx, info, GeneratedTable.Clients, clientById(client.clientId));
     },
     /**
@@ -859,7 +841,7 @@ export const resolvers = {
     ) => {
       const client = await ctx.clients.update(args.clientId, args.input);
       ctx.host.refresh();
-      audit(ctx, AuditType.ClientUpdated, clientTarget(client));
+      recordAdminChange(ctx, AuditType.ClientUpdated, clientTarget(client));
       return requiredRow(ctx, info, GeneratedTable.Clients, clientById(client.clientId));
     },
     /**
@@ -878,7 +860,7 @@ export const resolvers = {
       info: GraphQLResolveInfo,
     ) => {
       const client = await ctx.clients.rotateSecret(args.clientId);
-      audit(ctx, AuditType.ClientSecretRotated, clientTarget(client));
+      recordAdminChange(ctx, AuditType.ClientSecretRotated, clientTarget(client));
       return requiredRow(ctx, info, GeneratedTable.Clients, clientById(client.clientId));
     },
     /**
@@ -894,7 +876,7 @@ export const resolvers = {
       const row = await rowWhere(ctx, info, GeneratedTable.Clients, clientById(args.clientId));
       const client = await ctx.clients.remove(args.clientId);
       ctx.host.refresh();
-      audit(ctx, AuditType.ClientDeleted, clientTarget(client));
+      recordAdminChange(ctx, AuditType.ClientDeleted, clientTarget(client));
       return row;
     },
     /**
@@ -917,7 +899,7 @@ export const resolvers = {
         ctx.branding.read().name,
       );
       // The setup URL holds the token, so only who may sign in is kept.
-      audit(ctx, AuditType.PairingStarted, pairingTarget(started), {
+      recordAdminChange(ctx, AuditType.PairingStarted, pairingTarget(started), {
         allowedGroups: started.allowedGroups.join(', '),
         groupsClaim: started.groupsClaim,
       });
@@ -950,7 +932,7 @@ export const resolvers = {
       await ctx.pairings.finish(pairing.id);
       const finished = ctx.pairings.find(pairing.id) ?? { ...pairing, isFinished: true };
       ctx.host.refresh();
-      audit(ctx, AuditType.PairingFinished, pairingTarget(pairing), done);
+      recordAdminChange(ctx, AuditType.PairingFinished, pairingTarget(pairing), done);
       return pairingView(finished);
     },
     /**
@@ -965,7 +947,7 @@ export const resolvers = {
       const pairing = ctx.pairings.find(args.id);
       const wasCancelled = await ctx.pairings.cancel(args.id);
       if (pairing !== null && wasCancelled) {
-        audit(ctx, AuditType.PairingCancelled, pairingTarget(pairing));
+        recordAdminChange(ctx, AuditType.PairingCancelled, pairingTarget(pairing));
       }
       return wasCancelled;
     },
@@ -986,7 +968,7 @@ export const resolvers = {
       }
       const user = await ctx.users.create(args.input);
       ctx.host.refresh();
-      audit(ctx, AuditType.UserCreated, userTarget(user));
+      recordAdminChange(ctx, AuditType.UserCreated, userTarget(user));
       return requiredRow(ctx, info, GeneratedTable.Users, userById(user.id));
     },
     /**
@@ -1006,7 +988,7 @@ export const resolvers = {
     ) => {
       const user = await ctx.users.update(args.id, args.input);
       ctx.host.refresh();
-      audit(ctx, AuditType.UserUpdated, userTarget(user));
+      recordAdminChange(ctx, AuditType.UserUpdated, userTarget(user));
       return requiredRow(ctx, info, GeneratedTable.Users, userById(user.id));
     },
     /**
@@ -1028,7 +1010,7 @@ export const resolvers = {
       await ctx.passwordPolicy.check(args.password, owner);
       const user = await ctx.users.setPassword(args.id, args.password);
       await ctx.passwordLinks.cancelFor(user.id);
-      audit(ctx, AuditType.UserPasswordSet, userTarget(user));
+      recordAdminChange(ctx, AuditType.UserPasswordSet, userTarget(user));
       return requiredRow(ctx, info, GeneratedTable.Users, userById(user.id));
     },
     /**
@@ -1049,7 +1031,7 @@ export const resolvers = {
       await ctx.upstreams.removeUser(user.id);
       await ctx.pictures.discard(user);
       ctx.host.refresh();
-      audit(ctx, AuditType.UserDeleted, userTarget(user));
+      recordAdminChange(ctx, AuditType.UserDeleted, userTarget(user));
       return row;
     },
     /**
@@ -1071,7 +1053,7 @@ export const resolvers = {
       if (user.disabled) {
         await signOutEverywhere(ctx, user.id);
       }
-      audit(ctx, user.disabled ? AuditType.UserDisabled : AuditType.UserEnabled, userTarget(user));
+      recordAdminChange(ctx, user.disabled ? AuditType.UserDisabled : AuditType.UserEnabled, userTarget(user));
       return requiredRow(ctx, info, GeneratedTable.Users, userById(user.id));
     },
     /**
@@ -1095,7 +1077,7 @@ export const resolvers = {
       if (isEnded === false) {
         throw notFound(`"${user.username}" has no session "${args.sessionId}".`);
       }
-      audit(ctx, AuditType.UserSessionEnded, userTarget(user), { sessionId: args.sessionId });
+      recordAdminChange(ctx, AuditType.UserSessionEnded, userTarget(user), { sessionId: args.sessionId });
       return requiredRow(ctx, info, GeneratedTable.Users, userById(user.id));
     },
     /**
@@ -1110,7 +1092,7 @@ export const resolvers = {
     signOutUser: async (_parent: unknown, args: { id: string }, ctx: Context, info: GraphQLResolveInfo) => {
       const user = loadUser(ctx, args.id);
       await signOutEverywhere(ctx, user.id);
-      audit(ctx, AuditType.UserSignedOut, userTarget(user));
+      recordAdminChange(ctx, AuditType.UserSignedOut, userTarget(user));
       return requiredRow(ctx, info, GeneratedTable.Users, userById(user.id));
     },
     /**
@@ -1125,7 +1107,7 @@ export const resolvers = {
     resetSecondFactors: async (_parent: unknown, args: { id: string }, ctx: Context, info: GraphQLResolveInfo) => {
       const user = loadUser(ctx, args.id);
       await ctx.factors.removeAll(user.id);
-      audit(ctx, AuditType.UserSecondFactorsReset, userTarget(user));
+      recordAdminChange(ctx, AuditType.UserSecondFactorsReset, userTarget(user));
       return requiredRow(ctx, info, GeneratedTable.Users, userById(user.id));
     },
     /**
@@ -1145,7 +1127,7 @@ export const resolvers = {
       const { token, expiresAt } = await ctx.passwordLinks.issue(user.id);
       const url = `${adminUrls(ctx.issuer).base}${WEB_APP_PAGE.setPassword}#token=${token}`;
       // The URL holds the token, so only that a link was made is kept.
-      audit(ctx, AuditType.PasswordLinkCreated, userTarget(user));
+      recordAdminChange(ctx, AuditType.PasswordLinkCreated, userTarget(user));
       return { url, expiresAt: new Date(expiresAt).toISOString() };
     },
     /**
@@ -1158,7 +1140,7 @@ export const resolvers = {
      */
     renameGroup: async (_parent: unknown, args: { name: string; newName: string }, ctx: Context): Promise<Group> => {
       const group = await renameGroup(ctx, args.name, args.newName);
-      audit(ctx, AuditType.GroupRenamed, groupTarget(group.name), { from: args.name });
+      recordAdminChange(ctx, AuditType.GroupRenamed, groupTarget(group.name), { from: args.name });
       return group;
     },
     /**
@@ -1171,7 +1153,7 @@ export const resolvers = {
      */
     deleteGroup: async (_parent: unknown, args: { name: string }, ctx: Context): Promise<number> => {
       const members = await deleteGroup(ctx, args.name);
-      audit(ctx, AuditType.GroupDeleted, groupTarget(args.name), { members: String(members) });
+      recordAdminChange(ctx, AuditType.GroupDeleted, groupTarget(args.name), { members: String(members) });
       return members;
     },
     /**
@@ -1185,7 +1167,7 @@ export const resolvers = {
     rotateKeys: async (_parent: unknown, _args: unknown, ctx: Context): Promise<KeysView> => {
       const keys = keysView(await ctx.keys.rotate());
       ctx.host.refresh();
-      audit(ctx, AuditType.KeysRotated, KEYS_TARGET, { kid: keys.signingKeys[0]?.kid ?? '' });
+      recordAdminChange(ctx, AuditType.KeysRotated, KEYS_TARGET, { kid: keys.signingKeys[0]?.kid ?? '' });
       return keys;
     },
     /**
@@ -1198,7 +1180,7 @@ export const resolvers = {
      */
     setBrandingName: async (_parent: unknown, args: { name: string }, ctx: Context): Promise<BrandingView> => {
       const branding = await ctx.branding.setName(args.name);
-      audit(ctx, AuditType.BrandingNameSet, BRANDING_TARGET, { name: branding.name });
+      recordAdminChange(ctx, AuditType.BrandingNameSet, BRANDING_TARGET, { name: branding.name });
       return brandingView(branding);
     },
     /**
@@ -1215,7 +1197,9 @@ export const resolvers = {
       ctx: Context,
     ): Promise<BrandingView> => {
       const branding = await ctx.branding.setLogo(args.dataUrl ?? null);
-      audit(ctx, AuditType.BrandingLogoSet, BRANDING_TARGET, { logo: branding.logo === null ? 'removed' : 'set' });
+      recordAdminChange(ctx, AuditType.BrandingLogoSet, BRANDING_TARGET, {
+        logo: branding.logo === null ? 'removed' : 'set',
+      });
       return brandingView(branding);
     },
     /**
@@ -1232,7 +1216,7 @@ export const resolvers = {
       ctx: Context,
     ): Promise<HttpRedirectSetting> => {
       const setting = await ctx.settings.setHttpRedirects(args.allowed ?? null);
-      audit(ctx, AuditType.HttpRedirectsSet, SETTINGS_TARGET, {
+      recordAdminChange(ctx, AuditType.HttpRedirectsSet, SETTINGS_TARGET, {
         httpRedirects: setting.isAllowed ? 'allowed' : 'refused',
         chosenBy: setting.isSet ? 'operator' : 'issuer',
       });
@@ -1257,7 +1241,7 @@ export const resolvers = {
           ? {}
           : { checkBreaches: args.checkBreaches }),
       });
-      audit(ctx, AuditType.PasswordRulesSet, SETTINGS_TARGET, {
+      recordAdminChange(ctx, AuditType.PasswordRulesSet, SETTINGS_TARGET, {
         minScore: String(rules.minScore),
         breachCheck: rules.checkBreaches ? 'on' : 'off',
       });
@@ -1279,7 +1263,7 @@ export const resolvers = {
       info: GraphQLResolveInfo,
     ) => {
       const upstream = await ctx.upstreams.create({ ...upstreamFieldsOf(args.input), id: args.id });
-      audit(ctx, AuditType.UpstreamCreated, upstreamTarget(upstream), { kind: upstream.kind });
+      recordAdminChange(ctx, AuditType.UpstreamCreated, upstreamTarget(upstream), { kind: upstream.kind });
       return requiredRow(ctx, info, GeneratedTable.Upstreams, upstreamById(upstream.id));
     },
     /**
@@ -1299,7 +1283,7 @@ export const resolvers = {
     ) => {
       const isNewSecret = (args.input.clientSecret ?? '').trim() !== '';
       const upstream = await ctx.upstreams.update(args.id, upstreamFieldsOf(args.input));
-      audit(ctx, AuditType.UpstreamUpdated, upstreamTarget(upstream), {
+      recordAdminChange(ctx, AuditType.UpstreamUpdated, upstreamTarget(upstream), {
         clientSecret: isNewSecret ? 'replaced' : 'kept',
       });
       return requiredRow(ctx, info, GeneratedTable.Upstreams, upstreamById(upstream.id));
@@ -1316,7 +1300,7 @@ export const resolvers = {
     deleteUpstream: async (_parent: unknown, args: { id: string }, ctx: Context, info: GraphQLResolveInfo) => {
       const row = await rowWhere(ctx, info, GeneratedTable.Upstreams, upstreamById(args.id));
       const { provider, unlinked } = await ctx.upstreams.remove(args.id);
-      audit(ctx, AuditType.UpstreamDeleted, upstreamTarget(provider), { unlinked: String(unlinked) });
+      recordAdminChange(ctx, AuditType.UpstreamDeleted, upstreamTarget(provider), { unlinked: String(unlinked) });
       return row;
     },
     /**
@@ -1337,7 +1321,10 @@ export const resolvers = {
       const user = loadUser(ctx, args.id);
       const link = await ctx.upstreams.unlink(user.id, args.providerId);
       const provider = ctx.upstreams.find(link.providerId) ?? { id: link.providerId, name: link.providerId };
-      audit(ctx, AuditType.UpstreamUnlinked, upstreamTarget(provider), { identity: link.label, user: user.username });
+      recordAdminChange(ctx, AuditType.UpstreamUnlinked, upstreamTarget(provider), {
+        identity: link.label,
+        user: user.username,
+      });
       return requiredRow(ctx, info, GeneratedTable.Users, userById(user.id));
     },
   },
