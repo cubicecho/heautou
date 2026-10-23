@@ -1,6 +1,6 @@
 import { UPSTREAM_ID_PATTERN } from '@server/store/upstream-id.ts';
 import { useRef, useState } from 'react';
-import type { UnknownIdentity, UpstreamFieldsFragment, UpstreamKind } from '@/__generated__/graphql';
+import type { UnknownIdentity, UpstreamFieldsFragment, UpstreamInput, UpstreamKind } from '@/__generated__/graphql';
 import { ComboboxField, InputField, SelectField, SwitchField, TextareaField, useAppForm } from '@/components/app-form';
 import { DialogLayout } from '@/components/dialog-layout';
 import { Disclosure } from '@/components/disclosure';
@@ -14,7 +14,7 @@ import { FormElement } from '@/components/ui/form-element';
 import { useBackupInfo } from '@/core/backup';
 import { useGroupOptions } from '@/core/groups';
 import { commaListOf, linesOf, messageOf } from '@/core/lists';
-import { useSaveUpstream, useUpstreamRedirectUri } from '@/core/upstreams';
+import { useCreateUpstream, useUpdateUpstream, useUpstreamRedirectUri } from '@/core/upstreams';
 import {
   OTHER_UPSTREAM,
   UPSTREAM_PRESET_OPTIONS,
@@ -89,7 +89,9 @@ interface UpstreamFormDialogProps {
  */
 export function UpstreamFormDialog({ upstream, open, onOpenChange }: UpstreamFormDialogProps) {
   const isEdit = upstream !== null;
-  const save = useSaveUpstream();
+  const create = useCreateUpstream();
+  const update = useUpdateUpstream();
+  const failure = isEdit ? update.error : create.error;
   const groupOptions = useGroupOptions();
   // Whether SECRET_KEY seals the client secret, so the field says what happens to it.
   const isSealed = useBackupInfo().data?.isSealed;
@@ -116,9 +118,8 @@ export function UpstreamFormDialog({ upstream, open, onOpenChange }: UpstreamFor
     },
     onSubmit: async ({ value }) => {
       const kind = kindOf(value.kind);
-      await save.mutateAsync({
+      const vars: { id: string; input: UpstreamInput } = {
         id: value.id.trim(),
-        isNew: isEdit === false,
         input: {
           name: value.name.trim(),
           kind,
@@ -133,7 +134,8 @@ export function UpstreamFormDialog({ upstream, open, onOpenChange }: UpstreamFor
           groupsClaim: value.groupsClaim.trim() || null,
           groupMappings: mappingsOf(value.groupMappings),
         },
-      });
+      };
+      await (isEdit ? update.mutateAsync(vars) : create.mutateAsync(vars));
       onOpenChange(false);
     },
   });
@@ -369,9 +371,7 @@ export function UpstreamFormDialog({ upstream, open, onOpenChange }: UpstreamFor
               />
             )}
           </form.Subscribe>
-          {save.error === null ? null : (
-            <Alert variant="destructive" title="Not saved" description={messageOf(save.error)} />
-          )}
+          {failure === null ? null : <Alert variant="destructive" title="Not saved" description={messageOf(failure)} />}
         </FormElement>
       }
       footerActionsSlot={(close) => (

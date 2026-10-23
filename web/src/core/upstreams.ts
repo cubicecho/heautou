@@ -38,17 +38,29 @@ export function useUpstreamRedirectUri(id: string) {
 }
 
 /**
- * Adds an upstream provider, or changes one.
+ * Adds an upstream provider.
  *
  * @returns The mutation.
  */
-export function useSaveUpstream() {
+export function useCreateUpstream() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, input, isNew }: { id: string; input: UpstreamInput; isNew: boolean }) =>
-      isNew
-        ? (await request(CreateUpstreamDocument, { id, input })).createUpstream
-        : (await request(UpdateUpstreamDocument, { id, input })).updateUpstream,
+    mutationFn: async (vars: { id: string; input: UpstreamInput }) =>
+      (await request(CreateUpstreamDocument, vars)).createUpstream,
+    onSuccess: refetching(queryClient, QUERY_KEYS.upstreams),
+  });
+}
+
+/**
+ * Changes an upstream provider.
+ *
+ * @returns The mutation.
+ */
+export function useUpdateUpstream() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (vars: { id: string; input: UpstreamInput }) =>
+      (await request(UpdateUpstreamDocument, vars)).updateUpstream,
     onSuccess: refetching(queryClient, QUERY_KEYS.upstreams),
   });
 }
