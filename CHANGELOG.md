@@ -1,3 +1,26 @@
+# [1.20.0](https://github.com/cubicecho/heautou/compare/v1.19.0...v1.20.0) (2026-10-23)
+
+
+### Bug Fixes
+
+* **graphql:** have the activity list wait for entries still queued (B1) ([dd82ab1](https://github.com/cubicecho/heautou/commit/dd82ab15727a3830cc1dc671e31372c752fbbefc))
+* **pairing:** name an app's registration entries as the client store does (B2) ([9cd4f9a](https://github.com/cubicecho/heautou/commit/9cd4f9abbb6e2f871a87e743d23d4b0d801f05e3))
+* **sites:** hold the host field to the server's length limits (B4) ([8b1e773](https://github.com/cubicecho/heautou/commit/8b1e77382189932950bcd54e038cb14875b103a2))
+* **web:** fit the narrow top bar on a phone ([7d944c6](https://github.com/cubicecho/heautou/commit/7d944c6c4a0fa70428cf1a6e981bd5f96fc35ffd))
+* **web:** say whether secrets are sealed, and why email options are off ([1f60a75](https://github.com/cubicecho/heautou/commit/1f60a75fffb3cebeb5985e38e12b7885e880402b))
+
+
+### Features
+
+* **web:** draw My account as a page, inside the admin shell for admins ([0d3e607](https://github.com/cubicecho/heautou/commit/0d3e607505db06143a6132de7fc4837a3178a54f))
+* **web:** keep a client's rarely changed settings under Advanced ([d2f97d6](https://github.com/cubicecho/heautou/commit/d2f97d65cb49ddd8ab42cb57fc780d5ed6babad0))
+* **web:** list protected sites first and fold the proxy setup ([a50b8dd](https://github.com/cubicecho/heautou/commit/a50b8ddbdf74c024a909602e429c7cd283c4b2d7))
+* **web:** mask client secrets until shown ([52bedbe](https://github.com/cubicecho/heautou/commit/52bedbe56fe250aac60c1452f88624bbabb2d7e9))
+* **web:** plainer setup copy and readable activity rows ([d7e0d16](https://github.com/cubicecho/heautou/commit/d7e0d16b5f1e426eccfdb8f05b2b5c90e327d9db))
+* **web:** put a user's less used actions in a menu and mark admins ([0c30881](https://github.com/cubicecho/heautou/commit/0c30881e10f14b89210915c8ac89867f8d6b89af))
+* **web:** show how to configure a client first, and quiet its row ([7545683](https://github.com/cubicecho/heautou/commit/7545683fd779e7b6736fdfc1086bf3110438752e))
+* **web:** split Settings into tabs and move sign-in providers to Users ([3dd917c](https://github.com/cubicecho/heautou/commit/3dd917c03eeec02bb2fb1268ca90962c3f2484b5))
+
 # [1.19.0](https://github.com/cubicecho/heautou/compare/v1.18.0...v1.19.0) (2026-10-23)
 
 
