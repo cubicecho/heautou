@@ -16,7 +16,7 @@ import type { SettingsStore } from '../store/settings.ts';
 import { isAdmin, type UserStore } from '../store/users.ts';
 import type { WebSessionStore } from '../store/web-sessions.ts';
 import { PUBLIC_PATH } from './paths.ts';
-import { ACCOUNT_API, clearSessionCookies, requireSignedIn, signedInUser, viewerOf } from './session.ts';
+import { ACCOUNT_API, clearSessionCookie, requireSignedIn, signedInUser, viewerOf } from './session.ts';
 
 /** The routes of the signed-in user's own account. */
 export const ACCOUNT_PATH = {
@@ -169,7 +169,7 @@ export function createAccountRouter(deps: AccountDeps): Router {
       await sessions.revokeAccount(user.id, req.ip ?? null);
       audit.record({ type: AuditType.AccountSignedOutEverywhere, actor: actorOf(user), ip: req.ip ?? null });
     }
-    clearSessionCookies(res, issuer);
+    clearSessionCookie(res, issuer);
     res.json({ redirectTo: `${ADMIN_PATH.login}?return=${encodeURIComponent(WEB_APP_PAGE.account)}` });
   });
 

@@ -1,4 +1,3 @@
-import { COOKIE, FORMER_SESSION_COOKIE } from '../../server/account/session.ts';
 import { ADMIN_DEFAULTS } from '../../server/core/defaults.ts';
 import { HttpStatus, MS_PER_SECOND } from '../../server/core/wire.ts';
 import { startTestApp, type TestApp } from '../helpers.ts';
@@ -131,54 +130,6 @@ describe('admin sign-in', () => {
     expect(
       (await browser.send('/graphql', { method: 'POST', headers: { 'content-type': 'application/json' } })).status,
     ).toBe(HttpStatus.Unauthorized);
-  });
-
-  describe('the session cookie under its former name', () => {
-    /**
-     * Starts a session for the signed-in admin, as a browser from before the rename holds it.
-     *
-     * @returns The session's token.
-     */
-    const formerSession = async (): Promise<string> => {
-      const root = app.services.users.list().find((user) => user.username === 'root');
-      return app.services.webSessions.create(root?.id ?? '');
-    };
-    const send = (path: string, cookie: string, body?: string) =>
-      fetch(`${app.base}${path}`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', cookie },
-        body,
-      });
-
-    it('still signs the browser in, and is swapped for the new cookie', async () => {
-      const token = await formerSession();
-      const res = await send('/graphql', `${FORMER_SESSION_COOKIE}=${token}`, JSON.stringify({ query: VIEWER }));
-      expect((await res.json()).data.viewer).toEqual({ username: 'root' });
-      const cookies = res.headers.getSetCookie();
-      expect(cookies).toContainEqual(expect.stringMatching(new RegExp(`^${COOKIE.session}=${token};.*Max-Age=`)));
-      expect(cookies).toContainEqual(expect.stringMatching(new RegExp(`^${FORMER_SESSION_COOKIE}=;`)));
-
-      const moved = await send('/graphql', `${COOKIE.session}=${token}`, JSON.stringify({ query: VIEWER }));
-      expect((await moved.json()).data.viewer).toEqual({ username: 'root' });
-      expect(moved.headers.getSetCookie()).toEqual([]);
-    });
-
-    it('is only cleared once its session has ended', async () => {
-      const res = await send('/graphql', `${FORMER_SESSION_COOKIE}=ended`, JSON.stringify({ query: VIEWER }));
-      expect(res.status).toBe(HttpStatus.Unauthorized);
-      expect(res.headers.getSetCookie()).toEqual([expect.stringMatching(new RegExp(`^${FORMER_SESSION_COOKIE}=;`))]);
-    });
-
-    it('signs out, clearing both cookies', async () => {
-      const token = await formerSession();
-      const res = await send('/admin/logout', `${FORMER_SESSION_COOKIE}=${token}`);
-      expect(res.status).toBe(HttpStatus.Ok);
-      const cleared = res.headers.getSetCookie().filter((line) => /^[^=]+=;/.test(line));
-      expect(cleared.map((line) => line.slice(0, line.indexOf('=')))).toEqual(
-        expect.arrayContaining([COOKIE.session, FORMER_SESSION_COOKIE]),
-      );
-      expect(app.services.webSessions.find(token)).toBeNull();
-    });
   });
 
   it('keeps the admin client out of the client list and reserves its ID', async () => {

@@ -18,14 +18,6 @@ export const COOKIE = {
 } as const;
 
 /**
- * What the session cookie was called before it was `heautou_session`. A request that still sends it is signed in
- * by it, and `moveFormerSessionCookie` swaps it for the new one on that response, so the upgrade signs nobody out.
- * A session lasts `ADMIN_DEFAULTS.sessionSeconds` (12 hours), so none is left once a build with the new name has run
- * that long: drop this and `moveFormerSessionCookie` in the release after the rename.
- */
-export const FORMER_SESSION_COOKIE = 'heautou_admin';
-
-/**
  * Where the routes of a signed-in user's own account are. Under `/api` rather than `/account`, which is the web app's
  * page (and the dev server forwards to the API by prefix); not under `/admin`, since any signed-in user calls them.
  */
@@ -38,13 +30,13 @@ export interface SessionDeps {
 }
 
 /**
- * Reads a request's session token: the session cookie, else the cookie's former name.
+ * Reads a request's session token from the session cookie.
  *
  * @param req - The request.
- * @returns The token, or null when neither cookie was sent.
+ * @returns The token, or null when the cookie was not sent.
  */
 export function sessionTokenOf(req: Request): string | null {
-  return readCookie(req, COOKIE.session) ?? readCookie(req, FORMER_SESSION_COOKIE);
+  return readCookie(req, COOKIE.session);
 }
 
 /**
@@ -117,49 +109,25 @@ export function sessionCookieOptions(issuer: string): CookieOptions {
 }
 
 /**
- * Sets the session cookie for a new session, and clears the cookie's former name.
+ * Sets the session cookie for a new session.
  *
  * @param res - The response.
  * @param issuer - The issuer, for the cookie's options.
  * @param token - The session's token.
  */
 export function setSessionCookie(res: Response, issuer: string, token: string): void {
-  const options = sessionCookieOptions(issuer);
-  res.clearCookie(FORMER_SESSION_COOKIE, options);
-  res.cookie(COOKIE.session, token, { ...options, maxAge: ADMIN_DEFAULTS.sessionSeconds * MS_PER_SECOND });
+  res.cookie(COOKIE.session, token, {
+    ...sessionCookieOptions(issuer),
+    maxAge: ADMIN_DEFAULTS.sessionSeconds * MS_PER_SECOND,
+  });
 }
 
 /**
- * Clears the session cookie under its name and its former name, at sign-out.
+ * Clears the session cookie, at sign-out.
  *
  * @param res - The response.
  * @param issuer - The issuer, for the cookie's options.
  */
-export function clearSessionCookies(res: Response, issuer: string): void {
-  const options = sessionCookieOptions(issuer);
-  res.clearCookie(COOKIE.session, options);
-  res.clearCookie(FORMER_SESSION_COOKIE, options);
-}
-
-/**
- * Swaps a session cookie still under its former name for the new one, on whatever response the browser gets next. A
- * former cookie whose session ended is only cleared. Removed with `FORMER_SESSION_COOKIE`.
- *
- * @param deps - The session store.
- * @param issuer - The issuer, for the cookie's options.
- * @returns The middleware.
- */
-export function moveFormerSessionCookie(deps: Pick<SessionDeps, 'webSessions'>, issuer: string): RequestHandler {
-  return (req, res, next) => {
-    const former = readCookie(req, FORMER_SESSION_COOKIE);
-    if (former !== null) {
-      const isMoved = readCookie(req, COOKIE.session) !== null;
-      if (isMoved === false && deps.webSessions.find(former) !== null) {
-        setSessionCookie(res, issuer, former);
-      } else {
-        res.clearCookie(FORMER_SESSION_COOKIE, sessionCookieOptions(issuer));
-      }
-    }
-    next();
-  };
+export function clearSessionCookie(res: Response, issuer: string): void {
+  res.clearCookie(COOKIE.session, sessionCookieOptions(issuer));
 }

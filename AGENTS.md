@@ -104,7 +104,7 @@ signed in is caught by the `account_refused` policy check and asked to sign in a
 
 The admin UI signs in the same way, as the built-in public client `heautou-admin`: a 401 from `/graphql` sends the
 browser to `/admin/login`, which starts a PKCE flow back to `/admin/callback`. The callback swaps the code in-process
-(`provider.AuthorizationCode.find`), sets the `heautou_session` session cookie (a browser still holding the cookie's former name, `heautou_admin`, is signed in by it and given the new one). Any enabled user may sign in this way: `requireAdmin` gives a
+(`provider.AuthorizationCode.find`), sets the `heautou_session` session cookie. Any enabled user may sign in this way: `requireAdmin` gives a
 non-admin a 403 on `/graphql`, and the web app sends them on to `/account`. An invite or reset link is
 `/set-password#token=…`; setting the password through it signs nobody in, the page then sends the browser to the
 sign-in. Tests sign in with `signInAsAdmin` in `tests/oidc/browser.ts`.
