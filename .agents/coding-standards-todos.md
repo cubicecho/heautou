@@ -95,7 +95,7 @@ average 13); every failing file passes alone. See T5 and T6.
 | R25 | Refactor [readability] | Moves the error-message and claims helpers out of the web's `lists` module | The module says what it holds | — | open |
 | R26 | Refactor [reuse] | One "not saved" alert for the five form dialogs | Removes five copies | — | open |
 | R27 | Refactor [consistency] | Moves the five settings sections out of the settings route into concept folders, like mail and backup | Same shape as their siblings | — | open |
-| B1 | Bug (question) | Asks whether the generated activity list should wait for audit entries still queued, as the subscription does | The list shows a change just made | — | approved |
+| B1 | Bug (question) | Asks whether the generated activity list should wait for audit entries still queued, as the subscription does | The list shows a change just made | — | done |
 | B3 | Bug | Notes that nothing stops two servers sharing one Postgres, which the in-memory documents can't survive | Prevents silent data loss | — | open |
 | B6 | Bug (question) | Asks whether edit dialogs should agree on keeping Save off until something changes | Consistency; may belong to the UX pass | — | open |
 | B7 | Bug | The overview page always warns that secrets are plain text, even when they are sealed | The warning means something | — | open |

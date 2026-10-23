@@ -6,7 +6,8 @@
 // from memory, so a write past the store would leave the provider reading old data.
 import { addResolversToSchema } from '@graphql-tools/schema';
 import { buildSchema, GraphQLDateTime } from '@vantreeseba/drizzle-graphql';
-import { extendSchema, type GraphQLSchema, parse } from 'graphql';
+import { extendSchema, type GraphQLField, type GraphQLSchema, parse } from 'graphql';
+import type { Context } from '../core/context.ts';
 import { OPERATION_LIMIT_DEFAULTS } from '../core/defaults.ts';
 import type { Database } from '../db/client.ts';
 import { apiResolvers } from './apis.ts';
@@ -47,6 +48,9 @@ const RELATED_TABLES = ['upstreamLinks', 'upstreamGroupMappings'];
 /** Drizzle's name for a Postgres timestamp column. */
 const TIMESTAMP_COLUMN = 'PgTimestamp';
 
+/** The generated reads of the audit log. */
+const AUDIT_READS = ['auditEntries', 'auditEntry', 'auditEntriesAggregate'];
+
 /** The ordering a list runs with when the request passes none: oldest first, and the audit log newest first. */
 const OLDEST_FIRST = { createdAt: { direction: 'asc', priority: 1 } } as const;
 
@@ -78,6 +82,28 @@ function mergeResolvers(maps: readonly Record<string, object>[]): Record<string,
     }
   }
   return merged;
+}
+
+/**
+ * Makes the generated reads of the audit log wait for the entries still queued, as `audit.list` and the subscription
+ * do, so a change just made is in the list. `audit.record` does not wait for its write.
+ *
+ * @param schema - The built schema. Its audit fields are changed in place.
+ * @returns The same schema.
+ */
+function waitingForAudit(schema: GraphQLSchema): GraphQLSchema {
+  const fields = schema.getQueryType()?.getFields() ?? {};
+  for (const name of AUDIT_READS) {
+    const field: GraphQLField<unknown, Pick<Context, 'audit'>> | undefined = fields[name];
+    const resolve = field?.resolve;
+    if (field !== undefined && resolve !== undefined) {
+      field.resolve = async (parent, args, ctx, info) => {
+        await ctx.audit.settled();
+        return resolve(parent, args, ctx, info);
+      };
+    }
+  }
+  return schema;
 }
 
 /**
@@ -131,5 +157,5 @@ export function createSchema(db: Database): GraphQLSchema {
     schema: extended,
     resolvers: mergeResolvers([resolvers, apiResolvers, mailResolvers, forwardAuthResolvers]),
   });
-  return withKeysSelected(resolved);
+  return waitingForAudit(withKeysSelected(resolved));
 }
