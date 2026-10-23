@@ -34,12 +34,14 @@ a real Postgres and that the server boots on it; then builds the image and boots
 
 - `server/db/` the database: `schema.ts` (every table; the settings that are one document each are rows of `documents`;
   a row naming another store's row has no foreign key, each store keeps its own references), `relations.ts` (what
-  drizzle-graphql nests), `client.ts` (`openDatabase`: PGlite in `DATA_DIR/pg` with a pid lock, or node-postgres for
+  drizzle-graphql nests), `client.ts` (`openDatabase`: PGlite in `DATA_DIR/pg`, or node-postgres for
   `DATABASE_URL`, waiting for Postgres and taking the database lock before anything is written; `migrate` applies
-  `drizzle/`), `lock.ts` (the database lock: PGlite's lock file, or Postgres's session advisory lock on
+  `drizzle/`), `lock.ts` (the database lock: PGlite's `pg.lock` file, naming its holder by a token
+  and refreshed every `lockHeartbeatMs`, so it holds across containers where both are pid 1, and stale after
+  `lockStaleMs`; or Postgres's session advisory lock on
   `DATABASE_LOCK_KEY`, held on a connection of its own for the process's life; another holder is waited for up to
-  `DATABASE_DEFAULTS.lockWaitMs`, then refused as `DATABASE_IN_USE`; a dropped lock connection exits the process as
-  `DATABASE_LOCK_LOST`), `wait.ts` (boot waits for Postgres), `ssl.ts` (TLS only off the local
+  `DATABASE_DEFAULTS.lockWaitMs`, then refused as `DATABASE_IN_USE`; a lost lock (a dropped connection, a lock file taken over) exits
+  the process as `DATABASE_LOCK_LOST`), `wait.ts` (boot waits for Postgres), `ssl.ts` (TLS only off the local
   network), `document.ts` (a store's document in memory, changed synchronously and written through as row differences,
   in order, on one write queue; a write that fails puts the document back as the tables hold it and drops the changes
   made on top of it), `documents.ts` (each store's document ↔ rows, which also reads an older version's JSON file),

@@ -708,6 +708,8 @@ behavior: refuse to start while another holds the database, for instance with
 on a connection of its own, waiting up to `DATABASE_DEFAULTS.lockWaitMs`, and the server, the
 backup CLI and `db:migrate` refuse as `DATABASE_IN_USE`; a dropped lock connection exits as
 `DATABASE_LOCK_LOST`. CI's `postgres` job boots a second process and expects the refusal.
+PGlite's pid file didn't hold across containers (both pid 1, neither seeing the other's
+processes); its lock file now names its holder by a token and is refreshed while held.
 
 ### B4 — The web's host check accepts hosts the server refuses · low value
 

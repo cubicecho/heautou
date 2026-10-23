@@ -1,5 +1,9 @@
 import { EventEmitter } from 'node:events';
-import { DatabaseLockErrorCode, holdPostgresLock, type LockSession } from '../../server/db/lock.ts';
+import { existsSync, utimesSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
+import { openDatabase, PGLITE_DIRECTORY } from '../../server/db/client.ts';
+import { DatabaseLockErrorCode, holdDirectoryLock, holdPostgresLock, type LockSession } from '../../server/db/lock.ts';
+import { tempDir } from '../helpers.ts';
 
 const LABEL = 'postgres://db:5432/heautou';
 /** Where the fake Postgres says the holder connects from. */
@@ -118,5 +122,64 @@ describe('holdPostgresLock', () => {
     const released = new FakeSession(server);
     const release = await holdPostgresLock(released, LABEL, neverLost, QUICK, quiet);
     await release();
+  });
+});
+
+describe('holdDirectoryLock', () => {
+  const quiet = (): void => {};
+  const neverLost = (): void => {
+    throw new Error('The lock was reported lost.');
+  };
+  /** Refreshes fast and goes stale fast, so a test sees both. */
+  const BRISK = { ...QUICK, lockHeartbeatMs: 5, lockStaleMs: 40 };
+  /** Well past `BRISK.lockStaleMs`. */
+  const LONG_AGO_SECONDS = 3600;
+
+  it("refuses a second open of PGlite's directory, even from a process with the same pid", async () => {
+    // Two containers on one volume can both be pid 1; this process opening twice is the same case.
+    const dataDir = tempDir();
+    const database = await openDatabase({ url: '', dataDir, isProduction: false }, QUICK, neverLost);
+    try {
+      const second = openDatabase({ url: '', dataDir, isProduction: false }, QUICK, neverLost);
+      await expect(second).rejects.toMatchObject({ code: DatabaseLockErrorCode.InUse });
+    } finally {
+      await database.close();
+    }
+    const reopened = await openDatabase({ url: '', dataDir, isProduction: false }, QUICK, neverLost);
+    await reopened.close();
+  });
+
+  it('keeps its lock file fresh, so a holder that runs on is never taken for gone', async () => {
+    const directory = path.join(tempDir(), PGLITE_DIRECTORY);
+    const release = await holdDirectoryLock(directory, neverLost, BRISK, quiet);
+    try {
+      await new Promise((resolve) => setTimeout(resolve, BRISK.lockStaleMs * 2));
+      const second = holdDirectoryLock(directory, neverLost, BRISK, quiet);
+      await expect(second).rejects.toMatchObject({ code: DatabaseLockErrorCode.InUse });
+    } finally {
+      await release();
+    }
+  });
+
+  it('takes over a lock file its holder stopped refreshing, as after a crash', async () => {
+    const directory = path.join(tempDir(), PGLITE_DIRECTORY);
+    const lock = `${directory}.lock`;
+    writeFileSync(lock, JSON.stringify({ token: 'crashed', pid: 1, host: 'old-container' }));
+    const longAgo = new Date(Date.now() - LONG_AGO_SECONDS * 1000);
+    utimesSync(lock, longAgo, longAgo);
+    const release = await holdDirectoryLock(directory, neverLost, BRISK, quiet);
+    await release();
+    expect(existsSync(lock)).toBe(false);
+  });
+
+  it('reports the lock lost when another process takes its file over', async () => {
+    const directory = path.join(tempDir(), PGLITE_DIRECTORY);
+    const lost = vi.fn();
+    const release = await holdDirectoryLock(directory, lost, BRISK, quiet);
+    writeFileSync(`${directory}.lock`, JSON.stringify({ token: 'other', pid: 1, host: 'other-container' }));
+    await vi.waitFor(() => expect(lost).toHaveBeenCalledOnce(), { interval: 1 });
+    expect(lost.mock.calls[0]?.[0]).toMatchObject({ code: DatabaseLockErrorCode.Lost });
+    await release();
+    expect(existsSync(`${directory}.lock`)).toBe(true);
   });
 });

@@ -39,6 +39,13 @@ export interface DatabaseSettings {
   lockRetryDelayMs: number;
   /** How long the connection holding Postgres's lock may sit idle before TCP keepalive probes it. */
   lockKeepAliveDelayMs: number;
+  /** How often a process holding PGlite's directory refreshes its lock file. */
+  lockHeartbeatMs: number;
+  /**
+   * How long a lock file may go unrefreshed before its holder counts as gone. Under `lockWaitMs`, so a crashed
+   * holder's lock is taken over within the wait.
+   */
+  lockStaleMs: number;
 }
 
 export const DATABASE_DEFAULTS: Readonly<DatabaseSettings> = Object.freeze({
@@ -49,6 +56,8 @@ export const DATABASE_DEFAULTS: Readonly<DatabaseSettings> = Object.freeze({
   lockWaitMs: 15_000,
   lockRetryDelayMs: 1_000,
   lockKeepAliveDelayMs: 10_000,
+  lockHeartbeatMs: 2_000,
+  lockStaleMs: 10_000,
 });
 
 /** Bounds on one GraphQL operation. */

@@ -1,9 +1,14 @@
 // The database lock: one process uses a database at a time. Each store keeps its document in memory and writes it
 // through, so a second process on the same tables would overwrite the first's rows from stale memory. PGlite's lock is
-// a pid file beside its directory; Postgres's is a session-level advisory lock held on a connection of its own.
+// a file beside its directory that its holder keeps fresh; Postgres's is a session-level advisory lock held on a
+// connection of its own.
+import { randomUUID } from 'node:crypto';
+import { readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
+import { hostname } from 'node:os';
+import { z } from 'zod';
 import { DATABASE_DEFAULTS, type DatabaseSettings } from '../core/defaults.ts';
 import { errorMessage } from '../core/errors.ts';
-import { DATABASE_LOCK_KEY, MS_PER_SECOND } from '../core/wire.ts';
+import { DATABASE_LOCK_KEY, FILE_MODE, MS_PER_SECOND } from '../core/wire.ts';
 
 /** Why a process can't use the database. */
 export const DatabaseLockErrorCode = {
@@ -58,6 +63,20 @@ function inUse(label: string, holder: string): DatabaseLockError {
   return new DatabaseLockError(
     DatabaseLockErrorCode.InUse,
     `Another heautou is using ${label} (${holder}). Only one process may use a database: each keeps the data in memory, so a second would overwrite the first's changes. Stop the other one first: look for another container (\`docker ps\`, or a compose service scaled past 1) or a server started by hand on the same DATA_DIR or DATABASE_URL. \`npm run backup\` and \`npm run db:migrate\` need the server stopped too; to back up a running server, use Download backup under Settings.`,
+  );
+}
+
+/**
+ * Builds the error for a lock this process held and no longer does.
+ *
+ * @param label - The database, as the boot log names it.
+ * @param reason - What happened to the lock.
+ * @returns The error.
+ */
+function lockLost(label: string, reason: string): DatabaseLockError {
+  return new DatabaseLockError(
+    DatabaseLockErrorCode.Lost,
+    `The lock on ${label} was lost (${reason}), so another process could now use it. Stopping rather than go on writing unguarded; starting again takes the lock again.`,
   );
 }
 
@@ -166,12 +185,7 @@ export async function holdPostgresLock(
     const isUnexpected = isHeld && isReleasing === false;
     if (isUnexpected) {
       isHeld = false;
-      onLost(
-        new DatabaseLockError(
-          DatabaseLockErrorCode.Lost,
-          `The connection holding the lock on ${label} dropped (${reason}), so another process could now use it. Stopping rather than go on writing unguarded; starting again takes the lock again.`,
-        ),
-      );
+      onLost(lockLost(label, `its connection dropped: ${reason}`));
     }
   };
   // Before the lock is held, a failing query rejects on its own; this listener also stops an unhandled 'error'.
@@ -200,5 +214,126 @@ export async function holdPostgresLock(
     throw error;
   }
   isHeld = true;
+  return release;
+}
+
+/** The file beside PGlite's directory that says who has it open. */
+const LOCK_SUFFIX = '.lock';
+
+/** What a lock file says about its holder. */
+const directoryHolderSchema = z.object({
+  /** Made by each open, so it tells two processes apart even when both are pid 1 in containers of their own. */
+  token: z.string(),
+  pid: z.number(),
+  host: z.string(),
+});
+type DirectoryHolder = z.infer<typeof directoryHolderSchema>;
+
+/**
+ * Reads a lock file's holder.
+ *
+ * @param lock - The lock file.
+ * @returns The holder, or null when the file is gone or is not one this version wrote (an older one held a bare pid).
+ */
+function readHolder(lock: string): DirectoryHolder | null {
+  try {
+    return directoryHolderSchema.safeParse(JSON.parse(readFileSync(lock, 'utf8'))).data ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Says how long ago a lock file was last refreshed.
+ *
+ * @param lock - The lock file.
+ * @returns Its age in milliseconds, or null when there is none.
+ */
+function lockAgeMs(lock: string): number | null {
+  try {
+    return Date.now() - statSync(lock).mtimeMs;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Says whether a caught value is the error for a file that already exists.
+ *
+ * @param error - The caught value.
+ * @returns True for `EEXIST`.
+ */
+function isAlreadyThere(error: unknown): boolean {
+  return error instanceof Error && 'code' in error && error.code === 'EEXIST';
+}
+
+/**
+ * Claims PGlite's directory with a lock file beside it, and refreshes the file while the directory is open. PGlite has
+ * no server of its own, so two processes on one directory would each write it and corrupt it. A process id alone
+ * can't say who holds it: two containers on one volume can both be pid 1, and neither sees the other's processes. So
+ * the file names its holder by a token of its own, and a holder counts as gone once the file goes `lockStaleMs`
+ * without a refresh.
+ *
+ * @param directory - PGlite's directory.
+ * @param onLost - Called once if another process takes the lock file over while it is held.
+ * @param [overrides] - Settings that differ from `DATABASE_DEFAULTS`.
+ * @param [log] - Called once, when the first try finds the lock held.
+ * @returns What stops the refreshes and removes the file.
+ * @throws DatabaseLockError `DATABASE_IN_USE` when another process keeps the directory.
+ */
+export async function holdDirectoryLock(
+  directory: string,
+  onLost: (error: DatabaseLockError) => void,
+  overrides: Partial<DatabaseSettings> = {},
+  log: (message: string) => void = console.warn,
+): Promise<ReleaseLock> {
+  const { lockHeartbeatMs, lockStaleMs } = { ...DATABASE_DEFAULTS, ...overrides };
+  const lock = `${directory}${LOCK_SUFFIX}`;
+  const self: DirectoryHolder = { token: randomUUID(), pid: process.pid, host: hostname() };
+  const isOurs = (): boolean => readHolder(lock)?.token === self.token;
+  let heartbeat: NodeJS.Timeout | undefined;
+  const release: ReleaseLock = async () => {
+    clearInterval(heartbeat);
+    if (isOurs()) {
+      rmSync(lock, { force: true });
+    }
+  };
+
+  const tryLock = async (): Promise<LockAttempt> => {
+    const ageMs = lockAgeMs(lock);
+    if (ageMs !== null && ageMs < lockStaleMs) {
+      const holder = readHolder(lock);
+      const who = holder === null ? 'a process' : `process ${holder.pid} on ${holder.host}`;
+      return { isTaken: false, holder: `${who} has it open, last seen ${Math.round(ageMs / MS_PER_SECOND)}s ago` };
+    }
+    if (ageMs !== null) {
+      rmSync(lock, { force: true });
+    }
+    try {
+      writeFileSync(lock, JSON.stringify(self), { mode: FILE_MODE, flag: 'wx' });
+    } catch (error) {
+      if (isAlreadyThere(error)) {
+        return { isTaken: false, holder: 'another process opened it at the same moment' };
+      }
+      throw error;
+    }
+    return { isTaken: true, release };
+  };
+
+  await takeLock(directory, tryLock, overrides, log);
+  heartbeat = setInterval(() => {
+    try {
+      if (isOurs()) {
+        const now = new Date();
+        utimesSync(lock, now, now);
+        return;
+      }
+    } catch {
+      // The file went between the read and the refresh: as lost as when another process rewrote it.
+    }
+    clearInterval(heartbeat);
+    onLost(lockLost(directory, `another process took over ${lock}`));
+  }, lockHeartbeatMs);
+  heartbeat.unref();
   return release;
 }
