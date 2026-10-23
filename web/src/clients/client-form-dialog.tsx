@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { ClientFieldsFragment, TokenLifetimeDefaultsQuery } from '@/__generated__/graphql';
 import { AUTH_METHOD_OPTIONS, AUTH_METHODS, authMethodOf } from '@/clients/auth-methods';
 import { durationText, secondsIn } from '@/clients/durations';
@@ -5,6 +6,7 @@ import { BLANK_PRESET, PRESET_OPTIONS, PresetLinks, SitePresetGuide } from '@/cl
 import { baseUrlFrom, presetById, presetFields, sitePresetById } from '@/clients/presets';
 import { ComboboxField, InputField, SelectField, SwitchField, TextareaField, useAppForm } from '@/components/app-form';
 import { DialogLayout } from '@/components/dialog-layout';
+import { Disclosure } from '@/components/disclosure';
 import { FieldRow } from '@/components/field-row';
 import { Section } from '@/components/section';
 import { Alert } from '@/components/ui/alert';
@@ -59,6 +61,88 @@ function defaultPlaceholder(seconds: number | undefined): string {
   return seconds === undefined ? 'Default' : `Default: ${durationText(seconds)}`;
 }
 
+/**
+ * The form's starting values: the client's, or a new client's.
+ *
+ * @param client - The client to edit, or null to add one.
+ * @returns The values.
+ */
+function formDefaults(client: ClientFieldsFragment | null) {
+  return {
+    preset: BLANK_PRESET,
+    baseUrl: '',
+    clientId: '',
+    name: client?.name ?? '',
+    authMethod: client?.authMethod ?? 'CLIENT_SECRET_BASIC',
+    redirectUris: client?.redirectUris.join('\n') ?? '',
+    postLogoutRedirectUris: client?.postLogoutRedirectUris.join('\n') ?? '',
+    allowedGroups: client?.allowedGroups ?? [],
+    groupsClaim: client?.groupsClaim ?? DEFAULT_GROUPS_CLAIM,
+    allowClientCredentials: client?.allowClientCredentials ?? false,
+    allowDeviceFlow: client?.allowDeviceFlow ?? false,
+    accessToken: lifetimeText(client?.accessTokenSeconds),
+    idToken: lifetimeText(client?.idTokenSeconds),
+    refreshToken: lifetimeText(client?.refreshTokenSeconds),
+    backchannelLogoutUri: client?.backchannelLogoutUri ?? '',
+    backchannelLogoutSessionRequired: client?.backchannelLogoutSessionRequired ?? true,
+  };
+}
+
+/** What the client form holds. */
+type ClientFormValues = ReturnType<typeof formDefaults>;
+
+/** The fields under Advanced, so it stays open while one of them is wrong. */
+const ADVANCED_FIELDS = [
+  'clientId',
+  'authMethod',
+  'postLogoutRedirectUris',
+  'backchannelLogoutUri',
+  'groupsClaim',
+  'accessToken',
+  'idToken',
+  'refreshToken',
+] as const;
+
+/** What Advanced says under its title while nothing in it is changed. */
+const ADVANCED_UNCHANGED =
+  'Client ID, authentication, sign-out, groups claim, client credentials, device flow and token lifetimes.';
+
+/**
+ * Names the advanced settings that are not their defaults.
+ *
+ * @param values - The form's values.
+ * @returns A short name for each changed one, in the order the section lists them.
+ */
+function changedAdvanced(values: ClientFormValues): string[] {
+  const groupsClaim = values.groupsClaim.trim();
+  const hasOwnLifetimes = [values.accessToken, values.idToken, values.refreshToken].some((text) => text.trim() !== '');
+  const changes = [
+    { isChanged: values.clientId.trim() !== '', name: `client ID ${values.clientId.trim()}` },
+    {
+      isChanged: values.authMethod !== 'CLIENT_SECRET_BASIC',
+      name: AUTH_METHODS[authMethodOf(values.authMethod)].label,
+    },
+    { isChanged: linesOf(values.postLogoutRedirectUris).length > 0, name: 'post-logout URIs' },
+    { isChanged: values.backchannelLogoutUri.trim() !== '', name: 'back-channel logout' },
+    { isChanged: groupsClaim !== '' && groupsClaim !== DEFAULT_GROUPS_CLAIM, name: `groups claim ${groupsClaim}` },
+    { isChanged: values.allowClientCredentials, name: 'client credentials' },
+    { isChanged: values.allowDeviceFlow, name: 'device flow' },
+    { isChanged: hasOwnLifetimes, name: 'own token lifetimes' },
+  ];
+  return changes.filter((change) => change.isChanged).map((change) => change.name);
+}
+
+/**
+ * The line under Advanced: what is changed in it, or what it holds.
+ *
+ * @param values - The form's values.
+ * @returns The line.
+ */
+function advancedSummary(values: ClientFormValues): string {
+  const changed = changedAdvanced(values);
+  return changed.length === 0 ? ADVANCED_UNCHANGED : `Set: ${changed.join(', ')}.`;
+}
+
 interface ClientFormDialogProps {
   /** The client to edit, or null to add one. */
   client: ClientFieldsFragment | null;
@@ -80,26 +164,12 @@ export function ClientFormDialog({ client, open, onOpenChange, onSaved }: Client
   const update = useUpdateClient();
   const failure = isEdit ? update.error : create.error;
   const lifetimes = useTokenLifetimeDefaults().data;
+  const defaultValues = formDefaults(client);
+  // Open from the start on a client whose advanced settings were changed, so nothing saved is out of sight.
+  const [isAdvancedOpen, setAdvancedOpen] = useState(() => changedAdvanced(defaultValues).length > 0);
 
   const form = useAppForm({
-    defaultValues: {
-      preset: BLANK_PRESET,
-      baseUrl: '',
-      clientId: '',
-      name: client?.name ?? '',
-      authMethod: client?.authMethod ?? 'CLIENT_SECRET_BASIC',
-      redirectUris: client?.redirectUris.join('\n') ?? '',
-      postLogoutRedirectUris: client?.postLogoutRedirectUris.join('\n') ?? '',
-      allowedGroups: client?.allowedGroups ?? [],
-      groupsClaim: client?.groupsClaim ?? DEFAULT_GROUPS_CLAIM,
-      allowClientCredentials: client?.allowClientCredentials ?? false,
-      allowDeviceFlow: client?.allowDeviceFlow ?? false,
-      accessToken: lifetimeText(client?.accessTokenSeconds),
-      idToken: lifetimeText(client?.idTokenSeconds),
-      refreshToken: lifetimeText(client?.refreshTokenSeconds),
-      backchannelLogoutUri: client?.backchannelLogoutUri ?? '',
-      backchannelLogoutSessionRequired: client?.backchannelLogoutSessionRequired ?? true,
-    },
+    defaultValues,
     onSubmit: async ({ value }) => {
       const input = {
         name: value.name.trim(),
@@ -150,6 +220,120 @@ export function ClientFormDialog({ client, open, onOpenChange, onSaved }: Client
     }
     void form.validateField('redirectUris', 'change');
   };
+
+  /** What Advanced opens onto: what most apps leave as it is. */
+  const advancedFields = (
+    <>
+      {isEdit ? null : (
+        <InputField
+          form={form}
+          name="clientId"
+          label="Client ID"
+          description="Leave blank for a random one. Letters, digits, dots, dashes and underscores."
+          placeholder="grafana"
+        />
+      )}
+      <form.Subscribe selector={(state) => authMethodOf(state.values.authMethod)}>
+        {(authMethod) => (
+          <SelectField
+            form={form}
+            name="authMethod"
+            label="Client authentication"
+            options={AUTH_METHOD_OPTIONS}
+            description={AUTH_METHODS[authMethod].description}
+          />
+        )}
+      </form.Subscribe>
+      <TextareaField
+        form={form}
+        name="postLogoutRedirectUris"
+        label="Post-logout redirect URIs"
+        rows={URI_ROWS}
+        description="One per line. Where the application may send users after signing out. Optional."
+      />
+      <InputField
+        form={form}
+        name="backchannelLogoutUri"
+        label="Back-channel logout URI"
+        description="Optional. This provider posts a logout token here when a user signs out or an admin ends their sessions, so the application ends its own session too."
+        placeholder="https://app.example.com/oidc/backchannel-logout"
+      />
+      <form.Subscribe selector={(state) => state.values.backchannelLogoutUri.trim() !== ''}>
+        {(hasBackchannelUri) =>
+          hasBackchannelUri ? (
+            <SwitchField
+              form={form}
+              name="backchannelLogoutSessionRequired"
+              label="Send the session ID"
+              description="Puts the session ID (sid) in the logout token and the ID tokens, for an application that ends sessions by it."
+            />
+          ) : null
+        }
+      </form.Subscribe>
+      <InputField
+        form={form}
+        name="groupsClaim"
+        label="Groups claim"
+        description="The claim the user's groups are released in. Change it for an application that reads roles from another name."
+        placeholder={DEFAULT_GROUPS_CLAIM}
+      />
+      <SwitchField
+        form={form}
+        name="allowClientCredentials"
+        label="Allow client credentials"
+        description="Lets the application get tokens for itself, with no user, for a backup job or a service calling an API."
+        // Whether redirect URIs are needed turns on this switch, so they are checked again when it moves.
+        listeners={{ onChange: ({ fieldApi }) => fieldApi.form.validateField('redirectUris', 'change') }}
+      />
+      <SwitchField
+        form={form}
+        name="allowDeviceFlow"
+        label="Allow the device flow"
+        description="Lets a device with no browser of its own, such as a TV, show a code that a user confirms at /device. It is given refresh tokens."
+        listeners={{ onChange: ({ fieldApi }) => fieldApi.form.validateField('redirectUris', 'change') }}
+      />
+      <Section
+        title="Token lifetimes"
+        level={3}
+        description="How long this application's tokens stay valid, as 15m, 1h or 30d. Leave a field blank for the server's default."
+        contentSlot={
+          <FieldRow
+            perRow={3}
+            contentSlot={
+              <>
+                <InputField
+                  form={form}
+                  name="accessToken"
+                  label="Access token"
+                  placeholder={defaultPlaceholder(lifetimes?.accessTokenSeconds)}
+                  description={
+                    lifetimes === undefined
+                      ? undefined
+                      : `With client credentials the default is ${durationText(lifetimes.clientCredentialsSeconds)}.`
+                  }
+                  validators={{ onChange: ({ value }) => lifetimeProblem(value, lifetimes) }}
+                />
+                <InputField
+                  form={form}
+                  name="idToken"
+                  label="ID token"
+                  placeholder={defaultPlaceholder(lifetimes?.idTokenSeconds)}
+                  validators={{ onChange: ({ value }) => lifetimeProblem(value, lifetimes) }}
+                />
+                <InputField
+                  form={form}
+                  name="refreshToken"
+                  label="Refresh token"
+                  placeholder={defaultPlaceholder(lifetimes?.refreshTokenSeconds)}
+                  validators={{ onChange: ({ value }) => lifetimeProblem(value, lifetimes) }}
+                />
+              </>
+            }
+          />
+        }
+      />
+    </>
+  );
 
   return (
     <DialogLayout
@@ -204,15 +388,6 @@ export function ClientFormDialog({ client, open, onOpenChange, onSaved }: Client
             {(isClient) =>
               isClient ? (
                 <>
-                  {isEdit ? null : (
-                    <InputField
-                      form={form}
-                      name="clientId"
-                      label="Client ID"
-                      description="Leave blank for a random one. Letters, digits, dots, dashes and underscores."
-                      placeholder="grafana"
-                    />
-                  )}
                   <InputField
                     form={form}
                     name="name"
@@ -220,13 +395,6 @@ export function ClientFormDialog({ client, open, onOpenChange, onSaved }: Client
                     required
                     placeholder="Grafana"
                     validators={{ onChange: ({ value }) => (value.trim() ? undefined : 'Give the client a name.') }}
-                  />
-                  <SelectField
-                    form={form}
-                    name="authMethod"
-                    label="Client authentication"
-                    options={AUTH_METHOD_OPTIONS}
-                    description={AUTH_METHODS[authMethodOf(form.state.values.authMethod)].description}
                   />
                   <TextareaField
                     form={form}
@@ -244,26 +412,6 @@ export function ClientFormDialog({ client, open, onOpenChange, onSaved }: Client
                           : 'Add at least one redirect URI.',
                     }}
                   />
-                  <TextareaField
-                    form={form}
-                    name="postLogoutRedirectUris"
-                    label="Post-logout redirect URIs"
-                    rows={URI_ROWS}
-                    description="One per line. Where the application may send users after signing out. Optional."
-                  />
-                  <InputField
-                    form={form}
-                    name="backchannelLogoutUri"
-                    label="Back-channel logout URI"
-                    description="Optional. This provider posts a logout token here when a user signs out or an admin ends their sessions, so the application ends its own session too."
-                    placeholder="https://app.example.com/oidc/backchannel-logout"
-                  />
-                  <SwitchField
-                    form={form}
-                    name="backchannelLogoutSessionRequired"
-                    label="Send the session ID"
-                    description="Puts the session ID (sid) in the logout token and the ID tokens, for an application that ends sessions by it."
-                  />
                   <ComboboxField
                     form={form}
                     name="allowedGroups"
@@ -274,67 +422,28 @@ export function ClientFormDialog({ client, open, onOpenChange, onSaved }: Client
                     options={groupOptions}
                     placeholder="Every user"
                   />
-                  <InputField
-                    form={form}
-                    name="groupsClaim"
-                    label="Groups claim"
-                    description="The claim the user's groups are released in. Change it for an application that reads roles from another name."
-                    placeholder={DEFAULT_GROUPS_CLAIM}
-                  />
-                  <SwitchField
-                    form={form}
-                    name="allowClientCredentials"
-                    label="Allow client credentials"
-                    description="Lets the application get tokens for itself, with no user, for a backup job or a service calling an API."
-                    // Whether redirect URIs are needed turns on this switch, so they are checked again when it moves.
-                    listeners={{ onChange: ({ fieldApi }) => fieldApi.form.validateField('redirectUris', 'change') }}
-                  />
-                  <SwitchField
-                    form={form}
-                    name="allowDeviceFlow"
-                    label="Allow the device flow"
-                    description="Lets a device with no browser of its own, such as Home Assistant or a TV, show a code that a user confirms at /device after signing in. It is given refresh tokens."
-                    listeners={{ onChange: ({ fieldApi }) => fieldApi.form.validateField('redirectUris', 'change') }}
-                  />
-                  <Section
-                    title="Token lifetimes"
-                    description="How long the tokens this application is given stay valid, as 15m, 1h or 30d. Leave a field blank for the server's default."
-                    contentSlot={
-                      <FieldRow
-                        perRow={3}
-                        contentSlot={
-                          <>
-                            <InputField
-                              form={form}
-                              name="accessToken"
-                              label="Access token"
-                              placeholder={defaultPlaceholder(lifetimes?.accessTokenSeconds)}
-                              description={
-                                lifetimes === undefined
-                                  ? undefined
-                                  : `With client credentials the default is ${durationText(lifetimes.clientCredentialsSeconds)}.`
-                              }
-                              validators={{ onChange: ({ value }) => lifetimeProblem(value, lifetimes) }}
-                            />
-                            <InputField
-                              form={form}
-                              name="idToken"
-                              label="ID token"
-                              placeholder={defaultPlaceholder(lifetimes?.idTokenSeconds)}
-                              validators={{ onChange: ({ value }) => lifetimeProblem(value, lifetimes) }}
-                            />
-                            <InputField
-                              form={form}
-                              name="refreshToken"
-                              label="Refresh token"
-                              placeholder={defaultPlaceholder(lifetimes?.refreshTokenSeconds)}
-                              validators={{ onChange: ({ value }) => lifetimeProblem(value, lifetimes) }}
-                            />
-                          </>
-                        }
-                      />
+                  <form.Subscribe
+                    selector={(state) =>
+                      ADVANCED_FIELDS.some((name) => (state.fieldMeta[name]?.errors.length ?? 0) > 0)
                     }
-                  />
+                  >
+                    {(hasAdvancedErrors) => (
+                      <form.Subscribe selector={(state) => advancedSummary(state.values)}>
+                        {(summary) => (
+                          <Disclosure
+                            title="Advanced"
+                            titleClassName="text-foreground"
+                            description={summary}
+                            // A field in it that is wrong keeps it open, since a closed one would hide why Save is off.
+                            open={isAdvancedOpen || hasAdvancedErrors}
+                            onOpenChange={setAdvancedOpen}
+                            contentClassName="gap-4 pt-2"
+                            contentSlot={advancedFields}
+                          />
+                        )}
+                      </form.Subscribe>
+                    )}
+                  </form.Subscribe>
                 </>
               ) : null
             }
