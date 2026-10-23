@@ -121,12 +121,27 @@ export function loosen<T, TTables extends readonly PgTable[]>(mapping: DocumentM
     name: mapping.name,
     fallback: mapping.fallback,
     tables,
-    // The one place the typed rows meet the loose ones the queries here pass around. A document handed in is one this
-    // store wrote, or the file an older version of it wrote, which its toRows fills in.
+    // A document handed in is one this store wrote, or the file an older version of it wrote, which its toRows fills in.
     toRows: (document) => mapping.toRows(document as T) as Row[][],
-    fromRows: (rows) =>
-      mapping.fromRows(tables.map((_rowSet, index) => rows[index] ?? []) as RowsOf<TTables, 'select'>),
+    fromRows: (rows) => fromRowsOf(mapping, rows),
   };
+}
+
+/**
+ * Builds a document from the rows of each of its tables, a table with none read as empty.
+ *
+ * @typeParam T - The document's shape.
+ * @typeParam TTables - Its tables.
+ * @param mapping - How the document is laid out.
+ * @param rows - The rows of each table, in the order of its `tables`.
+ * @returns The document.
+ */
+function fromRowsOf<T, TTables extends readonly PgTable[]>(
+  mapping: DocumentMapping<T, TTables>,
+  rows: readonly Row[][],
+): T {
+  // The rows the queries here read are loose; they are the ones these tables hold.
+  return mapping.fromRows(mapping.tables.map((_rowSet, index) => rows[index] ?? []) as RowsOf<TTables, 'select'>);
 }
 
 /** Runs writes one at a time, in the order they were asked for. */
@@ -333,8 +348,7 @@ export function documentFromRows<T, TTables extends readonly PgTable[]>(
   const rowSets: readonly RowSet[] = mapping.tables;
   const loose = loosen(mapping);
   const toRows = (document: T): Row[][] => loose.toRows(document);
-  const fromRows = (rows: readonly Row[][]): T =>
-    mapping.fromRows(rowSets.map((_rowSet, index) => rows[index] ?? []) as RowsOf<TTables, 'select'>);
+  const fromRows = (rows: readonly Row[][]): T => fromRowsOf(mapping, rows);
 
   /**
    * Lays out the rows the tables hold as `toRows` would, so the next document's compare with them. Only rows that were
