@@ -96,10 +96,10 @@ async function accountBrowser(app: TestApp, username: string): Promise<Browser> 
  * @returns The secret and the recovery codes the server handed back.
  */
 async function enrolTotp(browser: Browser): Promise<{ secret: string; recoveryCodes: string[] }> {
-  const { secret } = await (await postJson(browser, '/admin/account/totp/start', {})).json();
+  const { secret } = await (await postJson(browser, '/api/account/totp/start', {})).json();
   // The step before now, so the code the sign-in uses next is a later one.
   const code = totpCode(secret, totpStepAt(Date.now()) - 1);
-  const confirmed = await postJson(browser, '/admin/account/totp/confirm', { code });
+  const confirmed = await postJson(browser, '/api/account/totp/confirm', { code });
   expect(confirmed.status).toBe(HttpStatus.Ok);
   return { secret, recoveryCodes: (await confirmed.json()).recoveryCodes };
 }
@@ -196,17 +196,17 @@ describe('two-factor sign-in', () => {
   it('needs the password to remove the authenticator app', async () => {
     const browser = await accountBrowser(app, 'ada');
     await enrolTotp(browser);
-    const refused = await postJson(browser, '/admin/account/totp/remove', { password: 'wrong' });
+    const refused = await postJson(browser, '/api/account/totp/remove', { password: 'wrong' });
     expect(refused.status).toBe(HttpStatus.Forbidden);
-    const removed = await postJson(browser, '/admin/account/totp/remove', { password: PASSWORD });
+    const removed = await postJson(browser, '/api/account/totp/remove', { password: PASSWORD });
     expect(await removed.json()).toEqual({ hasTotp: false, recoveryCodesLeft: 0, passkeys: [] });
   });
 
   it('registers a passkey, and signs in with it after the password or on its own', async () => {
     const authenticator = createSoftwareAuthenticator(app.base);
     const account = await accountBrowser(app, 'ada');
-    const { options } = await (await postJson(account, '/admin/account/passkeys/options', {})).json();
-    const added = await postJson(account, '/admin/account/passkeys', {
+    const { options } = await (await postJson(account, '/api/account/passkeys/options', {})).json();
+    const added = await postJson(account, '/api/account/passkeys', {
       name: 'Laptop',
       response: authenticator.create(options),
     });
@@ -240,8 +240,8 @@ describe('two-factor sign-in', () => {
   it('refuses a passkey alone when it did not check the user, or its user is disabled', async () => {
     const authenticator = createSoftwareAuthenticator(app.base);
     const account = await accountBrowser(app, 'ada');
-    const { options } = await (await postJson(account, '/admin/account/passkeys/options', {})).json();
-    await postJson(account, '/admin/account/passkeys', { name: 'Key', response: authenticator.create(options) });
+    const { options } = await (await postJson(account, '/api/account/passkeys/options', {})).json();
+    await postJson(account, '/api/account/passkeys', { name: 'Key', response: authenticator.create(options) });
 
     const tryAlone = async (userVerified: boolean): Promise<Response> => {
       const { browser, uid } = await startSignIn(app, client);
@@ -260,8 +260,8 @@ describe('two-factor sign-in', () => {
     const theirs = createSoftwareAuthenticator(app.base);
     await app.services.users.create({ username: 'bob', password: PASSWORD, email: '', name: '', groups: [] });
     const bob = await accountBrowser(app, 'bob');
-    const { options } = await (await postJson(bob, '/admin/account/passkeys/options', {})).json();
-    await postJson(bob, '/admin/account/passkeys', { name: 'Bob’s', response: theirs.create(options) });
+    const { options } = await (await postJson(bob, '/api/account/passkeys/options', {})).json();
+    await postJson(bob, '/api/account/passkeys', { name: 'Bob’s', response: theirs.create(options) });
     await enrolTotp(await accountBrowser(app, 'ada'));
 
     const { browser, uid } = await startSignIn(app, client);

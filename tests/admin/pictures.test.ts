@@ -108,12 +108,12 @@ describe('profile pictures', () => {
 
   it('lets a user set theirs, and serves it from the bucket with cache headers', async () => {
     const browser = await signInToWebApp(app, 'ada');
-    expect(await (await browser.send('/admin/account/picture')).json()).toEqual({
+    expect(await (await browser.send('/api/account/picture')).json()).toEqual({
       isEnabled: true,
       maxBytes: PROFILE_DEFAULTS.maxPictureBytes,
       url: null,
     });
-    const set = await upload(browser, '/admin/account/picture', await image('#cc3333', 'jpeg'), 'image/jpeg');
+    const set = await upload(browser, '/api/account/picture', await image('#cc3333', 'jpeg'), 'image/jpeg');
     expect(set.status).toBe(HttpStatus.Ok);
     const url = new URL(set.body.url);
     expect(url.origin + url.pathname).toBe(`${app.base}/users/${adaId}/picture`);
@@ -150,16 +150,16 @@ describe('profile pictures', () => {
 
   it('refuses what is not a PNG, JPEG or WebP image', async () => {
     const browser = await signInToWebApp(app, 'ada');
-    const gif = await upload(browser, '/admin/account/picture', await image('#000000', 'gif'), 'image/gif');
+    const gif = await upload(browser, '/api/account/picture', await image('#000000', 'gif'), 'image/gif');
     expect(gif.status).toBe(HttpStatus.BadRequest);
     expect(gif.body.error).toContain('PNG, JPEG or WebP');
     const fakePng = Buffer.concat([(await image('#000000')).subarray(0, 8), Buffer.from('not an image')]);
-    const fake = await upload(browser, '/admin/account/picture', fakePng);
+    const fake = await upload(browser, '/api/account/picture', fakePng);
     expect(fake.body.error).toContain('not a readable image');
-    const text = await upload(browser, '/admin/account/picture', Buffer.from('hello'), 'text/plain');
+    const text = await upload(browser, '/api/account/picture', Buffer.from('hello'), 'text/plain');
     expect(text.status).toBe(HttpStatus.UnsupportedMediaType);
     const big = Buffer.concat([await image('#000000'), Buffer.alloc(PROFILE_DEFAULTS.maxPictureBytes)]);
-    const tooLarge = await upload(browser, '/admin/account/picture', big);
+    const tooLarge = await upload(browser, '/api/account/picture', big);
     expect(tooLarge.status).toBe(HttpStatus.PayloadTooLarge);
     expect(s3.objects.size).toBe(0);
     expect(app.services.users.find(adaId)?.pictureVersion).toBeNull();
@@ -167,7 +167,7 @@ describe('profile pictures', () => {
 
   it('releases the picture claim with the profile scope', async () => {
     const browser = await signInToWebApp(app, 'ada');
-    const { body } = await upload(browser, '/admin/account/picture', await image('#33cc33'));
+    const { body } = await upload(browser, '/api/account/picture', await image('#33cc33'));
     const client = await app.services.clients.create({
       name: 'Gallery',
       authMethod: ClientAuthMethod.SecretBasic,
@@ -186,11 +186,11 @@ describe('profile pictures', () => {
 
   it('replaces and removes a picture, deleting it from the bucket', async () => {
     const browser = await signInToWebApp(app, 'ada');
-    const first = await upload(browser, '/admin/account/picture', await image('#111111'));
-    const second = await upload(browser, '/admin/account/picture', await image('#eeeeee'));
+    const first = await upload(browser, '/api/account/picture', await image('#111111'));
+    const second = await upload(browser, '/api/account/picture', await image('#eeeeee'));
     expect(second.body.url).not.toBe(first.body.url);
     expect(s3.objects.size).toBe(1);
-    const removed = await postEmpty(browser, '/admin/account/picture/remove');
+    const removed = await postEmpty(browser, '/api/account/picture/remove');
     expect(removed).toEqual({ status: HttpStatus.Ok, body: { url: null } });
     expect(s3.objects.size).toBe(0);
     expect((await fetch(second.body.url)).status).toBe(HttpStatus.NotFound);
@@ -221,7 +221,7 @@ describe('profile pictures', () => {
 
   it('deletes the picture with the user', async () => {
     const browser = await signInToWebApp(app, 'ada');
-    await upload(browser, '/admin/account/picture', await image('#999999'));
+    await upload(browser, '/api/account/picture', await image('#999999'));
     expect(s3.objects.size).toBe(1);
     const admin = await signInAsAdmin(app);
     const deleted = await adminGql(admin, 'mutation ($id: ID!) { deleteUser(id: $id) { id } }', { id: adaId });
@@ -231,9 +231,9 @@ describe('profile pictures', () => {
 
   it('answers 502 when the bucket is down, and keeps the old picture', async () => {
     const browser = await signInToWebApp(app, 'ada');
-    const first = await upload(browser, '/admin/account/picture', await image('#123456'));
+    const first = await upload(browser, '/api/account/picture', await image('#123456'));
     s3.setDown(true);
-    const failed = await upload(browser, '/admin/account/picture', await image('#654321'));
+    const failed = await upload(browser, '/api/account/picture', await image('#654321'));
     expect(failed.status).toBe(HttpStatus.BadGateway);
     expect((await fetch(`${app.base}/users/${adaId}/picture`)).status).toBe(HttpStatus.BadGateway);
     s3.setDown(false);
@@ -252,8 +252,8 @@ describe('profile pictures without a bucket', () => {
 
   it('are off, and the account page and admin UI are told', async () => {
     const admin = await signInAsAdmin(app);
-    expect(await (await admin.send('/admin/account/picture')).json()).toMatchObject({ isEnabled: false, url: null });
-    const refused = await upload(admin, '/admin/account/picture', await image('#000000'));
+    expect(await (await admin.send('/api/account/picture')).json()).toMatchObject({ isEnabled: false, url: null });
+    const refused = await upload(admin, '/api/account/picture', await image('#000000'));
     expect(refused.status).toBe(HttpStatus.BadRequest);
     expect(refused.body.error).toContain('off');
     const listed = await adminGql(admin, '{ profilePictures { isEnabled } }');

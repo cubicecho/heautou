@@ -15,7 +15,19 @@ import type { PasswordLinkStore } from '../store/password-links.ts';
 import type { SettingsStore } from '../store/settings.ts';
 import { isAdmin, type UserStore } from '../store/users.ts';
 import type { WebSessionStore } from '../store/web-sessions.ts';
-import { clearSessionCookies, requireSignedIn, signedInUser, viewerOf } from './session.ts';
+import { ACCOUNT_API, clearSessionCookies, requireSignedIn, signedInUser, viewerOf } from './session.ts';
+
+/** The routes of the signed-in user's own account. */
+export const ACCOUNT_PATH = {
+  /** Who is signed in, for the account page. */
+  account: ACCOUNT_API,
+  /** Changes the signed-in user's password (POST). */
+  password: `${ACCOUNT_API}/password`,
+  /** Ends every session of the signed-in user (POST). */
+  signOut: `${ACCOUNT_API}/sign-out-everywhere`,
+  /** The signed-in user's recent sign-ins, from the audit log. */
+  activity: `${ACCOUNT_API}/activity`,
+} as const;
 
 /** What the account, password link and branding routes use. */
 export interface AccountDeps {
@@ -58,9 +70,9 @@ function sendDeadLink(res: Response): void {
  * @returns A router to mount at the root.
  *
  * @remarks
- * `GET /admin/account` says who is signed in, with their sessions, or 401. `POST /admin/account/password` changes
- * their password given the current one, and `POST /admin/account/sign-out-everywhere` ends every session and token.
- * `GET /admin/account/activity` lists their last `AUDIT_DEFAULTS.accountEntries` sign-ins.
+ * `GET /api/account` says who is signed in, with their sessions, or 401. `POST /api/account/password` changes
+ * their password given the current one, and `POST /api/account/sign-out-everywhere` ends every session and token.
+ * `GET /api/account/activity` lists their last `AUDIT_DEFAULTS.accountEntries` sign-ins.
  * `POST /admin/password-link` names a link's user and `POST /admin/password-link/set` sets the password with it;
  * the token travels in the body, never in a URL. `GET /admin/branding`, `/admin/branding/logo` and
  * `/admin/password-rules` are public: the sign-in and set-password pages show them.
@@ -82,7 +94,7 @@ export function createAccountRouter(deps: AccountDeps): Router {
   const signedIn = requireSignedIn(deps);
   const router = Router();
 
-  router.get(ADMIN_PATH.account, signedIn, (_req, res) => {
+  router.get(ACCOUNT_PATH.account, signedIn, (_req, res) => {
     const user = viewerOf(res);
     const { id, username, name, email, groups } = user;
     res.json({
@@ -99,7 +111,7 @@ export function createAccountRouter(deps: AccountDeps): Router {
     });
   });
 
-  router.get(ADMIN_PATH.accountActivity, signedIn, async (_req, res) => {
+  router.get(ACCOUNT_PATH.activity, signedIn, async (_req, res) => {
     const user = viewerOf(res);
     const { entries } = await audit.list({
       first: AUDIT_DEFAULTS.accountEntries,
@@ -117,7 +129,7 @@ export function createAccountRouter(deps: AccountDeps): Router {
     });
   });
 
-  router.post(ADMIN_PATH.accountPassword, ...json, signedIn, async (req, res) => {
+  router.post(ACCOUNT_PATH.password, ...json, signedIn, async (req, res) => {
     const user = viewerOf(res);
     const parsed = changePasswordSchema.safeParse(req.body);
     if (parsed.success === false) {
@@ -149,7 +161,7 @@ export function createAccountRouter(deps: AccountDeps): Router {
     }
   });
 
-  router.post(ADMIN_PATH.accountSignOut, ...json, async (req, res) => {
+  router.post(ACCOUNT_PATH.signOut, ...json, async (req, res) => {
     const user = signedInUser(deps, req);
     if (user !== null) {
       await webSessions.removeUser(user.id);

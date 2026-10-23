@@ -37,7 +37,7 @@ Who can change things, and through what. Read from the guards, not the docs.
 | Actor | Is | Reaches the system through | May change |
 |---|---|---|---|
 | Operator (admin) | A user in the `ADMIN_DEFAULTS.group` group | A web session, `requireAdmin` on `/graphql` and `/admin/backup`, `/admin/restore` | Every client, user, group, API, upstream, protected site, key, setting, branding and mail setting; backups and restores |
-| Signed-in user | Any enabled user with a web session | `/admin/account/*` routes (`requireSignedIn`) | Their own profile, password, second factors, profile picture, sessions and upstream links |
+| Signed-in user | Any enabled user with a web session | `/api/account/*` routes (`requireSignedIn`) | Their own profile, password, second factors, profile picture, sessions and upstream links |
 | Anyone in a browser | Nobody signed in | The interaction routes, `/setup`, `/set-password`, forgot password | Sign in; make the first admin while `setup.ts` allows; set a password with a valid password link; ask for a reset link when it is on |
 | App (client) | A registered OIDC client | `/oidc/*` (oidc-provider) | Its own grants and tokens; with a setup URL's token its own registration (RFC 7591), then its registration through RFC 7592 |
 | Reverse proxy | An address `createProxyTrust` believes | `/auth/verify`, `/auth/sign-in`, `/auth/callback`, `/auth/sign-out` | Proxy sessions (by signing a user in or out) |

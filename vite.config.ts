@@ -36,6 +36,7 @@ export default defineConfig({
       '/oidc': API_ORIGIN,
       '/interaction': API_ORIGIN,
       '/admin': API_ORIGIN,
+      '/api': API_ORIGIN,
       '/upstream': API_ORIGIN,
       // A user's profile picture; `/users` itself is the web app's page.
       '^/users/[^/]+/picture': API_ORIGIN,

@@ -25,6 +25,12 @@ export const COOKIE = {
  */
 export const FORMER_SESSION_COOKIE = 'heautou_admin';
 
+/**
+ * Where the routes of a signed-in user's own account are. Under `/api` rather than `/account`, which is the web app's
+ * page (and the dev server forwards to the API by prefix); not under `/admin`, since any signed-in user calls them.
+ */
+export const ACCOUNT_API = '/api/account';
+
 /** What finding a request's signed-in user reads. */
 export interface SessionDeps {
   users: UserStore;

@@ -30,7 +30,7 @@ import { createLoginThrottle, limitRequests } from './rate-limit.ts';
 const GRAPHQL_ENDPOINT = '/graphql';
 const HEALTH_ENDPOINT = '/healthz';
 /** Every path but the server's own, so the web app's routes load index.html. */
-const WEB_ROUTES = /^(?!\/(graphql|healthz)$|\/(oidc|interaction|admin|upstream|auth)(\/|$)).*/;
+const WEB_ROUTES = /^(?!\/(graphql|healthz)$|\/(oidc|interaction|admin|api|upstream|auth)(\/|$)).*/;
 /** The routes that start sign-ins or write data, limited per address. */
 const LIMITED_ROUTES = [
   `${OIDC_MOUNT_PATH}/auth`,
@@ -39,6 +39,7 @@ const LIMITED_ROUTES = [
   `${OIDC_MOUNT_PATH}/device`,
   '/interaction',
   '/admin',
+  '/api',
   '/upstream',
   FORWARD_AUTH_PATH.signIn,
 ];

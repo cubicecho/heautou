@@ -15,26 +15,26 @@ import type { BrandingStore } from '../store/branding.ts';
 import type { FactorStore } from '../store/factors.ts';
 import type { PublicUser, UserStore } from '../store/users.ts';
 import type { WebSessionStore } from '../store/web-sessions.ts';
-import { requireSignedIn, viewerOf } from './session.ts';
+import { ACCOUNT_API, requireSignedIn, viewerOf } from './session.ts';
 
 /** The account page's second-factor routes. Every one acts on the signed-in user. */
 export const FACTOR_PATH = {
   /** What the user has set up, and whether passkeys work here. */
-  factors: '/admin/account/factors',
+  factors: `${ACCOUNT_API}/factors`,
   /** Makes an authenticator app secret to scan (POST). */
-  totpStart: '/admin/account/totp/start',
+  totpStart: `${ACCOUNT_API}/totp/start`,
   /** Turns the app on, given a code from it (POST). */
-  totpConfirm: '/admin/account/totp/confirm',
+  totpConfirm: `${ACCOUNT_API}/totp/confirm`,
   /** Turns the app off, given the password (POST). */
-  totpRemove: '/admin/account/totp/remove',
+  totpRemove: `${ACCOUNT_API}/totp/remove`,
   /** Makes new recovery codes, given the password (POST). */
-  recoveryCodes: '/admin/account/recovery-codes',
+  recoveryCodes: `${ACCOUNT_API}/recovery-codes`,
   /** Asks the browser to make a passkey (POST). */
-  passkeyOptions: '/admin/account/passkeys/options',
+  passkeyOptions: `${ACCOUNT_API}/passkeys/options`,
   /** Registers the passkey the browser made (POST). */
-  passkeyAdd: '/admin/account/passkeys',
+  passkeyAdd: `${ACCOUNT_API}/passkeys`,
   /** Removes a passkey, given the password (POST). */
-  passkeyRemove: '/admin/account/passkeys/remove',
+  passkeyRemove: `${ACCOUNT_API}/passkeys/remove`,
 } as const;
 
 /** What the factor routes use. */

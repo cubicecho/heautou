@@ -8,7 +8,7 @@ import { jsonReply, postJson } from '@/core/json-reply';
 /** The image types the server takes for a picture. It checks them again by their bytes. */
 export const PICTURE_TYPES = 'image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp';
 
-const ACCOUNT_PICTURE = '/admin/account/picture';
+const ACCOUNT_PICTURE = '/api/account/picture';
 const ACCOUNT_PICTURE_KEY = ['account', 'picture'] as const;
 const PICTURES_KEY = ['profilePictures'] as const;
 

@@ -207,7 +207,7 @@ describe('signing in through an upstream OpenID Connect provider', () => {
       password: PASSWORD,
     });
     await browser.send(account.href);
-    const started = await browser.postJson(`${app.base}/admin/account/upstreams/${UPSTREAM_ID}/link`, {});
+    const started = await browser.postJson(`${app.base}/api/account/upstreams/${UPSTREAM_ID}/link`, {});
     expect(started.status).toBe(HttpStatus.Ok);
     const callback = await walk(browser, (await started.json()).redirectTo, `${app.base}/upstream/`, {
       username: 'grace',
@@ -215,12 +215,12 @@ describe('signing in through an upstream OpenID Connect provider', () => {
     });
     const toAccount = await walk(browser, callback.href, `${app.base}/account`, null);
     const ticket = toAccount.searchParams.get('upstreamLink');
-    const finished = await browser.postJson(`${app.base}/admin/account/upstreams/finish`, { ticket });
+    const finished = await browser.postJson(`${app.base}/api/account/upstreams/finish`, { ticket });
     expect(await finished.json()).toEqual({ provider: 'Corp', label: 'grace@corp.example' });
-    const again = await browser.postJson(`${app.base}/admin/account/upstreams/finish`, { ticket });
+    const again = await browser.postJson(`${app.base}/api/account/upstreams/finish`, { ticket });
     expect(again.status).toBe(HttpStatus.BadRequest);
 
-    const listed = await (await browser.send(`${app.base}/admin/account/upstreams`)).json();
+    const listed = await (await browser.send(`${app.base}/api/account/upstreams`)).json();
     expect(listed.providers[0]).toMatchObject({ id: UPSTREAM_ID, link: { label: 'grace@corp.example' } });
 
     const done = await signInUpstream(createSiteBrowser(), 'grace');

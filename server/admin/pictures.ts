@@ -1,7 +1,7 @@
 import { Readable } from 'node:stream';
 import type { ReadableStream as NodeReadableStream } from 'node:stream/web';
 import express, { type Request, type RequestHandler, type Response, Router } from 'express';
-import { requireSignedIn, viewerOf } from '../account/session.ts';
+import { ACCOUNT_API, requireSignedIn, viewerOf } from '../account/session.ts';
 import { HTTP_DEFAULTS, PROFILE_DEFAULTS } from '../core/defaults.ts';
 import { errorMessage } from '../core/errors.ts';
 import { ObjectStorageError } from '../core/object-storage.ts';
@@ -17,9 +17,9 @@ import { requireAdmin } from './routes.ts';
 /** The picture routes. */
 export const PICTURE_PATH = {
   /** GET: whether pictures are on, and the signed-in user's. POST: sets theirs from an image body. */
-  account: '/admin/account/picture',
+  account: `${ACCOUNT_API}/picture`,
   /** POST: removes the signed-in user's picture. */
-  accountRemove: '/admin/account/picture/remove',
+  accountRemove: `${ACCOUNT_API}/picture/remove`,
   /** POST, admins only: sets a user's picture from an image body. */
   user: '/admin/users/:id/picture',
   /** POST, admins only: removes a user's picture. */

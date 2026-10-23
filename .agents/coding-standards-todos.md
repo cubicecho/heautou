@@ -17,7 +17,10 @@ green baseline. Everything else stays open, not approved. Decisions:
   cookie is `heautou_session`, the former one read and swapped for a session's lifetime; the
   `documents.name` values drop `.json` and name the concept (`keys`, `web-sessions`; the
   `document_names` migration renames the rows), while archive paths stay name + `.json`, so
-  `BACKUP_VERSION` stays 1 and older backups restore as they are.
+  `BACKUP_VERSION` stays 1 and older backups restore as they are; the account routes moved
+  from `/admin/account/*` to `/api/account/*` (no caller outside the web app, so no
+  redirects). `/admin/login`, `/admin/callback`, `/admin/logout`, setup, backup, branding and
+  the password-link routes keep `/admin` for now.
 - **B1:** the generated activity list waits for queued entries, as the subscription does
   (`fix:` with a regression test).
 - **B2:** a paired app's registration entries name the client the way every other entry does
@@ -53,7 +56,7 @@ average 13); every failing file passes alone. See T5 and T6.
 | M1 | Model change | Splits "admin" into the web session (any signed-in user's) and admin (a user in the admin group), in code names and in the server folders | A reader stops thinking the account page is admin-only | — | done |
 | R14 | Refactor [readability] | Renames the admin session store and service to web session, internal names only | M1 | M1 | done |
 | R15 | Refactor [pattern] | Moves the account page's routes (profile, second factors, own picture) out of `server/admin/` into `server/account/` | M1; P21 | M1 | done |
-| A1 | API change | Lists the persisted and public "admin" names of the web session (table, cookie, document name, `/admin/account/*` URLs) and proposes keeping them | M1 without a breaking change | M1 | done |
+| A1 | API change | Lists the persisted and public "admin" names of the web session (table, cookie, document name, `/admin/account/*` URLs) and proposes keeping them; done as renames with fallbacks (decision of 2026-10-23) | M1 without a breaking change | M1 | done |
 | M2 | Model change | Gives a client's display name (built-in name, else stored name, else ID) one owner | Removes five copies that already differ once | — | done |
 | B2 | Bug (question) | Asks whether a paired app's registration entries should name the client the way every other entry does | Settles the one differing copy before R4 merges them | — | done |
 | R4 | Refactor [reuse] | Replaces the five client-name copies with one function | M2 | M2, B2 | done |
@@ -69,7 +72,7 @@ average 13); every failing file passes alone. See T5 and T6.
 | R12 | Refactor [sweep] | Renames every store's `file` parameter to `document` (84 hits, 18 files) | M5 | M5 | done |
 | R13 | Refactor [readability] | Renames the document mapping's `file` field and `DOCUMENT_FILES` to say they are the document's name; the stored values stay | M5 | M5, A2 | done |
 | D6 | Doc [sweep] | Rewrites comments that say "the file" or "model files" where they mean the document or its tables | M5 | M5 | done |
-| A2 | API change | Asks whether the stored document names and archive paths (`keys.json`, …) keep their JSON-era values | Decides R13's scope | — | done |
+| A2 | API change | Asks whether the stored document names and archive paths (`keys.json`, …) keep their JSON-era values; done as a rename of the stored names, archive paths unchanged (decision of 2026-10-23) | Decides R13's scope | — | done |
 | M6 | Model change | Gives each rule or limit both sides check one owner on the server, imported by the web or held to it by a test | Ends silent drift between form checks and server checks | — | done |
 | B4 | Bug (question) | Asks whether the web's host check should match the server's, which also limits label and total length | Settles a copy that already drifted | — | done |
 | R28 | Refactor [reuse] | Has the web import the server's limits and patterns (archive size, logo size, host and ID patterns, password user inputs) instead of copying them | M6 | M6, B4 | done |
@@ -757,11 +760,24 @@ With M1, these keep their spelling unless the user asks (P27): the `admin_sessio
 signs everyone out), and the `/admin/account/*`, `/admin/login`, `/admin/callback`,
 `/admin/logout` URLs the web app calls. Proposal: keep all of them; only code names change.
 
+**Decided 2026-10-23: rename, with fallbacks (P28).** Done as `web_sessions` (a migration
+renames the table), the `heautou_session` cookie (`heautou_admin` still read and swapped
+until the release after the rename: `FORMER_SESSION_COOKIE`), the `web-sessions` document
+and `/api/account/*`. The sign-in cookie `heautou_admin_login`, `/admin/login`,
+`/admin/callback`, `/admin/logout` and the other `/admin/*` routes non-admins reach were not
+part of the decision.
+
 ### A2 — The stored document names keep their JSON-era values
 
 `documents.name` holds `keys.json`, `settings.json`, … and archives use the same paths, which
 older backups depend on (`BACKUP_VERSION` 1). Renaming the values needs a migration and an
 archive version 2 that still reads version 1. Proposal: keep them; R13 renames only the code.
+
+**Decided 2026-10-23: rename (P28).** `documents.name` holds the concept (`keys`,
+`web-sessions`, …; the `document_names` migration renames the rows). Archive paths stay the
+name plus `.json` (`archivePathOf`), so no archive version 2 is needed and version 1 backups
+restore as they are; the import still reads an older directory's files by their names on
+disk, `admin-sessions.json` included.
 
 ---
 

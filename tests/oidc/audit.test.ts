@@ -304,7 +304,7 @@ describe('the audit log', () => {
 
   it('shows a user their own recent sign-ins on their account page', async () => {
     const ada = await signInAsAdmin(app, 'ada');
-    const res = await ada.send('/admin/account/activity');
+    const res = await ada.send('/api/account/activity');
     expect(res.status).toBe(HttpStatus.Ok);
     const { entries } = await res.json();
     expect(entries[0]).toMatchObject({ type: AuditType.WebSignedIn, clientName: null });
@@ -316,6 +316,6 @@ describe('the audit log', () => {
     );
     expect(entries.some((entry: { type: string }) => entry.type === AuditType.PasswordLinkCreated)).toBe(false);
     expect(entries.some((entry: { type: string }) => entry.type === AuditType.SignInSucceeded)).toBe(false);
-    expect((await createBrowser(app.base).send('/admin/account/activity')).status).toBe(HttpStatus.Unauthorized);
+    expect((await createBrowser(app.base).send('/api/account/activity')).status).toBe(HttpStatus.Unauthorized);
   });
 });

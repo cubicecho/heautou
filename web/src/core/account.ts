@@ -4,7 +4,7 @@ import { jsonReply, postJson } from '@/core/json-reply';
 
 /** Where a browser with no session signs in, coming back to the account page. */
 export const ACCOUNT_LOGIN = '/admin/login?return=%2Faccount';
-/** What `/admin/account` answers a browser with no session. */
+/** What `/api/account` answers a browser with no session. */
 const HTTP_UNAUTHORIZED = 401;
 
 const KEY = ['account'] as const;
@@ -56,7 +56,7 @@ export function useAccount() {
   return useQuery({
     queryKey: KEY,
     queryFn: async () => {
-      const response = await fetch('/admin/account');
+      const response = await fetch('/api/account');
       if (response.status === HTTP_UNAUTHORIZED) {
         window.location.assign(ACCOUNT_LOGIN);
         throw new Error('Signing you in…');
@@ -75,7 +75,7 @@ export function useAccount() {
 export function useAccountActivity() {
   return useQuery({
     queryKey: [...KEY, 'activity'],
-    queryFn: async () => (await jsonReply(await fetch('/admin/account/activity'), activitySchema)).entries,
+    queryFn: async () => (await jsonReply(await fetch('/api/account/activity'), activitySchema)).entries,
     retry: false,
   });
 }
@@ -88,7 +88,7 @@ export function useAccountActivity() {
 export function useChangePassword() {
   return useMutation({
     mutationFn: async (body: { currentPassword: string; newPassword: string }) =>
-      jsonReply(await postJson('/admin/account/password', body), okSchema),
+      jsonReply(await postJson('/api/account/password', body), okSchema),
   });
 }
 
@@ -100,7 +100,7 @@ export function useChangePassword() {
 export function useSignOutEverywhere() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async () => jsonReply(await postJson('/admin/account/sign-out-everywhere', {}), redirectSchema),
+    mutationFn: async () => jsonReply(await postJson('/api/account/sign-out-everywhere', {}), redirectSchema),
     onSuccess: ({ redirectTo }) => {
       queryClient.removeQueries({ queryKey: KEY });
       window.location.assign(redirectTo);
@@ -161,7 +161,7 @@ export type AccountUpstream = z.infer<typeof upstreamsSchema>['providers'][numbe
 export function useAccountUpstreams() {
   return useQuery({
     queryKey: UPSTREAMS_KEY,
-    queryFn: async () => jsonReply(await fetch('/admin/account/upstreams'), upstreamsSchema),
+    queryFn: async () => jsonReply(await fetch('/api/account/upstreams'), upstreamsSchema),
     retry: false,
   });
 }
@@ -174,7 +174,7 @@ export function useAccountUpstreams() {
 export function useStartLink() {
   return useMutation({
     mutationFn: async (providerId: string) =>
-      jsonReply(await postJson(`/admin/account/upstreams/${encodeURIComponent(providerId)}/link`, {}), redirectSchema),
+      jsonReply(await postJson(`/api/account/upstreams/${encodeURIComponent(providerId)}/link`, {}), redirectSchema),
     onSuccess: ({ redirectTo }) => window.location.assign(redirectTo),
   });
 }
@@ -188,7 +188,7 @@ export function useFinishLink() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (ticket: string) =>
-      jsonReply(await postJson('/admin/account/upstreams/finish', { ticket }), linkedSchema),
+      jsonReply(await postJson('/api/account/upstreams/finish', { ticket }), linkedSchema),
     onSettled: () => queryClient.invalidateQueries({ queryKey: UPSTREAMS_KEY }),
   });
 }
@@ -202,7 +202,7 @@ export function useUnlink() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (providerId: string) =>
-      jsonReply(await postJson(`/admin/account/upstreams/${encodeURIComponent(providerId)}/unlink`, {}), okSchema),
+      jsonReply(await postJson(`/api/account/upstreams/${encodeURIComponent(providerId)}/unlink`, {}), okSchema),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: UPSTREAMS_KEY }),
   });
 }

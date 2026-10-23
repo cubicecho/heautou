@@ -1,6 +1,6 @@
 import express, { Router } from 'express';
 import { z } from 'zod';
-import { requireSignedIn, viewerOf } from '../account/session.ts';
+import { ACCOUNT_API, requireSignedIn, viewerOf } from '../account/session.ts';
 import { adminUrls, WEB_APP_PAGE } from '../admin/admin-client.ts';
 import { HTTP_DEFAULTS } from '../core/defaults.ts';
 import { errorMessage } from '../core/errors.ts';
@@ -16,13 +16,13 @@ import { FlowPurpose, UPSTREAM_PATH, type UpstreamFlows } from './flows.ts';
 /** The account routes of upstream identities. */
 export const ACCOUNT_UPSTREAM_PATH = {
   /** The providers, and which the signed-in user has linked (GET). */
-  list: '/admin/account/upstreams',
+  list: `${ACCOUNT_API}/upstreams`,
   /** Starts linking one (POST `/:id/link`): the reply says where to send the browser. */
-  link: '/admin/account/upstreams/:id/link',
+  link: `${ACCOUNT_API}/upstreams/:id/link`,
   /** Links the identity a finished flow came back with (POST, with its ticket). */
-  finish: '/admin/account/upstreams/finish',
+  finish: `${ACCOUNT_API}/upstreams/finish`,
   /** Unlinks one (POST `/:id/unlink`). */
-  unlink: '/admin/account/upstreams/:id/unlink',
+  unlink: `${ACCOUNT_API}/upstreams/:id/unlink`,
 } as const;
 
 /** The query parameter the account page reads a finished link's ticket from. */
