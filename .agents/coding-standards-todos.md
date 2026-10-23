@@ -48,9 +48,9 @@ average 13); every failing file passes alone. See T5 and T6.
 | R14 | Refactor [readability] | Renames the admin session store and service to web session, internal names only | M1 | M1 | approved |
 | R15 | Refactor [pattern] | Moves the account page's routes (profile, second factors, own picture) out of `server/admin/` into `server/account/` | M1; P21 | M1 | approved |
 | A1 | API change | Lists the persisted and public "admin" names of the web session (table, cookie, document name, `/admin/account/*` URLs) and proposes keeping them | M1 without a breaking change | M1 | approved |
-| M2 | Model change | Gives a client's display name (built-in name, else stored name, else ID) one owner | Removes five copies that already differ once | — | approved |
+| M2 | Model change | Gives a client's display name (built-in name, else stored name, else ID) one owner | Removes five copies that already differ once | — | done |
 | B2 | Bug (question) | Asks whether a paired app's registration entries should name the client the way every other entry does | Settles the one differing copy before R4 merges them | — | done |
-| R4 | Refactor [reuse] | Replaces the five client-name copies with one function | M2 | M2, B2 | approved |
+| R4 | Refactor [reuse] | Replaces the five client-name copies with one function | M2 | M2, B2 | done |
 | M3 | Model change | Makes the audit module the owner of audit targets and of "record what the signed-in admin did" | One place to look when an entry reads wrong | — | approved |
 | R5 | Refactor [reuse] | Replaces four copies of the admin-change recorder in the GraphQL modules with one | M3; removes copies in the most-changed folder | M3 | approved |
 | R6 | Refactor [pattern] | Moves the target builders (client, API, site, group, pairing, settings, branding, mail, cookie domain) beside `userTarget` | M3 | M3, R4 | approved |
@@ -164,7 +164,7 @@ and `server/oidc/audit-events.ts:112`, and differently in `server/core/services.
 `builtInClientName` in `server/admin/admin-client.ts` (or on the client store), answers it;
 `sessionClientName` keeps its one extra rule (the web app goes by the brand's name). Why it
 is simpler: one definition, and the next screen that names a client can't get it wrong.
-Implemented by: B2, R4. Status: open.
+Implemented by: B2, R4. Status: done.
 
 ### M3 — The audit module owns audit targets and the admin-change recorder
 

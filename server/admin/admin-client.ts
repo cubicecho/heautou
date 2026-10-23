@@ -25,6 +25,18 @@ export function builtInClientName(clientId: string): string | null {
   return BUILT_IN_CLIENT_NAMES.get(clientId) ?? null;
 }
 
+/**
+ * Names a client as people see it: a built-in client by its own name, else by the name the client store holds.
+ *
+ * @param clients - The client store.
+ * @param clientId - Any client ID.
+ * @param [fallback] - The name to use for a client the store no longer has, such as the one a request gave.
+ * @returns The name, or the client ID when nothing names it.
+ */
+export function clientDisplayName(clients: ClientStore, clientId: string, fallback?: string): string {
+  return builtInClientName(clientId) ?? clients.find(clientId)?.name ?? fallback ?? clientId;
+}
+
 /** The admin UI's server routes. */
 export const ADMIN_PATH = {
   /** Starts a sign-in; `?return=` is where to go after. */
@@ -135,5 +147,5 @@ export function sessionClientName(clientId: string, clients: ClientStore, brandi
   if (clientId === ADMIN_DEFAULTS.clientId) {
     return branding.name;
   }
-  return builtInClientName(clientId) ?? clients.find(clientId)?.name ?? clientId;
+  return clientDisplayName(clients, clientId);
 }

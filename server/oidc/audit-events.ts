@@ -1,6 +1,6 @@
 import type Provider from 'oidc-provider';
 import type { KoaContextWithOIDC } from 'oidc-provider';
-import { builtInClientName } from '../admin/admin-client.ts';
+import { builtInClientName, clientDisplayName } from '../admin/admin-client.ts';
 import { errorMessage } from '../core/errors.ts';
 import {
   AppSignInVia,
@@ -109,7 +109,7 @@ function clientTargetIn(clients: ClientStore, clientId: string, fallback?: strin
   return {
     kind: AuditTargetKind.Client,
     id: clientId,
-    name: builtInClientName(clientId) ?? clients.find(clientId)?.name ?? fallback ?? clientId,
+    name: clientDisplayName(clients, clientId, fallback),
   };
 }
 

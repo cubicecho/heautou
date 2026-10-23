@@ -1,6 +1,6 @@
 import type Provider from 'oidc-provider';
 import type { Client, KoaContextWithOIDC } from 'oidc-provider';
-import { adminClientMetadata, adminUrls } from '../admin/admin-client.ts';
+import { adminClientMetadata, adminUrls, clientDisplayName } from '../admin/admin-client.ts';
 import { createSetupGate, type SetupGate } from '../admin/setup.ts';
 import type { Database } from '../db/client.ts';
 import { createDataSet, type DataSet } from '../db/data-set.ts';
@@ -330,8 +330,8 @@ export async function openServices(settings: ServiceSettings): Promise<Services>
           target: {
             kind: AuditTargetKind.Client,
             id: client.clientId,
-            // As the store names it now; the provider passes an update the client as it was before.
-            name: clients.find(client.clientId)?.name ?? client.clientName ?? client.clientId,
+            // The provider passes an update the client as it was before, so its own name is only the fallback.
+            name: clientDisplayName(clients, client.clientId, client.clientName),
           },
         });
         refreshSoon();

@@ -299,9 +299,8 @@ Owner: `server/store/audit.ts`.
   targets are built where they are recorded (`resolvers.ts`, `apis.ts`, `forward-auth.ts`,
   `mail.ts`, `audit-events.ts`, `interactions.ts`, `services.ts`).
 - **Client display name:** a client's name as people see it: the built-in client's own name,
-  else the stored name, else its ID. Owner: none; written out in `admin-client.ts`
-  (`sessionClientName`), `oidc/pages.ts`, `oidc/interactions.ts` (`nameOf`) and
-  `oidc/audit-events.ts` (`clientTargetIn`), and differently in `services.ts`.
+  else the stored name, else the name a request gave, else its ID. Owner: `clientDisplayName`
+  in `server/admin/admin-client.ts`; `sessionClientName` there names the web app by the brand.
 - **Viewer:** the signed-in user a request is for. Owner: `requireSignedIn` (any enabled
   user) and `requireAdmin` in `server/admin/routes.ts` find it; handlers read it with
   `viewerOf(res)`.
