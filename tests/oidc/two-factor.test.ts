@@ -17,6 +17,7 @@ import {
   type SecondFactorAnswer,
   signIn,
   signInAsAdmin,
+  signInToWebApp,
 } from './browser.ts';
 
 /**
@@ -76,20 +77,6 @@ async function startSignIn(app: TestApp, client: OidcClient): Promise<{ browser:
 }
 
 /**
- * Signs a user in to their account page.
- *
- * @param app - The running app.
- * @param username - Who.
- * @returns Their browser.
- */
-async function accountBrowser(app: TestApp, username: string): Promise<Browser> {
-  const browser = createBrowser(app.base);
-  const callback = await signIn(app, '/admin/login', username, PASSWORD, browser, `${app.base}/admin/callback`);
-  await browser.send(callback.pathname + callback.search);
-  return browser;
-}
-
-/**
  * Sets up an authenticator app from the account page.
  *
  * @param browser - The user's account browser.
@@ -143,7 +130,7 @@ describe('two-factor sign-in', () => {
   });
 
   it('asks for the authenticator code after the password, and says so in the token', async () => {
-    const { secret, recoveryCodes } = await enrolTotp(await accountBrowser(app, 'ada'));
+    const { secret, recoveryCodes } = await enrolTotp((await signInToWebApp(app, 'ada')).browser);
     expect(recoveryCodes).toHaveLength(TWO_FACTOR_DEFAULTS.recoveryCodeCount);
 
     const { browser, uid } = await startSignIn(app, client);
@@ -161,7 +148,7 @@ describe('two-factor sign-in', () => {
   });
 
   it('takes a recovery code once', async () => {
-    const { recoveryCodes } = await enrolTotp(await accountBrowser(app, 'ada'));
+    const { recoveryCodes } = await enrolTotp((await signInToWebApp(app, 'ada')).browser);
     const [code = ''] = recoveryCodes;
     const withRecovery: SecondFactorAnswer = (uid, browser) =>
       postJson(browser, `/interaction/${uid}/second-factor`, { code });
@@ -170,7 +157,7 @@ describe('two-factor sign-in', () => {
   });
 
   it('makes the sign-in start again after too many wrong codes', async () => {
-    await enrolTotp(await accountBrowser(app, 'ada'));
+    await enrolTotp((await signInToWebApp(app, 'ada')).browser);
     const { browser, uid } = await startSignIn(app, client);
     await postJson(browser, `/interaction/${uid}/login`, { username: 'ada', password: PASSWORD });
     let last: Response | null = null;
@@ -183,7 +170,7 @@ describe('two-factor sign-in', () => {
   });
 
   it('needs the password to remove the authenticator app', async () => {
-    const browser = await accountBrowser(app, 'ada');
+    const { browser } = await signInToWebApp(app, 'ada');
     await enrolTotp(browser);
     const refused = await postJson(browser, '/api/account/totp/remove', { password: 'wrong' });
     expect(refused.status).toBe(HttpStatus.Forbidden);
@@ -193,7 +180,7 @@ describe('two-factor sign-in', () => {
 
   it('registers a passkey, and signs in with it after the password or on its own', async () => {
     const authenticator = createSoftwareAuthenticator(app.base);
-    const account = await accountBrowser(app, 'ada');
+    const { browser: account } = await signInToWebApp(app, 'ada');
     const { options } = await (await postJson(account, '/api/account/passkeys/options', {})).json();
     const added = await postJson(account, '/api/account/passkeys', {
       name: 'Laptop',
@@ -228,7 +215,7 @@ describe('two-factor sign-in', () => {
 
   it('refuses a passkey alone when it did not check the user, or its user is disabled', async () => {
     const authenticator = createSoftwareAuthenticator(app.base);
-    const account = await accountBrowser(app, 'ada');
+    const { browser: account } = await signInToWebApp(app, 'ada');
     const { options } = await (await postJson(account, '/api/account/passkeys/options', {})).json();
     await postJson(account, '/api/account/passkeys', { name: 'Key', response: authenticator.create(options) });
 
@@ -248,10 +235,10 @@ describe('two-factor sign-in', () => {
   it('refuses another user’s passkey after the password', async () => {
     const theirs = createSoftwareAuthenticator(app.base);
     await app.services.users.create({ username: 'bob', password: PASSWORD, email: '', name: '', groups: [] });
-    const bob = await accountBrowser(app, 'bob');
+    const { browser: bob } = await signInToWebApp(app, 'bob');
     const { options } = await (await postJson(bob, '/api/account/passkeys/options', {})).json();
     await postJson(bob, '/api/account/passkeys', { name: 'Bob’s', response: theirs.create(options) });
-    await enrolTotp(await accountBrowser(app, 'ada'));
+    await enrolTotp((await signInToWebApp(app, 'ada')).browser);
 
     const { browser, uid } = await startSignIn(app, client);
     await postJson(browser, `/interaction/${uid}/login`, { username: 'ada', password: PASSWORD });
@@ -261,7 +248,7 @@ describe('two-factor sign-in', () => {
   });
 
   it('lets an admin see and reset a user’s second factors', async () => {
-    await enrolTotp(await accountBrowser(app, 'ada'));
+    await enrolTotp((await signInToWebApp(app, 'ada')).browser);
     const admin = await signInAsAdmin(app);
     const shown = await adminGql(
       admin,

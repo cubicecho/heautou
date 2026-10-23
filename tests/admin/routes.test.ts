@@ -1,7 +1,15 @@
 import { ADMIN_DEFAULTS } from '../../server/core/defaults.ts';
 import { HttpStatus, MS_PER_SECOND } from '../../server/core/wire.ts';
 import { startTestApp, type TestApp } from '../helpers.ts';
-import { adminGql, type Browser, createBrowser, PASSWORD, signIn, signInAsAdmin } from '../oidc/browser.ts';
+import {
+  adminGql,
+  type Browser,
+  createBrowser,
+  PASSWORD,
+  signIn,
+  signInAsAdmin,
+  signInToWebApp,
+} from '../oidc/browser.ts';
 
 const VIEWER = '{ viewer { username } }';
 
@@ -62,10 +70,8 @@ describe('admin sign-in', () => {
 
   it('sends a user outside the admin group to their account, not the admin API', async () => {
     await app.services.users.create({ username: 'ada', password: PASSWORD, email: '', name: '', groups: [] });
-    const browser = createBrowser(app.base);
-    const callback = await signIn(app, '/admin/login', 'ada', PASSWORD, browser, `${app.base}/admin/callback`);
-    const res = await browser.send(callback.pathname + callback.search);
-    expect(res.headers.get('location')).toBe('/account');
+    const { browser, landing } = await signInToWebApp(app, 'ada');
+    expect(landing).toBe('/account');
     const gql = await browser.send('/graphql', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },

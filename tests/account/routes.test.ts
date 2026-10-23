@@ -2,31 +2,12 @@ import { createHash } from 'node:crypto';
 import { HttpStatus } from '../../server/core/wire.ts';
 import { ClientAuthMethod } from '../../server/store/clients.ts';
 import { startTestApp, type TestApp } from '../helpers.ts';
-import { adminGql, type Browser, createBrowser, PASSWORD, signIn, signInAsAdmin } from '../oidc/browser.ts';
+import { adminGql, type Browser, createBrowser, PASSWORD, signInAsAdmin, signInToWebApp } from '../oidc/browser.ts';
 
 /** How many hex characters of a password's SHA-1 go to Have I Been Pwned. */
 const HASH_PREFIX_LENGTH = 5;
 /** A one-pixel PNG. */
 const PIXEL_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
-
-/**
- * Signs a user in to the web app, the way the account page does.
- *
- * @param app - The running app.
- * @param username - Who signs in.
- * @param [password] - Their password.
- * @returns The browser, holding the session cookie, and where the callback sent it.
- */
-async function signInToWebApp(
-  app: TestApp,
-  username: string,
-  password = PASSWORD,
-): Promise<{ browser: Browser; landing: string | null }> {
-  const browser = createBrowser(app.base);
-  const callback = await signIn(app, '/admin/login', username, password, browser, `${app.base}/admin/callback`);
-  const res = await browser.send(callback.pathname + callback.search);
-  return { browser, landing: res.headers.get('location') };
-}
 
 /**
  * Posts JSON the way the web app does.

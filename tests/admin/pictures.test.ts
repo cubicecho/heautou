@@ -8,13 +8,12 @@ import { startTestApp, type TestApp } from '../helpers.ts';
 import {
   adminGql,
   type Browser,
-  createBrowser,
   PASSWORD,
   payloadOf,
   REDIRECT_URI,
-  signIn,
   signInAsAdmin,
   signInForTokens,
+  signInToWebApp,
 } from '../oidc/browser.ts';
 
 /**
@@ -28,20 +27,6 @@ function image(background: string, format: 'png' | 'jpeg' | 'gif' = 'png'): Prom
   return sharp({ create: { width: 400, height: 300, channels: 3, background } })
     .toFormat(format)
     .toBuffer();
-}
-
-/**
- * Signs a user in to the web app, the way the account page does.
- *
- * @param app - The running app.
- * @param username - Who signs in.
- * @returns The browser, holding the session cookie.
- */
-async function signInToWebApp(app: TestApp, username: string): Promise<Browser> {
-  const browser = createBrowser(app.base);
-  const callback = await signIn(app, '/admin/login', username, PASSWORD, browser, `${app.base}/admin/callback`);
-  await browser.send(callback.pathname + callback.search);
-  return browser;
 }
 
 /**
@@ -107,7 +92,7 @@ describe('profile pictures', () => {
   afterEach(() => app.close());
 
   it('lets a user set theirs, and serves it from the bucket with cache headers', async () => {
-    const browser = await signInToWebApp(app, 'ada');
+    const { browser } = await signInToWebApp(app, 'ada');
     expect(await (await browser.send('/api/account/picture')).json()).toEqual({
       isEnabled: true,
       maxBytes: PROFILE_DEFAULTS.maxPictureBytes,
@@ -149,7 +134,7 @@ describe('profile pictures', () => {
   });
 
   it('refuses what is not a PNG, JPEG or WebP image', async () => {
-    const browser = await signInToWebApp(app, 'ada');
+    const { browser } = await signInToWebApp(app, 'ada');
     const gif = await upload(browser, '/api/account/picture', await image('#000000', 'gif'), 'image/gif');
     expect(gif.status).toBe(HttpStatus.BadRequest);
     expect(gif.body.error).toContain('PNG, JPEG or WebP');
@@ -166,7 +151,7 @@ describe('profile pictures', () => {
   });
 
   it('releases the picture claim with the profile scope', async () => {
-    const browser = await signInToWebApp(app, 'ada');
+    const { browser } = await signInToWebApp(app, 'ada');
     const { body } = await upload(browser, '/api/account/picture', await image('#33cc33'));
     const client = await app.services.clients.create({
       name: 'Gallery',
@@ -185,7 +170,7 @@ describe('profile pictures', () => {
   });
 
   it('replaces and removes a picture, deleting it from the bucket', async () => {
-    const browser = await signInToWebApp(app, 'ada');
+    const { browser } = await signInToWebApp(app, 'ada');
     const first = await upload(browser, '/api/account/picture', await image('#111111'));
     const second = await upload(browser, '/api/account/picture', await image('#eeeeee'));
     expect(second.body.url).not.toBe(first.body.url);
@@ -211,7 +196,7 @@ describe('profile pictures', () => {
     const [entry] = (await app.services.audit.list({ first: 1 })).entries;
     expect(entry).toMatchObject({ type: AuditType.PictureSet, actor: { username: 'root' }, target: { id: adaId } });
 
-    const ada = await signInToWebApp(app, 'ada');
+    const { browser: ada } = await signInToWebApp(app, 'ada');
     const refused = await upload(ada, `/admin/users/${adaId}/picture`, await image('#000000'));
     expect(refused.status).toBe(HttpStatus.Forbidden);
 
@@ -220,7 +205,7 @@ describe('profile pictures', () => {
   });
 
   it('deletes the picture with the user', async () => {
-    const browser = await signInToWebApp(app, 'ada');
+    const { browser } = await signInToWebApp(app, 'ada');
     await upload(browser, '/api/account/picture', await image('#999999'));
     expect(s3.objects.size).toBe(1);
     const admin = await signInAsAdmin(app);
@@ -230,7 +215,7 @@ describe('profile pictures', () => {
   });
 
   it('answers 502 when the bucket is down, and keeps the old picture', async () => {
-    const browser = await signInToWebApp(app, 'ada');
+    const { browser } = await signInToWebApp(app, 'ada');
     const first = await upload(browser, '/api/account/picture', await image('#123456'));
     s3.setDown(true);
     const failed = await upload(browser, '/api/account/picture', await image('#654321'));

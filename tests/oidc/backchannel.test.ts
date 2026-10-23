@@ -11,9 +11,9 @@ import {
   PASSWORD,
   payloadOf,
   REDIRECT_URI,
-  signIn,
   signInAsAdmin,
   signInForTokens,
+  signInToWebApp,
 } from './browser.ts';
 
 /** The event a logout token carries, as OpenID Connect Back-Channel Logout 1.0 names it. */
@@ -202,9 +202,7 @@ describe('back-channel logout', () => {
   });
 
   it('tells the app when the user signs out everywhere from their account page', async () => {
-    const browser = createBrowser(app.base);
-    const callback = await signIn(app, '/admin/login', 'ada', PASSWORD, browser, `${app.base}/admin/callback`);
-    await browser.send(callback.pathname + callback.search);
+    const { browser } = await signInToWebApp(app, 'ada');
     const sid = await signInAda(client, browser);
     const res = await browser.send('/api/account/sign-out-everywhere', {
       method: 'POST',

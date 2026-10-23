@@ -123,11 +123,31 @@ export async function signIn(
 }
 
 /**
+ * Signs a user in to the web app, the admin UI or the account page, as its sign-in does.
+ *
+ * @param app - The running app.
+ * @param username - Who signs in.
+ * @param [password] - Their password.
+ * @returns The browser, holding the web session cookie, and the page the callback sent it to.
+ */
+export async function signInToWebApp(
+  app: TestApp,
+  username: string,
+  password = PASSWORD,
+): Promise<{ browser: Browser; landing: string }> {
+  const browser = createBrowser(app.base);
+  const callback = await signIn(app, '/admin/login', username, password, browser, `${app.base}/admin/callback`);
+  const res = await browser.send(callback.pathname + callback.search);
+  expect(res.status).toBe(HttpStatus.SeeOther);
+  return { browser, landing: res.headers.get('location') ?? '' };
+}
+
+/**
  * Signs a browser in to the admin UI, adding the admin first when there is none by that name.
  *
  * @param app - The running app.
  * @param [username] - The admin's username.
- * @returns The browser, holding the admin session cookie.
+ * @returns The browser, holding the web session cookie.
  */
 export async function signInAsAdmin(app: TestApp, username = 'root'): Promise<Browser> {
   const { users } = app.services;
@@ -135,11 +155,7 @@ export async function signInAsAdmin(app: TestApp, username = 'root'): Promise<Br
   if (exists === false) {
     await users.create({ username, password: PASSWORD, email: '', name: '', groups: [ADMIN_DEFAULTS.group] });
   }
-  const browser = createBrowser(app.base);
-  const callback = await signIn(app, '/admin/login', username, PASSWORD, browser, `${app.base}/admin/callback`);
-  const res = await browser.send(callback.pathname + callback.search);
-  expect(res.status).toBe(HttpStatus.SeeOther);
-  return browser;
+  return (await signInToWebApp(app, username)).browser;
 }
 
 /**
