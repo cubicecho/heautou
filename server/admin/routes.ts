@@ -95,8 +95,52 @@ export function signedInUser(deps: Pick<AdminDeps, 'users' | 'adminSessions'>, r
 }
 
 /**
- * Refuses requests without a session with 401 and those of users who are not admins with 403, and puts the admin
- * in `res.locals.viewer`.
+ * Keeps the signed-in user a request is for, for the handlers after the middleware that found them.
+ *
+ * @param res - The response.
+ * @param user - The signed-in user.
+ */
+function setViewer(res: Response, user: PublicUser): void {
+  res.locals.viewer = user;
+}
+
+/**
+ * Reads the signed-in user a request is for, which `requireSignedIn` or `requireAdmin` found.
+ *
+ * @param res - The response.
+ * @returns The user.
+ * @throws If neither middleware ran before the handler, which is a mistake in the route.
+ */
+export function viewerOf(res: Response): PublicUser {
+  // Express types `res.locals` as `any`; only setViewer writes this key.
+  const viewer: PublicUser | undefined = res.locals.viewer;
+  if (viewer === undefined) {
+    throw new Error('No signed-in user on this request. Put requireSignedIn or requireAdmin before the handler.');
+  }
+  return viewer;
+}
+
+/**
+ * Refuses requests without a session with 401, and keeps the signed-in user for `viewerOf`. Any enabled user passes.
+ *
+ * @param deps - The stores.
+ * @returns The middleware.
+ */
+export function requireSignedIn(deps: Pick<AdminDeps, 'users' | 'adminSessions'>): RequestHandler {
+  return (req, res, next) => {
+    const viewer = signedInUser(deps, req);
+    if (viewer === null) {
+      sendRefusal(res, HttpStatus.Unauthorized, 'Sign in first.');
+      return;
+    }
+    setViewer(res, viewer);
+    next();
+  };
+}
+
+/**
+ * Refuses requests without a session with 401 and those of users who are not admins with 403, and keeps the admin
+ * for `viewerOf`.
  *
  * @param deps - The stores.
  * @returns The middleware.
@@ -112,7 +156,7 @@ export function requireAdmin(deps: Pick<AdminDeps, 'users' | 'adminSessions'>): 
       sendRefusal(res, HttpStatus.Forbidden, `"${viewer.username}" is not in the "${ADMIN_DEFAULTS.group}" group.`);
       return;
     }
-    res.locals.viewer = viewer;
+    setViewer(res, viewer);
     next();
   };
 }

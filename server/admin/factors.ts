@@ -15,7 +15,7 @@ import type { BrandingStore } from '../store/branding.ts';
 import type { FactorStore } from '../store/factors.ts';
 import type { PublicUser, UserStore } from '../store/users.ts';
 import { adminUrls } from './admin-client.ts';
-import { signedInUser } from './routes.ts';
+import { requireSignedIn, viewerOf } from './routes.ts';
 
 /** The account page's second-factor routes. Every one acts on the signed-in user. */
 export const FACTOR_PATH = {
@@ -79,20 +79,7 @@ export function createFactorRouter(deps: FactorRouteDeps): Router {
   const challenges = createExpiringMap<string>(TWO_FACTOR_DEFAULTS.passkeyTimeoutSeconds, now);
   const router = Router();
 
-  /**
-   * Finds the signed-in user, or answers 401.
-   *
-   * @param req - The request.
-   * @param res - Its response.
-   * @returns The user, or null when the response was sent.
-   */
-  const viewerOf = (req: Request, res: Response): PublicUser | null => {
-    const user = signedInUser(deps, req);
-    if (user === null) {
-      sendRefusal(res, HttpStatus.Unauthorized, 'Sign in first.');
-    }
-    return user;
-  };
+  const signedIn = requireSignedIn(deps);
 
   /**
    * Records a change to the user's own factors.
@@ -148,29 +135,21 @@ export function createFactorRouter(deps: FactorRouteDeps): Router {
     return codes;
   };
 
-  router.get(FACTOR_PATH.factors, (req, res) => {
-    const user = viewerOf(req, res);
-    if (user !== null) {
-      res.json({ ...factors.summary(user.id), passkeysAvailable: rp.isAvailable });
-    }
+  router.get(FACTOR_PATH.factors, signedIn, (_req, res) => {
+    const user = viewerOf(res);
+    res.json({ ...factors.summary(user.id), passkeysAvailable: rp.isAvailable });
   });
 
-  router.post(FACTOR_PATH.totpStart, ...json, (req, res) => {
-    const user = viewerOf(req, res);
-    if (user === null) {
-      return;
-    }
+  router.post(FACTOR_PATH.totpStart, ...json, signedIn, (_req, res) => {
+    const user = viewerOf(res);
     const secret = newTotpSecret();
     totpSetups.set(user.id, secret);
     res.json({ secret, uri: totpUri(secret, branding.read().name, user.username) });
   });
 
-  router.post(FACTOR_PATH.totpConfirm, ...json, async (req, res) => {
-    const user = viewerOf(req, res);
+  router.post(FACTOR_PATH.totpConfirm, ...json, signedIn, async (req, res) => {
+    const user = viewerOf(res);
     const parsed = codeSchema.safeParse(req.body);
-    if (user === null) {
-      return;
-    }
     if (parsed.success === false) {
       sendRefusal(res, HttpStatus.BadRequest, 'Send the code the app shows.');
       return;
@@ -193,12 +172,9 @@ export function createFactorRouter(deps: FactorRouteDeps): Router {
     res.json({ recoveryCodes: await recoveryCodes });
   });
 
-  router.post(FACTOR_PATH.totpRemove, ...json, async (req, res) => {
-    const user = viewerOf(req, res);
+  router.post(FACTOR_PATH.totpRemove, ...json, signedIn, async (req, res) => {
+    const user = viewerOf(res);
     const parsed = passwordSchema.safeParse(req.body);
-    if (user === null) {
-      return;
-    }
     if (parsed.success === false) {
       sendRefusal(res, HttpStatus.BadRequest, 'Send your password.');
       return;
@@ -211,12 +187,9 @@ export function createFactorRouter(deps: FactorRouteDeps): Router {
     }
   });
 
-  router.post(FACTOR_PATH.recoveryCodes, ...json, async (req, res) => {
-    const user = viewerOf(req, res);
+  router.post(FACTOR_PATH.recoveryCodes, ...json, signedIn, async (req, res) => {
+    const user = viewerOf(res);
     const parsed = passwordSchema.safeParse(req.body);
-    if (user === null) {
-      return;
-    }
     if (parsed.success === false) {
       sendRefusal(res, HttpStatus.BadRequest, 'Send your password.');
       return;
@@ -233,11 +206,8 @@ export function createFactorRouter(deps: FactorRouteDeps): Router {
     }
   });
 
-  router.post(FACTOR_PATH.passkeyOptions, ...json, async (req, res) => {
-    const user = viewerOf(req, res);
-    if (user === null) {
-      return;
-    }
+  router.post(FACTOR_PATH.passkeyOptions, ...json, signedIn, async (_req, res) => {
+    const user = viewerOf(res);
     if (rp.isAvailable === false) {
       sendRefusal(res, HttpStatus.BadRequest, 'Passkeys need this site to be served over https.');
       return;
@@ -247,12 +217,9 @@ export function createFactorRouter(deps: FactorRouteDeps): Router {
     res.json({ options });
   });
 
-  router.post(FACTOR_PATH.passkeyAdd, ...json, async (req, res) => {
-    const user = viewerOf(req, res);
+  router.post(FACTOR_PATH.passkeyAdd, ...json, signedIn, async (req, res) => {
+    const user = viewerOf(res);
     const parsed = addPasskeySchema.safeParse(req.body);
-    if (user === null) {
-      return;
-    }
     if (parsed.success === false) {
       sendRefusal(res, HttpStatus.BadRequest, 'Send a name for the passkey and the browser’s answer.');
       return;
@@ -274,12 +241,9 @@ export function createFactorRouter(deps: FactorRouteDeps): Router {
     }
   });
 
-  router.post(FACTOR_PATH.passkeyRemove, ...json, async (req, res) => {
-    const user = viewerOf(req, res);
+  router.post(FACTOR_PATH.passkeyRemove, ...json, signedIn, async (req, res) => {
+    const user = viewerOf(res);
     const parsed = removePasskeySchema.safeParse(req.body);
-    if (user === null) {
-      return;
-    }
     if (parsed.success === false) {
       sendRefusal(res, HttpStatus.BadRequest, 'Send the passkey and your password.');
       return;

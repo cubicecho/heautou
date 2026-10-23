@@ -37,7 +37,7 @@ Who can change things, and through what. Read from the guards, not the docs.
 | Actor | Is | Reaches the system through | May change |
 |---|---|---|---|
 | Operator (admin) | A user in the `ADMIN_DEFAULTS.group` group | A web session, `requireAdmin` on `/graphql` and `/admin/backup`, `/admin/restore` | Every client, user, group, API, upstream, protected site, key, setting, branding and mail setting; backups and restores |
-| Signed-in user | Any enabled user with a web session | `/admin/account/*` routes (`signedInUser`) | Their own profile, password, second factors, profile picture, sessions and upstream links |
+| Signed-in user | Any enabled user with a web session | `/admin/account/*` routes (`requireSignedIn`) | Their own profile, password, second factors, profile picture, sessions and upstream links |
 | Anyone in a browser | Nobody signed in | The interaction routes, `/setup`, `/set-password`, forgot password | Sign in; make the first admin while `setup.ts` allows; set a password with a valid password link; ask for a reset link when it is on |
 | App (client) | A registered OIDC client | `/oidc/*` (oidc-provider) | Its own grants and tokens; with a setup URL's token its own registration (RFC 7591), then its registration through RFC 7592 |
 | Reverse proxy | An address `createProxyTrust` believes | `/auth/verify`, `/auth/sign-in`, `/auth/callback`, `/auth/sign-out` | Proxy sessions (by signing a user in or out) |
@@ -302,9 +302,9 @@ Owner: `server/store/audit.ts`.
   else the stored name, else its ID. Owner: none; written out in `admin-client.ts`
   (`sessionClientName`), `oidc/pages.ts`, `oidc/interactions.ts` (`nameOf`) and
   `oidc/audit-events.ts` (`clientTargetIn`), and differently in `services.ts`.
-- **Viewer:** the signed-in user a request is for. Owner: `res.locals.viewer` set by
-  `requireAdmin` (`server/admin/routes.ts`) and by `pictures.ts`; other routes call
-  `signedInUser` themselves.
+- **Viewer:** the signed-in user a request is for. Owner: `requireSignedIn` (any enabled
+  user) and `requireAdmin` in `server/admin/routes.ts` find it; handlers read it with
+  `viewerOf(res)`.
 - **Defaults group:** a tunable group in `server/core/defaults.ts` (`<CONCEPT>_DEFAULTS`).
   Facts are in `server/core/wire.ts`.
 

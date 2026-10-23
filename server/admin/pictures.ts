@@ -9,9 +9,9 @@ import { HttpStatus } from '../core/wire.ts';
 import { type PostBody, sameOriginJson, sameOriginPost, sendRefusal } from '../http/guards.ts';
 import type { AdminSessionStore } from '../store/admin-sessions.ts';
 import { type AuditActor, type AuditLog, AuditType, actorOf, userTarget } from '../store/audit.ts';
-import type { PublicUser, UserStore } from '../store/users.ts';
+import type { UserStore } from '../store/users.ts';
 import { adminUrls } from './admin-client.ts';
-import { requireAdmin, signedInUser } from './routes.ts';
+import { requireAdmin, requireSignedIn, viewerOf } from './routes.ts';
 
 /** The picture routes. */
 export const PICTURE_PATH = {
@@ -109,22 +109,7 @@ export function createPictureRouter(deps: PictureDeps): Router {
   const admin = requireAdmin(deps);
   const router = Router();
 
-  /**
-   * Puts the signed-in user in `res.locals.viewer`, or refuses with 401.
-   *
-   * @param req - The request.
-   * @param res - The response.
-   * @param next - Called when someone is signed in.
-   */
-  const signedIn: RequestHandler = (req, res, next) => {
-    const user = signedInUser(deps, req);
-    if (user === null) {
-      sendRefusal(res, HttpStatus.Unauthorized, 'Sign in first.');
-      return;
-    }
-    res.locals.viewer = user;
-    next();
-  };
+  const signedIn = requireSignedIn(deps);
 
   /**
    * Sets a picture from the request's body and records who did it.
@@ -173,7 +158,7 @@ export function createPictureRouter(deps: PictureDeps): Router {
   const json = [sameOriginJson(origin), express.json({ limit: HTTP_DEFAULTS.bodyLimit })];
 
   router.get(PICTURE_PATH.account, signedIn, (_req, res) => {
-    const viewer: PublicUser = res.locals.viewer;
+    const viewer = viewerOf(res);
     res.json({
       isEnabled: pictures.isEnabled,
       maxBytes: PROFILE_DEFAULTS.maxPictureBytes,
@@ -182,22 +167,22 @@ export function createPictureRouter(deps: PictureDeps): Router {
   });
 
   router.post(PICTURE_PATH.account, sameOriginPost(origin, IMAGE_BODY), signedIn, readImage, async (req, res) => {
-    const viewer: PublicUser = res.locals.viewer;
+    const viewer = viewerOf(res);
     await setFrom(req, res, viewer.id, actorOf(viewer));
   });
 
   router.post(PICTURE_PATH.accountRemove, ...json, signedIn, async (req, res) => {
-    const viewer: PublicUser = res.locals.viewer;
+    const viewer = viewerOf(res);
     await removeFor(req, res, viewer.id, actorOf(viewer));
   });
 
   router.post(PICTURE_PATH.user, sameOriginPost(origin, IMAGE_BODY), admin, readImage, async (req, res) => {
-    const viewer: PublicUser = res.locals.viewer;
+    const viewer = viewerOf(res);
     await setFrom(req, res, String(req.params.id), actorOf(viewer));
   });
 
   router.post(PICTURE_PATH.userRemove, ...json, admin, async (req, res) => {
-    const viewer: PublicUser = res.locals.viewer;
+    const viewer = viewerOf(res);
     await removeFor(req, res, String(req.params.id), actorOf(viewer));
   });
 

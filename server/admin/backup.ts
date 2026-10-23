@@ -7,9 +7,9 @@ import { type PostBody, sameOriginJson, sameOriginPost, sendRefusal } from '../h
 import type { AdminSessionStore } from '../store/admin-sessions.ts';
 import { type AuditLog, AuditType, actorOf } from '../store/audit.ts';
 import { BackupError } from '../store/backup.ts';
-import type { PublicUser, UserStore } from '../store/users.ts';
+import type { UserStore } from '../store/users.ts';
 import { ADMIN_PATH, adminUrls } from './admin-client.ts';
-import { COOKIE, requireAdmin, sessionCookieOptions } from './routes.ts';
+import { COOKIE, requireAdmin, sessionCookieOptions, viewerOf } from './routes.ts';
 
 /** The backup routes. */
 export const BACKUP_PATH = {
@@ -109,7 +109,7 @@ export function createBackupRouter(deps: BackupDeps): Router {
       const { includeSessions } = parsed.data;
       try {
         const archive = await backup.create({ includeSessions });
-        const viewer: PublicUser = res.locals.viewer;
+        const viewer = viewerOf(res);
         audit.record({
           type: AuditType.BackupDownloaded,
           actor: actorOf(viewer),
@@ -136,7 +136,7 @@ export function createBackupRouter(deps: BackupDeps): Router {
       sendRefusal(res, HttpStatus.BadRequest, 'Send the archive as the body.');
       return;
     }
-    const viewer: PublicUser = res.locals.viewer;
+    const viewer = viewerOf(res);
     try {
       const restored = await backup.restore(archive);
       audit.record({

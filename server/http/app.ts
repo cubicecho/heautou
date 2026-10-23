@@ -7,7 +7,7 @@ import { adminUrls } from '../admin/admin-client.ts';
 import { createBackupRouter } from '../admin/backup.ts';
 import { createFactorRouter } from '../admin/factors.ts';
 import { createPictureRouter } from '../admin/pictures.ts';
-import { createAdminRouter, requireAdmin } from '../admin/routes.ts';
+import { createAdminRouter, requireAdmin, viewerOf } from '../admin/routes.ts';
 import { isProduction, OIDC_MOUNT_PATH, trustProxy } from '../core/config.ts';
 import type { Context } from '../core/context.ts';
 import { HTTP_DEFAULTS } from '../core/defaults.ts';
@@ -20,7 +20,6 @@ import { graphqlLogger } from '../graphql/logger.ts';
 import { useOperationLimits } from '../graphql/operation-limits.ts';
 import { createForgotPasswordRouter } from '../mail/forgot-password.ts';
 import { createInteractionRouter } from '../oidc/interactions.ts';
-import type { PublicUser } from '../store/users.ts';
 import { createUpstreamRouter } from '../upstream/routes.ts';
 import { sameOriginJson } from './guards.ts';
 import { securityHeaders, webAppHeaders } from './headers.ts';
@@ -89,7 +88,7 @@ export function createApp(services: Services): Express {
       pictures: services.pictures,
       protectedSites: services.protectedSites,
       forwardAuth: services.forwardAuth,
-      viewer: res.locals.viewer as PublicUser,
+      viewer: viewerOf(res),
       ip: req.ip ?? null,
     }),
   });

@@ -67,7 +67,7 @@ average 13); every failing file passes alone. See T5 and T6.
 | M6 | Model change | Gives each rule or limit both sides check one owner on the server, imported by the web or held to it by a test | Ends silent drift between form checks and server checks | — | approved |
 | B4 | Bug (question) | Asks whether the web's host check should match the server's, which also limits label and total length | Settles a copy that already drifted | — | done |
 | R28 | Refactor [reuse] | Has the web import the server's limits and patterns (archive size, logo size, host and ID patterns, password user inputs) instead of copying them | M6 | M6, B4 | approved |
-| R1 | Refactor [reuse] | One "signed-in user or 401" middleware, with a typed way to read the viewer, replacing seven copies | Removes copies in five route modules and an unchecked `res.locals` read | — | approved |
+| R1 | Refactor [reuse] | One "signed-in user or 401" middleware, with a typed way to read the viewer, replacing seven copies | Removes copies in five route modules and an unchecked `res.locals` read | — | done |
 | R2 | Refactor [simplify] | Makes the GraphQL context the services plus viewer and address, so nobody lists every service twice more | Removes two hand-kept lists in two of the most-changed files (P14) | R1 | open |
 | R3 | Refactor [reuse] | Uses the shared JSON refusal helper in the sign-in routes instead of its exact copy | Removes a copy | — | open |
 | T4 | Test [pin] | Pins the hand-written GraphQL fields no test names yet | Protects R9 | — | open |

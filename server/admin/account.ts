@@ -15,7 +15,7 @@ import type { PasswordLinkStore } from '../store/password-links.ts';
 import type { SettingsStore } from '../store/settings.ts';
 import { isAdmin, type UserStore } from '../store/users.ts';
 import { ADMIN_PATH, adminUrls, brandingView, sessionClientName, WEB_APP_PAGE } from './admin-client.ts';
-import { COOKIE, sessionCookieOptions, signedInUser } from './routes.ts';
+import { COOKIE, requireSignedIn, sessionCookieOptions, signedInUser, viewerOf } from './routes.ts';
 
 /** What the account, password link and branding routes use. */
 export interface AccountDeps {
@@ -79,14 +79,11 @@ export function createAccountRouter(deps: AccountDeps): Router {
    */
   const targetName = (target: AuditTarget): string =>
     target.id === ADMIN_DEFAULTS.clientId || clients.find(target.id) !== null ? clientName(target.id) : target.name;
+  const signedIn = requireSignedIn(deps);
   const router = Router();
 
-  router.get(ADMIN_PATH.account, (req, res) => {
-    const user = signedInUser(deps, req);
-    if (user === null) {
-      sendRefusal(res, HttpStatus.Unauthorized, 'Sign in first.');
-      return;
-    }
+  router.get(ADMIN_PATH.account, signedIn, (_req, res) => {
+    const user = viewerOf(res);
     const { id, username, name, email, groups } = user;
     res.json({
       id,
@@ -102,12 +99,8 @@ export function createAccountRouter(deps: AccountDeps): Router {
     });
   });
 
-  router.get(ADMIN_PATH.accountActivity, async (req, res) => {
-    const user = signedInUser(deps, req);
-    if (user === null) {
-      sendRefusal(res, HttpStatus.Unauthorized, 'Sign in first.');
-      return;
-    }
+  router.get(ADMIN_PATH.accountActivity, signedIn, async (_req, res) => {
+    const user = viewerOf(res);
     const { entries } = await audit.list({
       first: AUDIT_DEFAULTS.accountEntries,
       types: SIGN_IN_TYPES,
@@ -124,12 +117,8 @@ export function createAccountRouter(deps: AccountDeps): Router {
     });
   });
 
-  router.post(ADMIN_PATH.accountPassword, ...json, async (req, res) => {
-    const user = signedInUser(deps, req);
-    if (user === null) {
-      sendRefusal(res, HttpStatus.Unauthorized, 'Sign in first.');
-      return;
-    }
+  router.post(ADMIN_PATH.accountPassword, ...json, signedIn, async (req, res) => {
+    const user = viewerOf(res);
     const parsed = changePasswordSchema.safeParse(req.body);
     if (parsed.success === false) {
       sendRefusal(res, HttpStatus.BadRequest, 'Send the current password and the new one.');

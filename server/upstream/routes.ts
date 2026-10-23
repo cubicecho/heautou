@@ -1,7 +1,7 @@
-import express, { type Request, type Response, Router } from 'express';
+import express, { Router } from 'express';
 import { z } from 'zod';
 import { adminUrls, WEB_APP_PAGE } from '../admin/admin-client.ts';
-import { signedInUser } from '../admin/routes.ts';
+import { requireSignedIn, viewerOf } from '../admin/routes.ts';
 import { HTTP_DEFAULTS } from '../core/defaults.ts';
 import { errorMessage } from '../core/errors.ts';
 import { HttpStatus } from '../core/wire.ts';
@@ -10,7 +10,7 @@ import { INTERACTION_PATH } from '../oidc/provider.ts';
 import type { AdminSessionStore } from '../store/admin-sessions.ts';
 import { type AuditLog, AuditType, actorOf } from '../store/audit.ts';
 import type { UpstreamStore } from '../store/upstreams.ts';
-import type { PublicUser, UserStore } from '../store/users.ts';
+import type { UserStore } from '../store/users.ts';
 import { upstreamTarget } from './accounts.ts';
 import { FlowPurpose, UPSTREAM_PATH, type UpstreamFlows } from './flows.ts';
 
@@ -58,20 +58,7 @@ export function createUpstreamRouter(deps: UpstreamRouteDeps): Router {
   const json = [sameOriginJson(urls.origin), express.json({ limit: HTTP_DEFAULTS.bodyLimit })];
   const router = Router();
 
-  /**
-   * Finds the signed-in user, or answers 401.
-   *
-   * @param req - The request.
-   * @param res - Its response.
-   * @returns The user, or null when the response was sent.
-   */
-  const userOf = (req: Request, res: Response): PublicUser | null => {
-    const user = signedInUser(deps, req);
-    if (user === null) {
-      sendRefusal(res, HttpStatus.Unauthorized, 'Sign in first.');
-    }
-    return user;
-  };
+  const signedIn = requireSignedIn(deps);
 
   router.get(`${UPSTREAM_PATH}/:id/callback`, async (req, res) => {
     const query = new URLSearchParams(req.originalUrl.split('?')[1] ?? '');
@@ -93,11 +80,8 @@ export function createUpstreamRouter(deps: UpstreamRouteDeps): Router {
     res.redirect(HttpStatus.SeeOther, `${WEB_APP_PAGE.account}?${LINK_TICKET_PARAM}=${encodeURIComponent(ticket)}`);
   });
 
-  router.get(ACCOUNT_UPSTREAM_PATH.list, (req, res) => {
-    const user = userOf(req, res);
-    if (user === null) {
-      return;
-    }
+  router.get(ACCOUNT_UPSTREAM_PATH.list, signedIn, (_req, res) => {
+    const user = viewerOf(res);
     const links = upstreams.linksOf(user.id);
     res.json({
       hasPassword: user.hasPassword,
@@ -113,11 +97,8 @@ export function createUpstreamRouter(deps: UpstreamRouteDeps): Router {
     });
   });
 
-  router.post(ACCOUNT_UPSTREAM_PATH.finish, ...json, async (req, res) => {
-    const user = userOf(req, res);
-    if (user === null) {
-      return;
-    }
+  router.post(ACCOUNT_UPSTREAM_PATH.finish, ...json, signedIn, async (req, res) => {
+    const user = viewerOf(res);
     const parsed = ticketSchema.safeParse(req.body);
     const outcome = parsed.success ? upstreamFlows.takeForAccount(parsed.data.ticket) : null;
     const isTheirs = outcome !== null && outcome.start.purpose === FlowPurpose.Link && outcome.start.userId === user.id;
@@ -149,11 +130,8 @@ export function createUpstreamRouter(deps: UpstreamRouteDeps): Router {
     }
   });
 
-  router.post(ACCOUNT_UPSTREAM_PATH.link, ...json, async (req, res) => {
-    const user = userOf(req, res);
-    if (user === null) {
-      return;
-    }
+  router.post(ACCOUNT_UPSTREAM_PATH.link, ...json, signedIn, async (req, res) => {
+    const user = viewerOf(res);
     try {
       const redirectTo = await upstreamFlows.start(String(req.params.id), {
         purpose: FlowPurpose.Link,
@@ -165,11 +143,8 @@ export function createUpstreamRouter(deps: UpstreamRouteDeps): Router {
     }
   });
 
-  router.post(ACCOUNT_UPSTREAM_PATH.unlink, ...json, async (req, res) => {
-    const user = userOf(req, res);
-    if (user === null) {
-      return;
-    }
+  router.post(ACCOUNT_UPSTREAM_PATH.unlink, ...json, signedIn, async (req, res) => {
+    const user = viewerOf(res);
     const isLastWayIn = user.hasPassword === false && upstreams.linksOf(user.id).length <= 1;
     if (isLastWayIn) {
       sendRefusal(
