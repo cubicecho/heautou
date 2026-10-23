@@ -59,6 +59,18 @@ export function createBrowser(base: string) {
 }
 
 /**
+ * Reads where a redirect sends the browser, as a URL on the app.
+ *
+ * @param app - The running app.
+ * @param res - The response, which must be a 303.
+ * @returns The URL it sends the browser to.
+ */
+export function locationOf(app: TestApp, res: Response): URL {
+  expect(res.status).toBe(HttpStatus.SeeOther);
+  return new URL(res.headers.get('location') ?? '', app.base);
+}
+
+/**
  * Walks a browser from the authorize URL to the client's callback, signing in on the way.
  *
  * @param app - The running app.

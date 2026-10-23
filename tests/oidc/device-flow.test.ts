@@ -6,7 +6,7 @@ import { AuditType, SIGN_IN_TYPES } from '../../server/store/audit.ts';
 import { ClientAuthMethod, type OidcClient } from '../../server/store/clients.ts';
 import type { PublicUser } from '../../server/store/users.ts';
 import { startTestApp, type TestApp } from '../helpers.ts';
-import { type Browser, createBrowser, PASSWORD, payloadOf } from './browser.ts';
+import { type Browser, createBrowser, locationOf, PASSWORD, payloadOf } from './browser.ts';
 
 const TELOS_API = 'https://telos.home.lan/api';
 /** An access token lifetime the API sets, unlike any default. */
@@ -76,21 +76,6 @@ function poll(app: TestApp, client: OidcClient, deviceCode: string) {
     device_code: deviceCode,
     client_id: client.clientId,
   });
-}
-
-/**
- * Reads a redirect's target as a URL on the app.
- *
- * @param app - The running app.
- * @param res - The response.
- * @returns The URL it sends the browser to.
- */
-function locationOf(app: TestApp, res: Response): URL {
-  const location = res.headers.get('location');
-  if (location === null) {
-    throw new Error(`Expected a redirect, got ${res.status}.`);
-  }
-  return new URL(location, app.base);
 }
 
 /**
