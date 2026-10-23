@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { HttpStatus } from '../../server/core/wire.ts';
 import { ClientAuthMethod } from '../../server/store/clients.ts';
-import { startTestApp, type TestApp } from '../helpers.ts';
+import { createTestUser, startTestApp, type TestApp } from '../helpers.ts';
 import {
   adminGql,
   type Browser,
@@ -38,13 +38,7 @@ describe('the account page', () => {
     app = await startTestApp();
     // With no admin yet, sign-in goes to the setup page instead.
     await signInAsAdmin(app);
-    const ada = await app.services.users.create({
-      username: 'ada',
-      password: PASSWORD,
-      email: '',
-      name: 'Ada',
-      groups: ['family'],
-    });
+    const ada = await createTestUser(app, { username: 'ada', name: 'Ada', groups: ['family'] });
     adaId = ada.id;
   });
 
@@ -160,7 +154,7 @@ describe('password links', () => {
   });
 
   it('refuses a weak password and keeps the link for another try', async () => {
-    const { id } = await app.services.users.create({ username: 'dee', email: '', name: '', groups: [] });
+    const { id } = await createTestUser(app, { username: 'dee', password: '' });
     const link = await adminGql(admin, 'mutation($id: ID!) { createPasswordLink(id: $id) { url } }', { id });
     const token = new URLSearchParams(new URL(link.data.createPasswordLink.url).hash.slice(1)).get('token');
     const visitor = createBrowser(app.base);
@@ -173,13 +167,7 @@ describe('password links', () => {
   });
 
   it('lets a new link replace the last and an admin-set password cancel it', async () => {
-    const { id } = await app.services.users.create({
-      username: 'cy',
-      password: PASSWORD,
-      email: '',
-      name: '',
-      groups: [],
-    });
+    const { id } = await createTestUser(app, { username: 'cy' });
     const MAKE = 'mutation($id: ID!) { createPasswordLink(id: $id) { url } }';
     const tokenOf = (reply: Awaited<ReturnType<typeof adminGql>>): string | null =>
       new URLSearchParams(new URL(reply.data.createPasswordLink.url).hash.slice(1)).get('token');
@@ -203,9 +191,8 @@ describe('groups', () => {
   beforeEach(async () => {
     app = await startTestApp();
     admin = await signInAsAdmin(app);
-    const { users } = app.services;
-    await users.create({ username: 'ada', password: PASSWORD, email: '', name: '', groups: ['family', 'media'] });
-    await users.create({ username: 'bob', password: PASSWORD, email: '', name: '', groups: ['family'] });
+    await createTestUser(app, { username: 'ada', groups: ['family', 'media'] });
+    await createTestUser(app, { username: 'bob', groups: ['family'] });
   });
 
   afterEach(() => app.close());
@@ -336,7 +323,7 @@ describe('breached passwords', () => {
   afterEach(() => app.close());
 
   it('refuses a password Have I Been Pwned knows, once the operator turns the check on', async () => {
-    const { id } = await app.services.users.create({ username: 'dee', email: '', name: '', groups: [] });
+    const { id } = await createTestUser(app, { username: 'dee', password: '' });
     const { token } = await app.services.passwordLinks.issue(id);
     const set = await postAndRead(createBrowser(app.base), '/api/password-link/set', { token, password: PASSWORD });
     expect(set.status).toBe(HttpStatus.BadRequest);

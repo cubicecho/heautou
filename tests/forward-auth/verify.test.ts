@@ -6,7 +6,7 @@ import { REMOTE_HEADER } from '../../server/forward-auth/routes.ts';
 import { PAGE_PARAM, WEB_PAGE } from '../../server/oidc/pages.ts';
 import { AuditType } from '../../server/store/audit.ts';
 import type { ProtectedSite } from '../../server/store/protected-sites.ts';
-import { startTestApp, type TestApp } from '../helpers.ts';
+import { createTestUser, startTestApp, type TestApp } from '../helpers.ts';
 import { withTotp } from '../oidc/authenticator.ts';
 import {
   adminGql,
@@ -76,16 +76,15 @@ describe('forward auth', () => {
 
   beforeEach(async () => {
     app = await startTestApp();
-    const { users, protectedSites } = app.services;
-    const ada = await users.create({
+    const { protectedSites } = app.services;
+    const ada = await createTestUser(app, {
       username: 'ada',
-      password: PASSWORD,
       email: 'ada@home.lan',
       name: 'Ada Lovelace',
       groups: ['media', 'staff'],
     });
     adaId = ada.id;
-    await users.create({ username: 'bob', password: PASSWORD, email: '', name: '', groups: [] });
+    await createTestUser(app, { username: 'bob' });
     site = await protectedSites.create({ name: 'Sonarr', host: SITE_HOST, allowedGroups: ['media'] });
   });
 

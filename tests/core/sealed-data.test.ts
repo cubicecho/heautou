@@ -7,8 +7,8 @@ import { DOCUMENT_NAMES } from '../../server/db/documents.ts';
 import { clients, documents } from '../../server/db/schema.ts';
 import { ClientAuthMethod } from '../../server/store/clients.ts';
 import { createTestDatabase } from '../db.ts';
-import { startTestApp } from '../helpers.ts';
-import { PASSWORD, payloadOf, REDIRECT_URI, signInForTokens } from '../oidc/browser.ts';
+import { createTestUser, startTestApp } from '../helpers.ts';
+import { payloadOf, REDIRECT_URI, signInForTokens } from '../oidc/browser.ts';
 
 const ISSUER = 'http://127.0.0.1:1/oidc';
 /** What every sealed value starts with. */
@@ -118,7 +118,7 @@ describe('secrets at rest', () => {
   it('signs a user in with sealed keys and secrets, and writes new secrets sealed', async () => {
     const app = await startTestApp({ secretKeys: { current: newKey(), previous: null } });
     try {
-      await app.services.users.create({ username: 'ada', password: PASSWORD, email: '', name: '', groups: [] });
+      await createTestUser(app, { username: 'ada' });
       const client = await app.services.clients.rotateSecret((await addClient(app.services)).clientId);
       await app.services.keys.rotate();
       app.services.host.refresh();

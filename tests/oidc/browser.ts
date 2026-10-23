@@ -1,6 +1,7 @@
 import { ADMIN_DEFAULTS } from '../../server/core/defaults.ts';
 import { HttpStatus } from '../../server/core/wire.ts';
 import type { TestApp } from '../helpers.ts';
+import { createTestUser } from '../helpers.ts';
 
 export const REDIRECT_URI = 'http://app.example/callback';
 export const PASSWORD = 'correct horse';
@@ -165,7 +166,7 @@ export async function signInAsAdmin(app: TestApp, username = 'root'): Promise<Br
   const { users } = app.services;
   const exists = users.list().some((user) => user.username === username);
   if (exists === false) {
-    await users.create({ username, password: PASSWORD, email: '', name: '', groups: [ADMIN_DEFAULTS.group] });
+    await createTestUser(app, { username, groups: [ADMIN_DEFAULTS.group] });
   }
   return (await signInToWebApp(app, username)).browser;
 }

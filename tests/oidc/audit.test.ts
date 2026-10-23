@@ -2,7 +2,7 @@ import { KEY_DEFAULTS } from '../../server/core/defaults.ts';
 import { HttpStatus } from '../../server/core/wire.ts';
 import { AuditType, actorOf } from '../../server/store/audit.ts';
 import { ClientAuthMethod } from '../../server/store/clients.ts';
-import { startTestApp, type TestApp } from '../helpers.ts';
+import { createTestUser, startTestApp, type TestApp } from '../helpers.ts';
 import {
   adminGql,
   adminSubscribe,
@@ -43,7 +43,7 @@ describe('the audit log', () => {
   beforeAll(async () => {
     app = await startTestApp();
     admin = await signInAsAdmin(app);
-    await app.services.users.create({ username: 'ada', password: PASSWORD, email: '', name: '', groups: [] });
+    await createTestUser(app, { username: 'ada' });
     client = await app.services.clients.create({
       name: 'Test app',
       authMethod: ClientAuthMethod.SecretBasic,
@@ -261,13 +261,7 @@ describe('the audit log', () => {
   });
 
   it('filters by type and by user, a page at a time', async () => {
-    const grace = await app.services.users.create({
-      username: 'grace',
-      password: PASSWORD,
-      email: '',
-      name: '',
-      groups: [],
-    });
+    const grace = await createTestUser(app, { username: 'grace' });
     const actor = actorOf(grace);
     app.services.audit.record({ type: AuditType.SignInFailed, actor, ip: null });
     app.services.audit.record({ type: AuditType.SignInFailed, actor, ip: null });

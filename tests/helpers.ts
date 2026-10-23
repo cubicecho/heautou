@@ -5,7 +5,9 @@ import path from 'node:path';
 import { openServices, type ServiceSettings, type Services } from '../server/core/services.ts';
 import type { OpenDatabase } from '../server/db/client.ts';
 import { createApp } from '../server/http/app.ts';
+import type { NewUser, PublicUser } from '../server/store/users.ts';
 import { createTestDatabase } from './db.ts';
+import { PASSWORD } from './oidc/browser.ts';
 
 /**
  * Reads the port a test server was given.
@@ -92,4 +94,18 @@ export async function startTestApp(settings: TestAppSettings = {}): Promise<Test
     }
   };
   return { base, services, database, close };
+}
+
+/**
+ * Adds a user for a test: with the test password and no email address, name or groups, unless the test says otherwise.
+ *
+ * @param app - The app, or anything holding its services.
+ * @param given - The username, and whatever the test changes. A `password` of '' makes a user without one.
+ * @returns The user.
+ */
+export function createTestUser(
+  app: { services: Pick<Services, 'users'> },
+  given: Partial<NewUser> & Pick<NewUser, 'username'>,
+): Promise<PublicUser> {
+  return app.services.users.create({ password: PASSWORD, email: '', name: '', groups: [], ...given });
 }

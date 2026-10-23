@@ -5,7 +5,7 @@ import { DEVICE_CODE_GRANT } from '../../server/oidc/adapter.ts';
 import { AuditType, SIGN_IN_TYPES } from '../../server/store/audit.ts';
 import { ClientAuthMethod, type OidcClient } from '../../server/store/clients.ts';
 import type { PublicUser } from '../../server/store/users.ts';
-import { startTestApp, type TestApp } from '../helpers.ts';
+import { createTestUser, startTestApp, type TestApp } from '../helpers.ts';
 import { type Browser, createBrowser, locationOf, PASSWORD, payloadOf } from './browser.ts';
 
 const TELOS_API = 'https://telos.home.lan/api';
@@ -173,13 +173,7 @@ describe('device flow', () => {
 
   beforeEach(async () => {
     app = await startTestApp();
-    ada = await app.services.users.create({
-      username: 'ada',
-      password: PASSWORD,
-      name: 'Ada Lovelace',
-      email: 'ada@example.com',
-      groups: [],
-    });
+    ada = await createTestUser(app, { username: 'ada', name: 'Ada Lovelace', email: 'ada@example.com' });
     hub = await app.services.clients.create({
       name: 'Home Assistant',
       authMethod: ClientAuthMethod.None,

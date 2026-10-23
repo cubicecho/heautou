@@ -3,12 +3,11 @@ import { createServer, type Server } from 'node:http';
 import { HttpStatus } from '../../server/core/wire.ts';
 import { AuditType } from '../../server/store/audit.ts';
 import { ClientAuthMethod, type OidcClient } from '../../server/store/clients.ts';
-import { portOf, startTestApp, type TestApp } from '../helpers.ts';
+import { createTestUser, portOf, startTestApp, type TestApp } from '../helpers.ts';
 import {
   adminGql,
   type Browser,
   createBrowser,
-  PASSWORD,
   payloadOf,
   REDIRECT_URI,
   signInAsAdmin,
@@ -110,8 +109,7 @@ describe('back-channel logout', () => {
     app = await startTestApp();
     standIn = await startStandInApp();
     admin = await signInAsAdmin(app);
-    adaId = (await app.services.users.create({ username: 'ada', password: PASSWORD, email: '', name: '', groups: [] }))
-      .id;
+    adaId = (await createTestUser(app, { username: 'ada' })).id;
     client = await app.services.clients.create({
       name: 'Notes',
       authMethod: ClientAuthMethod.SecretBasic,

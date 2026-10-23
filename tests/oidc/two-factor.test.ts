@@ -3,7 +3,7 @@ import { totpCode, totpStepAt } from '../../server/core/totp.ts';
 import { HttpStatus } from '../../server/core/wire.ts';
 import { AuditType } from '../../server/store/audit.ts';
 import { ClientAuthMethod, type OidcClient } from '../../server/store/clients.ts';
-import { startTestApp, type TestApp } from '../helpers.ts';
+import { createTestUser, startTestApp, type TestApp } from '../helpers.ts';
 import { createSoftwareAuthenticator, withTotp } from './authenticator.ts';
 import {
   adminGql,
@@ -98,22 +98,8 @@ describe('two-factor sign-in', () => {
 
   beforeEach(async () => {
     app = await startTestApp();
-    await app.services.users.create({
-      username: 'root',
-      password: PASSWORD,
-      email: '',
-      name: '',
-      groups: [ADMIN_DEFAULTS.group],
-    });
-    adaId = (
-      await app.services.users.create({
-        username: 'ada',
-        password: PASSWORD,
-        email: '',
-        name: 'Ada',
-        groups: ['family'],
-      })
-    ).id;
+    await createTestUser(app, { username: 'root', groups: [ADMIN_DEFAULTS.group] });
+    adaId = (await createTestUser(app, { username: 'ada', name: 'Ada', groups: ['family'] })).id;
     client = await app.services.clients.create({
       name: 'Photos',
       authMethod: ClientAuthMethod.SecretBasic,
@@ -234,7 +220,7 @@ describe('two-factor sign-in', () => {
 
   it('refuses another user’s passkey after the password', async () => {
     const theirs = createSoftwareAuthenticator(app.base);
-    await app.services.users.create({ username: 'bob', password: PASSWORD, email: '', name: '', groups: [] });
+    await createTestUser(app, { username: 'bob' });
     const { browser: bob } = await signInToWebApp(app, 'bob');
     const { options } = await (await postJson(bob, '/api/account/passkeys/options', {})).json();
     await postJson(bob, '/api/account/passkeys', { name: 'Bob’s', response: theirs.create(options) });

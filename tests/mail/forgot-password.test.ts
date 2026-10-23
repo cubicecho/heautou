@@ -1,8 +1,8 @@
 import { MAIL_DEFAULTS } from '../../server/core/defaults.ts';
 import { HttpStatus } from '../../server/core/wire.ts';
 import { AuditType } from '../../server/store/audit.ts';
-import { startTestApp, type TestApp } from '../helpers.ts';
-import { type Browser, createBrowser, PASSWORD, postJson } from '../oidc/browser.ts';
+import { createTestUser, startTestApp, type TestApp } from '../helpers.ts';
+import { type Browser, createBrowser, postJson } from '../oidc/browser.ts';
 import { createFakeTransport, type FakeTransport, TEST_SERVER, waitFor } from './fake-transport.ts';
 
 /** More redirects than reaching the sign-in page takes. */
@@ -64,9 +64,9 @@ describe('forgot password', () => {
   beforeEach(async () => {
     fake = createFakeTransport();
     app = await startTestApp({ mailTransport: fake.factory });
-    const { users, mail } = app.services;
-    await users.create({ username: 'root', password: PASSWORD, email: '', name: '', groups: ['heautou-admin'] });
-    await users.create({ username: 'ada', password: PASSWORD, email: 'Ada@Example.home', name: 'Ada', groups: [] });
+    const { mail } = app.services;
+    await createTestUser(app, { username: 'root', groups: ['heautou-admin'] });
+    await createTestUser(app, { username: 'ada', email: 'Ada@Example.home', name: 'Ada' });
     await mail.setServer(TEST_SERVER);
     await mail.setOptions({ forgotPassword: true });
     browser = createBrowser(app.base);
@@ -111,7 +111,7 @@ describe('forgot password', () => {
   it('sends nothing to a disabled user', async () => {
     const ada = app.services.users.list().find((user) => user.username === 'ada');
     await app.services.users.setDisabled(ada?.id ?? '', true);
-    await app.services.users.create({ username: 'bob', email: 'bob@example.home', name: '', groups: [] });
+    await createTestUser(app, { username: 'bob', email: 'bob@example.home', password: '' });
     expect(await forgot(browser, uid, 'ada')).toEqual({ status: HttpStatus.Ok, body: { ok: true } });
     await settleWith(browser, uid, fake, 'bob');
     expect(fake.sent.map((mail) => mail.to)).toEqual(['bob@example.home']);

@@ -4,11 +4,10 @@ import { HttpStatus } from '../../server/core/wire.ts';
 import { AuditType } from '../../server/store/audit.ts';
 import { ClientAuthMethod } from '../../server/store/clients.ts';
 import { createFakeS3, type FakeS3 } from '../fake-s3.ts';
-import { startTestApp, type TestApp } from '../helpers.ts';
+import { createTestUser, startTestApp, type TestApp } from '../helpers.ts';
 import {
   adminGql,
   type Browser,
-  PASSWORD,
   payloadOf,
   REDIRECT_URI,
   signInAsAdmin,
@@ -79,13 +78,7 @@ describe('profile pictures', () => {
     s3 = createFakeS3();
     app = await startTestApp({ objectStorage: s3.storage });
     await signInAsAdmin(app);
-    const ada = await app.services.users.create({
-      username: 'ada',
-      password: PASSWORD,
-      email: 'ada@example.home',
-      name: 'Ada',
-      groups: [],
-    });
+    const ada = await createTestUser(app, { username: 'ada', email: 'ada@example.home', name: 'Ada' });
     adaId = ada.id;
   });
 

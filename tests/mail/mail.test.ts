@@ -6,7 +6,7 @@ import { DOCUMENT_NAMES } from '../../server/db/documents.ts';
 import { documents } from '../../server/db/schema.ts';
 import { AuditType } from '../../server/store/audit.ts';
 import { BACKUP_LAYOUT, BackupErrorCode, readBackup } from '../../server/store/backup.ts';
-import { startTestApp, type TestApp } from '../helpers.ts';
+import { createTestUser, startTestApp, type TestApp } from '../helpers.ts';
 import { adminGql, type Browser, PASSWORD, signInAsAdmin } from '../oidc/browser.ts';
 import { createFakeTransport, type FakeTransport, TEST_SERVER, waitFor } from './fake-transport.ts';
 
@@ -49,12 +49,7 @@ describe('email', () => {
       name: 'Root',
       groups: ['heautou-admin'],
     });
-    const ada = await app.services.users.create({
-      username: 'ada',
-      email: 'ada@example.home',
-      name: 'Ada',
-      groups: [],
-    });
+    const ada = await createTestUser(app, { username: 'ada', email: 'ada@example.home', name: 'Ada', password: '' });
     adaId = ada.id;
   });
 
@@ -166,7 +161,7 @@ describe('email', () => {
 
   it('refuses a user with no address', async () => {
     await adminGql(admin, SET_SERVER, { input: TEST_SERVER });
-    const bob = await app.services.users.create({ username: 'bob', email: '', name: '', groups: [] });
+    const bob = await createTestUser(app, { username: 'bob', password: '' });
     const refused = await adminGql(admin, EMAIL_LINK, { id: bob.id });
     expect(refused.errors[0].message).toMatch(/no email address/);
   });
