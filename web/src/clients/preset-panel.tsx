@@ -99,6 +99,22 @@ export function PresetLinks({ preset }: { preset: ClientPreset }) {
 }
 
 /**
+ * A preset's steps or caveats, as a list inside an alert.
+ *
+ * @param props - The notes.
+ * @param props.notes - One sentence each.
+ */
+function NoteList({ notes }: { notes: readonly string[] }) {
+  return (
+    <ul className="flex list-disc flex-col gap-1 pl-4">
+      {notes.map((note) => (
+        <li key={note}>{note}</li>
+      ))}
+    </ul>
+  );
+}
+
+/**
  * The settings to copy into the app: an env block, a file, or a row per field.
  *
  * @param props - What to set.
@@ -124,7 +140,13 @@ function ConfigView({ config }: { config: PresetConfig }) {
           contentSlot={config.settings
             .filter((setting) => setting.note !== undefined)
             .map((setting) => (
-              <PropertyRow key={setting.name} label={setting.name} value={setting.note} valueClassName="text-xs" />
+              <PropertyRow
+                key={setting.name}
+                label={setting.name}
+                labelClassName="font-mono font-normal"
+                value={setting.note}
+                valueClassName="text-foreground/70 text-sm"
+              />
             ))}
         />
       </div>
@@ -180,13 +202,7 @@ export function PresetPanel({ client, preset }: { client: ClientFieldsFragment; 
       }
       contentSlot={
         <div className="flex flex-col gap-3">
-          {preset.notes === undefined ? null : (
-            <ul className="flex list-disc flex-col gap-1 pl-5 text-foreground/70 text-sm">
-              {preset.notes.map((note) => (
-                <li key={note}>{note}</li>
-              ))}
-            </ul>
-          )}
+          {preset.notes === undefined ? null : <Alert variant="info" description={<NoteList notes={preset.notes} />} />}
           <ConfigView config={config} />
         </div>
       }
@@ -208,13 +224,13 @@ export function SitePresetGuide({ preset }: { preset: SitePreset }) {
       <Alert
         variant="info"
         title={`${preset.name} needs no client`}
-        description={`It signs in through forward auth. Add it as a protected site, then set it up as below.`}
+        description={
+          <>
+            <p>It signs in through forward auth. Add it as a protected site, then set it up as below.</p>
+            <NoteList notes={preset.notes} />
+          </>
+        }
       />
-      <ul className="flex list-disc flex-col gap-1 pl-5 text-foreground/70 text-sm">
-        {preset.notes.map((note) => (
-          <li key={note}>{note}</li>
-        ))}
-      </ul>
       <div className="flex flex-wrap gap-2">
         <Button
           variant="info"

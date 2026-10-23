@@ -20,9 +20,10 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { CopyButton } from '@/components/ui/copy-button';
 import { Pencil, Plug, Plus, RefreshCw, Trash2 } from '@/components/ui/icons';
-import { useClients, useDeleteClient, useRotateClientSecret } from '@/core/admin';
+import { useClients, useDeleteClient, useProviderInfo, useRotateClientSecret } from '@/core/admin';
 import { AppWindow } from '@/core/app-icons';
 import { messageOf } from '@/core/lists';
+import type { SlotNode } from '@/lib/utils';
 
 export const Route = createFileRoute('/clients')({ component: ClientsPage });
 
@@ -84,59 +85,239 @@ function appDescription(app: AppGroup): string {
     : `${where}. Its clients may get tokens to ${apis.map((api) => api.name).join(', ')} only.`;
 }
 
-/**
- * The URIs a client may be sent back to, one per line.
- *
- * @param uris - The URIs.
- * @returns The list, or a dash when there are none.
- */
-function uriList(uris: readonly string[]) {
-  return uris.length === 0 ? '—' : uris.join('\n');
-}
+/** The claim groups are released in unless a client names another. */
+const DEFAULT_GROUPS_CLAIM = 'groups';
+
+/** The scope an app adds only when it wants refresh tokens, left out of the scopes the setup suggests. */
+const REFRESH_SCOPE = 'offline_access';
 
 /**
  * The lifetimes a client was given, by token.
  *
  * @param client - The client, whose own lifetimes are null where it has the server's.
- * @returns Each token's lifetime, or "Server defaults" when it was given none.
+ * @returns Each token's lifetime, or null when it has the server's for all three.
  */
-function lifetimesText(client: ClientFieldsFragment): string {
+function lifetimesText(client: ClientFieldsFragment): string | null {
   const { accessTokenSeconds, idTokenSeconds, refreshTokenSeconds } = client;
-  const named = [
+  const isAllDefault = [accessTokenSeconds, idTokenSeconds, refreshTokenSeconds].every((seconds) => seconds === null);
+  if (isAllDefault) {
+    return null;
+  }
+  return [
     { label: 'access', seconds: accessTokenSeconds },
     { label: 'ID', seconds: idTokenSeconds },
     { label: 'refresh', seconds: refreshTokenSeconds },
-  ].map(({ label, seconds }) => `${label} ${seconds === null ? 'default' : durationText(seconds)}`);
-  const isAllDefault = [accessTokenSeconds, idTokenSeconds, refreshTokenSeconds].every((seconds) => seconds === null);
-  return isAllDefault ? 'Server defaults' : named.join(', ');
+  ]
+    .map(({ label, seconds }) => `${label} ${seconds === null ? 'default' : durationText(seconds)}`)
+    .join(', ');
 }
 
 /**
- * Where a client is told its users signed out.
+ * The URIs a client may be sent back to, as one row's value.
+ *
+ * @param props - The URIs.
+ * @param props.uris - One or more URIs.
+ */
+function UriListValue({ uris }: { uris: readonly string[] }) {
+  return <span className="whitespace-pre-line break-all font-mono">{uris.join('\n')}</span>;
+}
+
+/**
+ * The client's ID and secret, as the rows of whichever panel shows them first, with copy and rotate.
  *
  * @param client - The client.
- * @returns Its back-channel logout URI, marked when the logout token carries no session ID, or a dash for none.
+ * @returns The two rows, and why the last rotation failed.
  */
-function backchannelText(client: ClientFieldsFragment): string {
-  const { backchannelLogoutUri, backchannelLogoutSessionRequired } = client;
-  if (backchannelLogoutUri === null || backchannelLogoutUri === undefined) {
-    return '—';
-  }
-  return backchannelLogoutSessionRequired ? backchannelLogoutUri : `${backchannelLogoutUri} (no session ID)`;
+function useCredentialRows(client: ClientFieldsFragment) {
+  const rotate = useRotateClientSecret();
+  const secret = client.clientSecret ?? null;
+  const rows = [
+    <PropertyRow
+      key="id"
+      label="Client ID"
+      value={client.clientId}
+      valueClassName="font-mono break-all"
+      actionSlot={<CopyButton value={client.clientId} label="Copy client ID" />}
+    />,
+    <PropertyRow
+      key="secret"
+      label="Client secret"
+      value={secret ?? 'None. A public client proves itself with PKCE.'}
+      valueClassName={secret === null ? undefined : 'font-mono break-all'}
+      actionSlot={
+        secret === null ? undefined : (
+          <>
+            <CopyButton value={secret} label="Copy client secret" />
+            <ConfirmButton
+              aria-label="Rotate client secret"
+              hint="Rotate secret"
+              variant="outline"
+              size="icon-sm"
+              iconSlot={<RefreshCw />}
+              title="Rotate this client's secret?"
+              description={`${client.name} stops being able to sign anyone in until it is given the new secret.`}
+              confirmLabel="Rotate"
+              onConfirm={() => rotate.mutate(client.clientId)}
+            />
+          </>
+        )
+      }
+    />,
+  ];
+  return { rows, rotateError: rotate.error };
 }
 
 /**
- * What an application is configured with: its ID, its secret, its URIs.
+ * What a client with no preset needs in its app: where the provider is, the credentials, and what to ask for.
+ *
+ * @param props - The client, and its ID and secret rows.
+ */
+function GenericSetup({ client, credentialRows }: { client: ClientFieldsFragment; credentialRows: SlotNode[] }) {
+  const provider = useProviderInfo().data;
+  const scopes = (provider?.scopes ?? []).filter((scope) => scope !== REFRESH_SCOPE).join(' ');
+  const providerRows =
+    provider === undefined
+      ? []
+      : [
+          <PropertyRow
+            key="discovery"
+            label="Discovery URL"
+            value={provider.discoveryUrl}
+            valueClassName="font-mono break-all"
+            hint="Also called the OpenID configuration or well-known URL."
+            actionSlot={<CopyButton value={provider.discoveryUrl} label="Copy discovery URL" />}
+          />,
+          <PropertyRow
+            key="issuer"
+            label="Issuer"
+            value={provider.issuer}
+            valueClassName="font-mono break-all"
+            hint="For an app that asks for the issuer or provider URL instead."
+            actionSlot={<CopyButton value={provider.issuer} label="Copy issuer" />}
+          />,
+        ];
+  const scopeRows =
+    scopes === ''
+      ? []
+      : [
+          <PropertyRow
+            key="scopes"
+            label="Scopes"
+            value={scopes}
+            valueClassName="font-mono"
+            hint={`Add ${REFRESH_SCOPE} for refresh tokens.`}
+            actionSlot={<CopyButton value={scopes} label="Copy scopes" />}
+          />,
+        ];
+  const claimRows =
+    client.groupsClaim === DEFAULT_GROUPS_CLAIM
+      ? []
+      : [
+          <PropertyRow
+            key="claim"
+            label="Groups claim"
+            value={client.groupsClaim}
+            valueClassName="font-mono"
+            hint="The user's groups arrive in this claim, for the app's role or policy mapping."
+          />,
+        ];
+
+  return (
+    <Section
+      title="Configure the app"
+      description="Set these on the app's OpenID Connect page. Most apps need only the discovery URL, the client ID and the secret."
+      contentSlot={
+        <DescriptionList
+          contentSlot={[
+            ...providerRows,
+            ...credentialRows,
+            <PropertyRow
+              key="redirect"
+              label={client.redirectUris.length > 1 ? 'Redirect URIs' : 'Redirect URI'}
+              value={
+                client.redirectUris.length === 0 ? (
+                  'None. It signs no one in through a browser.'
+                ) : (
+                  <UriListValue uris={client.redirectUris} />
+                )
+              }
+              hint="The app's callback, matched exactly."
+            />,
+            ...scopeRows,
+            ...claimRows,
+          ]}
+        />
+      }
+    />
+  );
+}
+
+/**
+ * The facts about a client beyond its setup, leaving out the ones still at a new client's default.
+ *
+ * @param client - The client.
+ * @returns The rows.
+ */
+function detailRows(client: ClientFieldsFragment) {
+  const lifetimes = lifetimesText(client);
+  const backchannelUri = client.backchannelLogoutUri ?? null;
+  const rows = [
+    <PropertyRow key="method" label="Authentication" value={AUTH_METHODS[client.authMethod].label} />,
+    <PropertyRow
+      key="groups"
+      label="Allowed groups"
+      value={client.allowedGroups.length === 0 ? 'Every user' : client.allowedGroups.join(', ')}
+    />,
+    client.postLogoutRedirectUris.length === 0 ? null : (
+      <PropertyRow
+        key="logout"
+        label="Post-logout URIs"
+        value={<UriListValue uris={client.postLogoutRedirectUris} />}
+      />
+    ),
+    backchannelUri === null ? null : (
+      <PropertyRow
+        key="backchannel"
+        label="Back-channel logout"
+        value={backchannelUri}
+        valueClassName="font-mono break-all"
+        hint={client.backchannelLogoutSessionRequired ? undefined : 'Without the session ID.'}
+      />
+    ),
+    client.allowClientCredentials ? <PropertyRow key="credentials" label="Client credentials" value="Allowed" /> : null,
+    client.allowDeviceFlow ? <PropertyRow key="device" label="Device flow" value="Allowed" /> : null,
+    client.apis.length === 0 ? null : (
+      <PropertyRow
+        key="apis"
+        label="APIs"
+        value={client.apis.map((api) => `${api.name} (${api.identifier})`).join('\n')}
+        valueClassName="break-all whitespace-pre-line"
+      />
+    ),
+    lifetimes === null ? null : <PropertyRow key="lifetimes" label="Token lifetimes" value={lifetimes} />,
+  ];
+  return rows.filter((row) => row !== null);
+}
+
+/**
+ * What an application is configured with: how to set it up first, then the client's details.
  *
  * @param props - The client.
  */
-function ClientCredentials({ client }: { client: ClientFieldsFragment }) {
-  const rotate = useRotateClientSecret();
-  const secret = client.clientSecret;
+function ClientDetail({ client }: { client: ClientFieldsFragment }) {
   const preset = presetById(client.preset);
+  const { rows: credentialRows, rotateError } = useCredentialRows(client);
+  const hasPreset = preset !== undefined;
+  // A preset's panel holds the ID and secret inside its own settings, so the rows that copy and rotate them sit here.
+  const presetCredentialRows = hasPreset
+    ? [
+        ...credentialRows,
+        <PropertyRow key="redirect" label="Redirect URIs" value={<UriListValue uris={client.redirectUris} />} />,
+      ]
+    : [];
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-6">
       {client.refusedRedirectUris.length === 0 ? null : (
         <Alert
           variant="warning"
@@ -144,88 +325,43 @@ function ClientCredentials({ client }: { client: ClientFieldsFragment }) {
           description={`The client still works, but cannot be saved until these use https: ${client.refusedRedirectUris.join(', ')}. Plain http can be allowed under Settings.`}
         />
       )}
-      <DescriptionList
-        contentSlot={[
-          <PropertyRow
-            key="id"
-            label="Client ID"
-            value={client.clientId}
-            valueClassName="font-mono break-all"
-            actionSlot={<CopyButton value={client.clientId} label="Copy client ID" />}
-          />,
-          <PropertyRow
-            key="secret"
-            label="Client secret"
-            value={secret ?? 'None. A public client proves itself with PKCE.'}
-            valueClassName={secret === null ? undefined : 'font-mono break-all'}
-            actionSlot={
-              secret === null ? undefined : (
-                <>
-                  <CopyButton value={secret} label="Copy client secret" />
-                  <ConfirmButton
-                    aria-label="Rotate client secret"
-                    hint="Rotate secret"
-                    variant="outline"
-                    size="icon-sm"
-                    iconSlot={<RefreshCw />}
-                    title="Rotate this client's secret?"
-                    description={`${client.name} stops being able to sign anyone in until it is given the new secret.`}
-                    confirmLabel="Rotate"
-                    onConfirm={() => rotate.mutate(client.clientId)}
-                  />
-                </>
-              )
-            }
-          />,
-          <PropertyRow key="method" label="Authentication" value={AUTH_METHODS[client.authMethod].label} />,
-          <PropertyRow
-            key="redirect"
-            label="Redirect URIs"
-            value={uriList(client.redirectUris)}
-            valueClassName="font-mono break-all whitespace-pre-line"
-          />,
-          <PropertyRow
-            key="logout"
-            label="Post-logout URIs"
-            value={uriList(client.postLogoutRedirectUris)}
-            valueClassName="font-mono break-all whitespace-pre-line"
-          />,
-          <PropertyRow
-            key="backchannel"
-            label="Back-channel logout"
-            value={backchannelText(client)}
-            valueClassName={client.backchannelLogoutUri === null ? undefined : 'font-mono break-all'}
-          />,
-          <PropertyRow
-            key="groups"
-            label="Allowed groups"
-            value={client.allowedGroups.length === 0 ? 'Every user' : client.allowedGroups.join(', ')}
-          />,
-          <PropertyRow key="claim" label="Groups claim" value={client.groupsClaim} valueClassName="font-mono" />,
-          <PropertyRow
-            key="credentials"
-            label="Client credentials"
-            value={client.allowClientCredentials ? 'Allowed' : 'Not allowed'}
-          />,
-          <PropertyRow key="device" label="Device flow" value={client.allowDeviceFlow ? 'Allowed' : 'Not allowed'} />,
-          <PropertyRow
-            key="apis"
-            label="APIs"
-            value={
-              client.apis.length === 0
-                ? 'None. Its access tokens are only good for reading the user’s profile here.'
-                : client.apis.map((api) => `${api.name} (${api.identifier})`).join('\n')
-            }
-            valueClassName={client.apis.length === 0 ? undefined : 'break-all whitespace-pre-line'}
-          />,
-          <PropertyRow key="lifetimes" label="Token lifetimes" value={lifetimesText(client)} />,
-        ]}
-      />
-      {rotate.error === null ? null : (
-        <Alert variant="destructive" title="Secret not rotated" description={messageOf(rotate.error)} />
+      {rotateError === null ? null : (
+        <Alert variant="destructive" title="Secret not rotated" description={messageOf(rotateError)} />
       )}
-      {preset === undefined ? null : <PresetPanel client={client} preset={preset} />}
+      {hasPreset ? (
+        <PresetPanel client={client} preset={preset} />
+      ) : (
+        <GenericSetup client={client} credentialRows={credentialRows} />
+      )}
+      <Section
+        title="Details"
+        contentSlot={<DescriptionList contentSlot={[...presetCredentialRows, ...detailRows(client)]} />}
+      />
     </div>
+  );
+}
+
+/**
+ * The badges after a client's name: what is out of the ordinary about it.
+ *
+ * @param client - The client.
+ * @returns The badges.
+ */
+function clientBadges(client: ClientFieldsFragment) {
+  const presetName = presetById(client.preset)?.name;
+  // A preset badge that only repeats the name says nothing.
+  const showsPreset = presetName !== undefined && presetName.toLowerCase() !== client.name.toLowerCase();
+  return (
+    <>
+      {client.authMethod === 'NONE' ? <Badge variant="outline">Public</Badge> : null}
+      {client.allowedGroups.length === 0 ? null : <Badge variant="secondary">Limited</Badge>}
+      {client.source === 'PAIRED' ? <Badge variant="secondary">Paired</Badge> : null}
+      {showsPreset ? <Badge variant="secondary">{presetName}</Badge> : null}
+      {client.groupsClaim === DEFAULT_GROUPS_CLAIM ? null : (
+        <Badge variant="outline">groups as {client.groupsClaim}</Badge>
+      )}
+      {client.refusedRedirectUris.length === 0 ? null : <Badge variant="warning">http redirect</Badge>}
+    </>
   );
 }
 
@@ -252,18 +388,7 @@ function ClientsPage() {
       open={openId === client.clientId}
       onOpenChange={(next) => setOpenId(next ? client.clientId : null)}
       title={client.name}
-      badgesSlot={
-        <>
-          <Badge variant="outline">{client.authMethod === 'NONE' ? 'Public' : 'Confidential'}</Badge>
-          {client.allowedGroups.length === 0 ? null : <Badge variant="secondary">Limited</Badge>}
-          {client.source === 'PAIRED' ? <Badge variant="secondary">Paired</Badge> : null}
-          {presetById(client.preset) === undefined ? null : (
-            <Badge variant="secondary">{presetById(client.preset)?.name}</Badge>
-          )}
-          {client.refusedRedirectUris.length === 0 ? null : <Badge variant="warning">http redirect</Badge>}
-        </>
-      }
-      meta={<span className="font-mono text-foreground/60 text-xs">{client.clientId}</span>}
+      meta={clientBadges(client)}
       actionSlot={
         <>
           <Button
@@ -284,7 +409,7 @@ function ClientsPage() {
           />
         </>
       }
-      contentSlot={<ClientCredentials client={client} />}
+      contentSlot={<ClientDetail client={client} />}
     />
   );
   const close = (next: boolean): void => {
