@@ -1,3 +1,15 @@
+## [1.20.2](https://github.com/cubicecho/heautou/compare/v1.20.1...v1.20.2) (2026-10-23)
+
+
+### Bug Fixes
+
+* **account:** call the web sign-in's cookie heautou_sign_in ([145ed06](https://github.com/cubicecho/heautou/commit/145ed064176eacac7d09effdde2ab96f277931d0))
+* **account:** serve the public account routes under /api ([0e5ea58](https://github.com/cubicecho/heautou/commit/0e5ea58acede6237f295714f32d9362c734c3b2f))
+* **account:** stop reading the session cookie's former name ([1eb2d9f](https://github.com/cubicecho/heautou/commit/1eb2d9f41f529704f8b4cd9e6b9ae3be5bab86e5))
+* **store:** name the keys document when it is emptied under the server ([059a6cb](https://github.com/cubicecho/heautou/commit/059a6cbdfc780c4a681920b75dab70ccb3211527))
+* **web:** check the GraphQL reply instead of casting it ([168e08b](https://github.com/cubicecho/heautou/commit/168e08bb055fad04e4bd43b6a4cb4a457d99ddc6))
+* **web:** name an API's scopes in the invalid_scope message ([f776301](https://github.com/cubicecho/heautou/commit/f7763018ec4988bffb4515798136f8a37293158c))
+
 ## [1.20.1](https://github.com/cubicecho/heautou/compare/v1.20.0...v1.20.1) (2026-10-23)
 
 
