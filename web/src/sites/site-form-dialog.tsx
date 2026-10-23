@@ -8,8 +8,8 @@ import { useGroupOptions } from '@/core/admin';
 import { messageOf } from '@/core/lists';
 import { useCreateProtectedSite, useUpdateProtectedSite } from '@/core/protected-sites';
 
-/** A host as the server takes it: a DNS name, no scheme, port or path. */
-const HOST_PATTERN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/i;
+/** A host as the server takes it once lowercased: a DNS name of up to 253 characters, labels of up to 63. */
+const HOST_PATTERN = /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/;
 
 interface SiteFormDialogProps {
   /** The site to edit, or null to add one. */
@@ -78,7 +78,7 @@ export function SiteFormDialog({ site, open, onOpenChange, onSaved }: SiteFormDi
             description="The host the proxy is asked about, without https:// or a port."
             validators={{
               onChange: ({ value }) =>
-                HOST_PATTERN.test(value.trim()) ? undefined : 'A host name such as sonarr.home.lan.',
+                HOST_PATTERN.test(value.trim().toLowerCase()) ? undefined : 'A host name such as sonarr.home.lan.',
             }}
           />
           <InputField
