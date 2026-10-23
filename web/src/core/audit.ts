@@ -91,11 +91,11 @@ export function useAuditLog(filters: AuditFilters) {
  */
 export function withNewEntry(data: AuditPages | undefined, entry: AuditEntryFieldsFragment): AuditPages | undefined {
   const [first, ...rest] = data?.pages ?? [];
-  if (
-    data === undefined ||
-    first === undefined ||
-    data.pages.some((page) => page.entries.some((e) => e.id === entry.id))
-  ) {
+  if (!data || !first) {
+    return data;
+  }
+  const isCached = data.pages.some((page) => page.entries.some((cached) => cached.id === entry.id));
+  if (isCached) {
     return data;
   }
   return { ...data, pages: [{ ...first, entries: [entry, ...first.entries] }, ...rest] };
