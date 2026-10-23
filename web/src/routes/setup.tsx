@@ -15,9 +15,13 @@ import { BrandIcon } from '@/core/brand';
 import { jsonReply, postJson, redirectReplySchema } from '@/core/json-reply';
 import { messageOf } from '@/core/lists';
 import { QUERY_KEYS } from '@/core/query-keys';
+import { fragmentParam } from '@/core/url-fragment';
 import { PasswordStrengthMeter } from '@/passwords/strength-meter';
 
 export const Route = createFileRoute('/setup')({ component: SetupPage });
+
+/** The fragment parameter (`fragmentParam`) holding the link's token. */
+const TOKEN_PARAM = 'token';
 
 const FORM_ID = 'setup-form';
 const SETUP_URL = '/admin/setup';
@@ -37,21 +41,12 @@ function LogCommand() {
 }
 
 /**
- * Reads the setup token from the link's fragment, which never reaches the server's logs or a proxy's.
- *
- * @returns The token, or null when the link had none.
- */
-function tokenFromLink(): string | null {
-  return new URLSearchParams(window.location.hash.slice(1)).get('token');
-}
-
-/**
  * Makes the first admin, where the app sends a browser while there is none. For a few minutes after boot a new
  * account needs nothing else; after that, or to make an existing user the admin with their password, it needs the
  * token the server logs, which arrives in this page's link or is pasted in.
  */
 function SetupPage() {
-  const [linkToken] = useState(tokenFromLink);
+  const [linkToken] = useState(() => fragmentParam(TOKEN_PARAM));
   const [failure, setFailure] = useState<string | null>(null);
   const status = useQuery({
     queryKey: QUERY_KEYS.setup,

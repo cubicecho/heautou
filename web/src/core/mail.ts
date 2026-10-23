@@ -14,6 +14,7 @@ import {
 import { request } from '@/core/gql';
 import { jsonReply, okReplySchema, postJson } from '@/core/json-reply';
 import { QUERY_KEYS } from '@/core/query-keys';
+import { fragmentParam } from '@/core/url-fragment';
 
 /**
  * Reads the SMTP server and the email options.
@@ -98,6 +99,8 @@ export function useEmailPasswordLink() {
   });
 }
 
+/** The reset link's fragment parameter naming the sign-in it was asked from. */
+const UID_PARAM = 'uid';
 /** What an interaction's uid is made of: oidc-provider's ids are base64url. */
 const UID_PATTERN = /^[A-Za-z0-9_-]+$/;
 
@@ -109,7 +112,7 @@ const UID_PATTERN = /^[A-Za-z0-9_-]+$/;
  * @returns The page to go to.
  */
 export async function signInAfterReset(fallback: string): Promise<string> {
-  const uid = new URLSearchParams(window.location.hash.slice(1)).get('uid') ?? '';
+  const uid = fragmentParam(UID_PARAM) ?? '';
   if (UID_PATTERN.test(uid) === false) {
     return fallback;
   }
