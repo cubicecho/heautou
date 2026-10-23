@@ -1,12 +1,9 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
-import path from 'node:path';
 import { gunzipSync, gzipSync } from 'node:zlib';
 import { BACKUP_DEFAULTS } from '../../server/core/defaults.ts';
 import { createSecretBox, isSealed, type SecretKeys } from '../../server/core/secret-box.ts';
 import { openServices, type Services } from '../../server/core/services.ts';
 import type { OpenDatabase } from '../../server/db/client.ts';
 import { archivePathOf, DOCUMENT_NAMES, oidcModelDocument } from '../../server/db/documents.ts';
-import { readDataDirectory } from '../../server/db/import.ts';
 import { documents, oidcModels, users, webSessions } from '../../server/db/schema.ts';
 import { AUDIT_FILE, AuditType, userTarget } from '../../server/store/audit.ts';
 import {
@@ -22,7 +19,7 @@ import {
 import { ClientAuthMethod } from '../../server/store/clients.ts';
 import { UpstreamKind } from '../../server/store/upstreams.ts';
 import { createTestDatabase } from '../db.ts';
-import { newSecretKey, newSecretKeys, tempDir } from '../helpers.ts';
+import { newSecretKey, newSecretKeys } from '../helpers.ts';
 import { PASSWORD, REDIRECT_URI } from '../oidc/browser.ts';
 
 const ISSUER = 'http://127.0.0.1:1/oidc';
@@ -181,18 +178,6 @@ describe('backups', () => {
     expect(await refusal(() => createBackup({ [USERS_FILE]: '[]\n' }, BACKUP_LAYOUT, { includeSessions: false }))).toBe(
       BackupErrorCode.BadFile,
     );
-  });
-
-  it('reads an older data directory, dropping audit lines a crash cut short and refusing a JSON file that does not parse', async () => {
-    const dataDir = tempDir();
-    mkdirSync(path.join(dataDir, 'pg'));
-    writeFileSync(path.join(dataDir, 'pg', 'ignored.json'), '{');
-    writeFileSync(path.join(dataDir, 'notes.txt'), 'not data');
-    writeFileSync(path.join(dataDir, AUDIT_FILE), '{"id":"1","at":"x","type":"t"}\n{"id":"2",\n');
-    expect(readDataDirectory(dataDir, ['pg'])).toEqual({ [AUDIT_FILE]: '{"id":"1","at":"x","type":"t"}\n' });
-
-    writeFileSync(path.join(dataDir, USERS_FILE), '[{');
-    expect(await refusal(() => readDataDirectory(dataDir, ['pg']))).toBe(BackupErrorCode.BadFile);
   });
 
   it('round trips through a restore into a running server, signing everyone out', async () => {

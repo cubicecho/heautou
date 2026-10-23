@@ -12,9 +12,9 @@ import {
   type SnippetSite,
   traefikConfig,
   type Upstream,
-} from '../../web/src/sites/proxy-snippets.ts';
+} from '../../../web/src/sites/proxy-snippets.ts';
 
-const DOC = readFileSync(path.resolve(import.meta.dirname, '../../docs/forward-auth.md'), 'utf8');
+const DOC = readFileSync(path.resolve(import.meta.dirname, '../../../docs/forward-auth.md'), 'utf8');
 
 /**
  * Reads the fenced blocks of one language out of the doc.

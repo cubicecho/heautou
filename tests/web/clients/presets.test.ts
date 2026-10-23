@@ -1,6 +1,6 @@
-import { openDocument } from '../../server/db/document.ts';
-import { CLIENTS_DOCUMENT } from '../../server/db/documents.ts';
-import { type ClientAuthMethod, createClientStore } from '../../server/store/clients.ts';
+import { openDocument } from '../../../server/db/document.ts';
+import { CLIENTS_DOCUMENT } from '../../../server/db/documents.ts';
+import { type ClientAuthMethod, createClientStore } from '../../../server/store/clients.ts';
 import {
   baseUrlFrom,
   baseUrlOfClient,
@@ -12,8 +12,8 @@ import {
   presetFields,
   SITE_PRESETS,
   UNSUPPORTED_APPS,
-} from '../../web/src/clients/presets.ts';
-import { createTestStore } from '../db.ts';
+} from '../../../web/src/clients/presets.ts';
+import { createTestStore } from '../../db.ts';
 
 const CONTEXT: PresetContext = {
   issuer: 'https://auth.example.com/oidc',

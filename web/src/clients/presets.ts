@@ -1,6 +1,6 @@
 // Client presets: what common apps need from their client, and what to set in each app afterwards.
 // Adding an app is one entry in PRESETS. Each one links to the docs it was checked against.
-// No imports: tests/web/presets.test.ts loads this under the server's tsconfig.
+// No imports: tests/web/clients/presets.test.ts loads this under the server's tsconfig.
 
 /** How the client proves itself: the GraphQL `ClientAuthMethod`, written out so this file stands alone. */
 export type ClientAuthMethod = 'CLIENT_SECRET_BASIC' | 'CLIENT_SECRET_POST' | 'NONE';
