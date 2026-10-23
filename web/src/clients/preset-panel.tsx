@@ -14,6 +14,7 @@ import {
   sitePresetById,
   UNSUPPORTED_APPS,
 } from '@/clients/presets';
+import { maskSecret, SecretToggle } from '@/clients/secret';
 import type { SelectEntry } from '@/components/app-form';
 import { DescriptionList, PropertyRow } from '@/components/description-list';
 import { Section } from '@/components/section';
@@ -114,19 +115,39 @@ function NoteList({ notes }: { notes: readonly string[] }) {
   );
 }
 
+/** A client secret in the settings, and whether it is shown. */
+interface SecretView {
+  /** The secret, or null for a public client. */
+  value: string | null;
+  isShown: boolean;
+  onShownChange: (isShown: boolean) => void;
+}
+
 /**
  * The settings to copy into the app: an env block, a file, or a row per field.
  *
- * @param props - What to set.
+ * @param props - What to set, and the client secret in it, masked until shown. A copy copies the real value.
  */
-function ConfigView({ config }: { config: PresetConfig }) {
+function ConfigView({ config, secret }: { config: PresetConfig; secret?: SecretView | undefined }) {
+  const shown = (text: string): string =>
+    secret === undefined ? text : maskSecret(text, secret.value, secret.isShown);
+  const toggleFor = (text: string) =>
+    secret === undefined || secret.value === null || text.includes(secret.value) === false ? null : (
+      <SecretToggle isShown={secret.isShown} onShownChange={secret.onShownChange} />
+    );
   if (config.format === 'file') {
     return (
       <CodeBlock
         title={config.fileName}
         language={config.language}
-        content={config.text}
-        actionSlot={<CopyButton value={config.text} />}
+        content={shown(config.text)}
+        actionSlot={
+          // The block's action column stacks what it is given, so the two buttons share a row.
+          <div className="flex gap-1">
+            {toggleFor(config.text)}
+            <CopyButton value={config.text} />
+          </div>
+        }
       />
     );
   }
@@ -134,7 +155,16 @@ function ConfigView({ config }: { config: PresetConfig }) {
     const text = envText(config.settings);
     return (
       <div className="flex flex-col gap-2">
-        <CodeBlock title=".env" content={text} actionSlot={<CopyButton value={text} />} />
+        <CodeBlock
+          title=".env"
+          content={shown(text)}
+          actionSlot={
+            <div className="flex gap-1">
+              {toggleFor(text)}
+              <CopyButton value={text} />
+            </div>
+          }
+        />
         <DescriptionList
           layout="stacked"
           contentSlot={config.settings
@@ -158,10 +188,15 @@ function ConfigView({ config }: { config: PresetConfig }) {
         <PropertyRow
           key={setting.name}
           label={setting.name}
-          value={setting.value}
+          value={shown(setting.value)}
           hint={setting.note}
           valueClassName="font-mono break-all whitespace-pre-line"
-          actionSlot={<CopyButton value={setting.value} label={`Copy ${setting.name}`} />}
+          actionSlot={
+            <>
+              {toggleFor(setting.value)}
+              <CopyButton value={setting.value} label={`Copy ${setting.name}`} />
+            </>
+          }
         />
       ))}
     />
@@ -171,9 +206,19 @@ function ConfigView({ config }: { config: PresetConfig }) {
 /**
  * How to configure the app a client was started from, filled in with the client's values.
  *
- * @param props - The client and its preset.
+ * @param props - The client and its preset, and whether the client secret in the settings is shown.
  */
-export function PresetPanel({ client, preset }: { client: ClientFieldsFragment; preset: ClientPreset }) {
+export function PresetPanel({
+  client,
+  preset,
+  isSecretShown,
+  onSecretShownChange,
+}: {
+  client: ClientFieldsFragment;
+  preset: ClientPreset;
+  isSecretShown: boolean;
+  onSecretShownChange: (isShown: boolean) => void;
+}) {
   const provider = useProviderInfo().data;
   if (provider === undefined) {
     return null;
@@ -203,7 +248,10 @@ export function PresetPanel({ client, preset }: { client: ClientFieldsFragment; 
       contentSlot={
         <div className="flex flex-col gap-3">
           {preset.notes === undefined ? null : <Alert variant="info" description={<NoteList notes={preset.notes} />} />}
-          <ConfigView config={config} />
+          <ConfigView
+            config={config}
+            secret={{ value: client.clientSecret ?? null, isShown: isSecretShown, onShownChange: onSecretShownChange }}
+          />
         </div>
       }
     />

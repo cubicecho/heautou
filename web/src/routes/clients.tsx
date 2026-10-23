@@ -7,6 +7,7 @@ import { durationText } from '@/clients/durations';
 import { PairDialog } from '@/clients/pair-dialog';
 import { PresetPanel } from '@/clients/preset-panel';
 import { presetById } from '@/clients/presets';
+import { maskSecret, SecretToggle } from '@/clients/secret';
 import { ConfirmButton } from '@/components/confirm-button';
 import { DescriptionList, PropertyRow } from '@/components/description-list';
 import { DisclosureRow } from '@/components/disclosure-row';
@@ -126,9 +127,15 @@ function UriListValue({ uris }: { uris: readonly string[] }) {
  * The client's ID and secret, as the rows of whichever panel shows them first, with copy and rotate.
  *
  * @param client - The client.
+ * @param isSecretShown - Whether the secret is shown rather than masked.
+ * @param onSecretShownChange - Shows or hides it.
  * @returns The two rows, and why the last rotation failed.
  */
-function useCredentialRows(client: ClientFieldsFragment) {
+function useCredentialRows(
+  client: ClientFieldsFragment,
+  isSecretShown: boolean,
+  onSecretShownChange: (isShown: boolean) => void,
+) {
   const rotate = useRotateClientSecret();
   const secret = client.clientSecret ?? null;
   const rows = [
@@ -142,11 +149,14 @@ function useCredentialRows(client: ClientFieldsFragment) {
     <PropertyRow
       key="secret"
       label="Client secret"
-      value={secret ?? 'None. A public client proves itself with PKCE.'}
+      value={
+        secret === null ? 'None. A public client proves itself with PKCE.' : maskSecret(secret, secret, isSecretShown)
+      }
       valueClassName={secret === null ? undefined : 'font-mono break-all'}
       actionSlot={
         secret === null ? undefined : (
           <>
+            <SecretToggle isShown={isSecretShown} onShownChange={onSecretShownChange} />
             <CopyButton value={secret} label="Copy client secret" />
             <ConfirmButton
               aria-label="Rotate client secret"
@@ -306,7 +316,9 @@ function detailRows(client: ClientFieldsFragment) {
  */
 function ClientDetail({ client }: { client: ClientFieldsFragment }) {
   const preset = presetById(client.preset);
-  const { rows: credentialRows, rotateError } = useCredentialRows(client);
+  // One switch for the secret wherever the panel shows it: its row and the settings that hold it.
+  const [isSecretShown, setSecretShown] = useState(false);
+  const { rows: credentialRows, rotateError } = useCredentialRows(client, isSecretShown, setSecretShown);
   const hasPreset = preset !== undefined;
   // A preset's panel holds the ID and secret inside its own settings, so the rows that copy and rotate them sit here.
   const presetCredentialRows = hasPreset
@@ -329,7 +341,12 @@ function ClientDetail({ client }: { client: ClientFieldsFragment }) {
         <Alert variant="destructive" title="Secret not rotated" description={messageOf(rotateError)} />
       )}
       {hasPreset ? (
-        <PresetPanel client={client} preset={preset} />
+        <PresetPanel
+          client={client}
+          preset={preset}
+          isSecretShown={isSecretShown}
+          onSecretShownChange={setSecretShown}
+        />
       ) : (
         <GenericSetup client={client} credentialRows={credentialRows} />
       )}
