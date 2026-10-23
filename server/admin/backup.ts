@@ -4,10 +4,10 @@ import { BACKUP_DEFAULTS, HTTP_DEFAULTS } from '../core/defaults.ts';
 import type { DataBackup } from '../core/services.ts';
 import { HttpStatus } from '../core/wire.ts';
 import { type PostBody, sameOriginJson, sameOriginPost, sendRefusal } from '../http/guards.ts';
-import type { AdminSessionStore } from '../store/admin-sessions.ts';
 import { type AuditLog, AuditType, actorOf } from '../store/audit.ts';
 import { BackupError, RestoreVia, restoredDetail } from '../store/backup.ts';
 import type { UserStore } from '../store/users.ts';
+import type { WebSessionStore } from '../store/web-sessions.ts';
 import { ADMIN_PATH, adminUrls } from './admin-client.ts';
 import { COOKIE, requireAdmin, sessionCookieOptions, viewerOf } from './routes.ts';
 
@@ -30,7 +30,7 @@ const downloadSchema = z.object({ includeSessions: z.boolean() });
 export interface BackupDeps {
   backup: DataBackup;
   users: UserStore;
-  adminSessions: AdminSessionStore;
+  webSessions: WebSessionStore;
   audit: AuditLog;
   issuer: string;
 }

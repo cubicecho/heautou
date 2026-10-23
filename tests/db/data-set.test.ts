@@ -80,13 +80,13 @@ describe('data set', () => {
     expect(Object.keys(without)).toEqual(
       expect.arrayContaining([DOCUMENT_FILES.users, DOCUMENT_FILES.keys, AUDIT_FILE]),
     );
-    expect(without).not.toHaveProperty(DOCUMENT_FILES.adminSessions);
+    expect(without).not.toHaveProperty(DOCUMENT_FILES.webSessions);
     expect(without).not.toHaveProperty(DOCUMENT_FILES.branding);
     expect(Object.keys(without).some((file) => file.startsWith('oidc/'))).toBe(false);
 
     const withSessions = await app.services.dataSet.exportFiles({ includeSessions: true, skipped: [] });
     expect(Object.keys(withSessions).some((file) => file.startsWith('oidc/'))).toBe(true);
-    expect(withSessions).toHaveProperty(DOCUMENT_FILES.adminSessions);
+    expect(withSessions).toHaveProperty(DOCUMENT_FILES.webSessions);
   });
 
   it('changes nothing when a file is not JSON', async () => {

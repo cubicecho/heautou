@@ -78,7 +78,7 @@ export function createApp(services: Services): Express {
       keys: services.keys,
       branding: services.branding,
       passwordLinks: services.passwordLinks,
-      adminSessions: services.adminSessions,
+      webSessions: services.webSessions,
       pairings: services.pairings,
       pairingOffers: services.pairingOffers,
       settings: services.settings,

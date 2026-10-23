@@ -7,13 +7,13 @@ import { HttpStatus } from '../core/wire.ts';
 import { sameOriginJson, sendRefusal } from '../http/guards.ts';
 import { type LoginThrottle, sendTooMany } from '../http/rate-limit.ts';
 import type { SessionTools } from '../oidc/sessions.ts';
-import type { AdminSessionStore } from '../store/admin-sessions.ts';
 import { type AuditLog, type AuditTarget, AuditType, actorOf, SIGN_IN_TYPES } from '../store/audit.ts';
 import type { BrandingStore } from '../store/branding.ts';
 import type { ClientStore } from '../store/clients.ts';
 import type { PasswordLinkStore } from '../store/password-links.ts';
 import type { SettingsStore } from '../store/settings.ts';
 import { isAdmin, type UserStore } from '../store/users.ts';
+import type { WebSessionStore } from '../store/web-sessions.ts';
 import { ADMIN_PATH, adminUrls, brandingView, sessionClientName, WEB_APP_PAGE } from './admin-client.ts';
 import { COOKIE, requireSignedIn, sessionCookieOptions, signedInUser, viewerOf } from './routes.ts';
 
@@ -21,7 +21,7 @@ import { COOKIE, requireSignedIn, sessionCookieOptions, signedInUser, viewerOf }
 export interface AccountDeps {
   users: UserStore;
   clients: ClientStore;
-  adminSessions: AdminSessionStore;
+  webSessions: WebSessionStore;
   passwordLinks: PasswordLinkStore;
   sessions: SessionTools;
   branding: BrandingStore;
@@ -66,7 +66,7 @@ function sendDeadLink(res: Response): void {
  * `/admin/password-rules` are public: the sign-in and set-password pages show them.
  */
 export function createAccountRouter(deps: AccountDeps): Router {
-  const { users, clients, adminSessions, passwordLinks, sessions, branding, issuer, throttle, audit } = deps;
+  const { users, clients, webSessions, passwordLinks, sessions, branding, issuer, throttle, audit } = deps;
   const { settings, passwordPolicy } = deps;
   const urls = adminUrls(issuer);
   const json = [sameOriginJson(urls.origin), express.json({ limit: HTTP_DEFAULTS.bodyLimit })];
@@ -152,7 +152,7 @@ export function createAccountRouter(deps: AccountDeps): Router {
   router.post(ADMIN_PATH.accountSignOut, ...json, async (req, res) => {
     const user = signedInUser(deps, req);
     if (user !== null) {
-      await adminSessions.removeUser(user.id);
+      await webSessions.removeUser(user.id);
       await sessions.revokeAccount(user.id, req.ip ?? null);
       audit.record({ type: AuditType.AccountSignedOutEverywhere, actor: actorOf(user), ip: req.ip ?? null });
     }

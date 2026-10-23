@@ -29,7 +29,7 @@ const SERVER_TABLES = [
   'passkeys',
   'pairings',
   'passwordLinks',
-  'adminSessions',
+  'webSessions',
   'proxySessions',
   'documents',
   'oidcModels',

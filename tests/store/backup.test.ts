@@ -7,7 +7,7 @@ import { createSecretBox, SECRET_KEY_BYTES, type SecretKeys } from '../../server
 import { openServices, type Services } from '../../server/core/services.ts';
 import type { OpenDatabase } from '../../server/db/client.ts';
 import { readDataDirectory } from '../../server/db/import.ts';
-import { adminSessions, oidcModels, users } from '../../server/db/schema.ts';
+import { oidcModels, users, webSessions } from '../../server/db/schema.ts';
 import { AuditType, userTarget } from '../../server/store/audit.ts';
 import {
   BACKUP_FORMAT,
@@ -95,7 +95,7 @@ async function populated(key: Buffer | null = null) {
     redirectUris: [REDIRECT_URI],
     postLogoutRedirectUris: [],
   });
-  const webSession = await services.adminSessions.create(user.id);
+  const webSession = await services.webSessions.create(user.id);
   await services.proxySessions.create({ userId: user.id, grantId: 'grant-1', amr: ['pwd'], acr: 'pwd' });
   services.audit.record({ type: AuditType.UserCreated, actor: null, ip: null, target: userTarget(user) });
   await services.settled();
@@ -218,9 +218,9 @@ describe('backups', () => {
     expect(target.services.keys.current().jwks.map((jwk) => jwk.kid)).toEqual(sourceKids);
     expect(target.services.host.current().issuer).toBe(ISSUER);
     // Neither the target's own web sessions nor the source's come back.
-    expect(target.services.adminSessions.find(target.webSession)).toBeNull();
-    expect(target.services.adminSessions.find(source.webSession)).toBeNull();
-    expect(await target.database.db.select().from(adminSessions)).toEqual([]);
+    expect(target.services.webSessions.find(target.webSession)).toBeNull();
+    expect(target.services.webSessions.find(source.webSession)).toBeNull();
+    expect(await target.database.db.select().from(webSessions)).toEqual([]);
     expect(await target.database.db.select().from(oidcModels)).toMatchObject([
       { model: PROVIDER_SESSION.model, id: PROVIDER_SESSION.id },
     ]);

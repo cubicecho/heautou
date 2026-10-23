@@ -9,11 +9,11 @@ import { registrationOptions, relyingPartyOf, verifyRegistration } from '../core
 import { HttpStatus } from '../core/wire.ts';
 import { sameOriginJson, sendRefusal } from '../http/guards.ts';
 import { type LoginThrottle, sendTooMany } from '../http/rate-limit.ts';
-import type { AdminSessionStore } from '../store/admin-sessions.ts';
 import { type AuditLog, AuditType, actorOf } from '../store/audit.ts';
 import type { BrandingStore } from '../store/branding.ts';
 import type { FactorStore } from '../store/factors.ts';
 import type { PublicUser, UserStore } from '../store/users.ts';
+import type { WebSessionStore } from '../store/web-sessions.ts';
 import { adminUrls } from './admin-client.ts';
 import { requireSignedIn, viewerOf } from './routes.ts';
 
@@ -40,7 +40,7 @@ export const FACTOR_PATH = {
 /** What the factor routes use. */
 export interface FactorRouteDeps {
   users: UserStore;
-  adminSessions: AdminSessionStore;
+  webSessions: WebSessionStore;
   factors: FactorStore;
   branding: BrandingStore;
   issuer: string;

@@ -7,9 +7,9 @@ import { ObjectStorageError } from '../core/object-storage.ts';
 import { PICTURE_ROUTE, PICTURE_TOO_LARGE, type ProfilePictures, STORED_PICTURE_TYPE } from '../core/pictures.ts';
 import { HttpStatus } from '../core/wire.ts';
 import { type PostBody, sameOriginJson, sameOriginPost, sendRefusal } from '../http/guards.ts';
-import type { AdminSessionStore } from '../store/admin-sessions.ts';
 import { type AuditActor, type AuditLog, AuditType, actorOf, userTarget } from '../store/audit.ts';
 import type { UserStore } from '../store/users.ts';
+import type { WebSessionStore } from '../store/web-sessions.ts';
 import { adminUrls } from './admin-client.ts';
 import { requireAdmin, requireSignedIn, viewerOf } from './routes.ts';
 
@@ -59,7 +59,7 @@ const readImage: RequestHandler = (req, res, next) => {
 export interface PictureDeps {
   pictures: ProfilePictures;
   users: UserStore;
-  adminSessions: AdminSessionStore;
+  webSessions: WebSessionStore;
   audit: AuditLog;
   issuer: string;
 }

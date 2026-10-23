@@ -38,7 +38,7 @@ export interface BackupLayout {
  */
 export const BACKUP_LAYOUT: BackupLayout = Object.freeze({
   /** The web app's sessions: a restore signs everyone out rather than bringing back sessions from the backup. */
-  skipped: Object.freeze([DOCUMENT_FILES.adminSessions, DOCUMENT_FILES.proxySessions]),
+  skipped: Object.freeze([DOCUMENT_FILES.webSessions, DOCUMENT_FILES.proxySessions]),
   required: Object.freeze([DOCUMENT_FILES.keys]),
 });
 

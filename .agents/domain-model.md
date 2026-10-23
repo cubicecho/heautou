@@ -103,8 +103,8 @@ Waiting sign-ins and passkey challenges live in memory only. Owner:
 web sign-in (PKCE, swapped in-process) --cookie heautou_admin--> live --expires | sign-out | restore--> gone
 ```
 
-Owner: `server/store/admin-sessions.ts` (the code calls it an admin session; it is held by
-every signed-in user, admin or not).
+Owner: `server/store/web-sessions.ts` (`WebSessionStore`); it is held by every signed-in
+user, admin or not.
 
 ### Proxy session
 
@@ -141,7 +141,7 @@ Owner: `server/store/audit.ts`.
 | There is always an enabled admin once one exists | `server/store/users.ts` (`isLosingLastAdmin`) |
 | A redirect or back-channel logout URI is https, loopback http or a public client's own scheme, unless Settings allow plain http | `server/store/redirect-uris.ts`, checked by the client store on save and by the pairing policy |
 | With `SECRET_KEY`, client secrets, private keys, authenticator secrets, upstream secrets and the SMTP password are sealed in the tables | `server/store/sealed-document.ts`; boot's `checkSecrets` in `services.ts` refuses a wrong key before writing |
-| Passwords, web and proxy session tokens, password-link tokens and recovery codes are stored hashed | each store (`users.ts`, `admin-sessions.ts`, `proxy-sessions.ts`, `password-links.ts`, `factors.ts`) |
+| Passwords, web and proxy session tokens, password-link tokens and recovery codes are stored hashed | each store (`users.ts`, `web-sessions.ts`, `proxy-sessions.ts`, `password-links.ts`, `factors.ts`) |
 | The GraphQL schema never names a hash or sealed column | `SERVER_TABLES` and `SECRET_COLUMNS` in `server/graphql/build-schema.ts` |
 | No generated GraphQL write: every change goes through a store | `features` in `server/graphql/build-schema.ts` |
 | A store's check-then-change is atomic | each store changes its document before its first `await` (`document.ts` applies it synchronously) |
@@ -219,8 +219,9 @@ Owner: `server/store/audit.ts`.
 - **Setup (first admin):** making the first admin while none exists: free for ten minutes
   after boot, then with the token the boot log prints. Owner: `server/admin/setup.ts`.
 - **Web session:** a browser signed in to heautou's own web app: the admin UI for an admin,
-  the account page for anyone. Owner: `server/store/admin-sessions.ts` (code name: admin
-  session, cookie `heautou_admin`).
+  the account page for anyone. Owner: `server/store/web-sessions.ts` (`services.webSessions`).
+  Its stored and wire names keep "admin" (A1): the `admin_sessions` table, the
+  `admin-sessions.json` document and archive path, the `heautou_admin` cookie.
 - **Account page:** where any user changes their own profile, password, second factors,
   picture, sessions and linked accounts. Owner: `server/admin/account.ts`,
   `server/admin/factors.ts`, `web/src/routes/account.tsx`.

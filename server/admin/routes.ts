@@ -11,10 +11,10 @@ import { type LoginThrottle, sendTooMany } from '../http/rate-limit.ts';
 import { pkceChallenge, redeemCode } from '../oidc/code-exchange.ts';
 import type { ProviderHost } from '../oidc/host.ts';
 import { PAGE_PARAM, pageUrl, WEB_PAGE } from '../oidc/pages.ts';
-import type { AdminSessionStore } from '../store/admin-sessions.ts';
 import { type AuditLog, AuditType, actorOf, userTarget } from '../store/audit.ts';
 import type { KeyStore } from '../store/keys.ts';
 import { isAdmin, type PublicUser, type UserStore } from '../store/users.ts';
+import type { WebSessionStore } from '../store/web-sessions.ts';
 import { ADMIN_PATH, adminUrls, WEB_APP_PAGE } from './admin-client.ts';
 import type { SetupGate } from './setup.ts';
 
@@ -61,7 +61,7 @@ const setupSchema = z.object({
 export interface AdminDeps {
   host: ProviderHost;
   users: UserStore;
-  adminSessions: AdminSessionStore;
+  webSessions: WebSessionStore;
   setup: SetupGate;
   keys: KeyStore;
   issuer: string;
@@ -87,9 +87,9 @@ function randomToken(): string {
  * @param req - The request.
  * @returns The user, or null when there is no session or they are disabled.
  */
-export function signedInUser(deps: Pick<AdminDeps, 'users' | 'adminSessions'>, req: Request): PublicUser | null {
+export function signedInUser(deps: Pick<AdminDeps, 'users' | 'webSessions'>, req: Request): PublicUser | null {
   const cookie = readCookie(req, COOKIE.session);
-  const userId = cookie === null ? null : deps.adminSessions.find(cookie);
+  const userId = cookie === null ? null : deps.webSessions.find(cookie);
   const user = userId === null ? null : deps.users.find(userId);
   return user !== null && user.disabled === false ? user : null;
 }
@@ -126,7 +126,7 @@ export function viewerOf(res: Response): PublicUser {
  * @param deps - The stores.
  * @returns The middleware.
  */
-export function requireSignedIn(deps: Pick<AdminDeps, 'users' | 'adminSessions'>): RequestHandler {
+export function requireSignedIn(deps: Pick<AdminDeps, 'users' | 'webSessions'>): RequestHandler {
   return (req, res, next) => {
     const viewer = signedInUser(deps, req);
     if (viewer === null) {
@@ -145,7 +145,7 @@ export function requireSignedIn(deps: Pick<AdminDeps, 'users' | 'adminSessions'>
  * @param deps - The stores.
  * @returns The middleware.
  */
-export function requireAdmin(deps: Pick<AdminDeps, 'users' | 'adminSessions'>): RequestHandler {
+export function requireAdmin(deps: Pick<AdminDeps, 'users' | 'webSessions'>): RequestHandler {
   return (req, res, next) => {
     const viewer = signedInUser(deps, req);
     if (viewer === null) {
@@ -211,7 +211,7 @@ function showError(res: Response, error: string, description: string): void {
  * first admin: a new user without a token for a while after boot, otherwise with the token from the server log.
  */
 export function createAdminRouter(deps: AdminDeps): Router {
-  const { host, users, adminSessions, setup, keys, issuer, throttle, audit, passwordPolicy } = deps;
+  const { host, users, webSessions, setup, keys, issuer, throttle, audit, passwordPolicy } = deps;
   const urls = adminUrls(issuer);
   const guard = sameOriginJson(urls.origin);
   const cookieBase: CookieOptions = { httpOnly: true, secure: urls.isHttps };
@@ -289,7 +289,7 @@ export function createAdminRouter(deps: AdminDeps): Router {
         return;
       }
       audit.record({ type: AuditType.WebSignedIn, actor: actorOf(user), ip: req.ip ?? null });
-      res.cookie(COOKIE.session, await adminSessions.create(user.id), {
+      res.cookie(COOKIE.session, await webSessions.create(user.id), {
         ...sessionCookie,
         maxAge: ADMIN_DEFAULTS.sessionSeconds * MS_PER_SECOND,
       });
@@ -302,12 +302,12 @@ export function createAdminRouter(deps: AdminDeps): Router {
   router.post(ADMIN_PATH.logout, guard, async (req, res) => {
     const cookie = readCookie(req, COOKIE.session);
     if (cookie !== null) {
-      const userId = adminSessions.find(cookie);
+      const userId = webSessions.find(cookie);
       const user = userId === null ? null : users.find(userId);
       if (user !== null) {
         audit.record({ type: AuditType.WebSignedOut, actor: actorOf(user), ip: req.ip ?? null });
       }
-      await adminSessions.remove(cookie);
+      await webSessions.remove(cookie);
     }
     res.clearCookie(COOKIE.session, sessionCookie);
     const end = new URLSearchParams({ client_id: ADMIN_DEFAULTS.clientId });

@@ -333,7 +333,7 @@ function pairingChanges(ctx: Context, id: string): Repeater<{ pairingChanged: Pa
  * @returns Once the apps with a back-channel logout URI have been told.
  */
 async function signOutEverywhere(ctx: Context, userId: string): Promise<void> {
-  await ctx.adminSessions.removeUser(userId);
+  await ctx.webSessions.removeUser(userId);
   await ctx.sessions.revokeAccount(userId, ctx.ip);
 }
 

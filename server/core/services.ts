@@ -6,7 +6,6 @@ import type { Database } from '../db/client.ts';
 import { createDataSet, type DataSet } from '../db/data-set.ts';
 import { createWriteQueue, type DataDocument, type DocumentStore, openDocument } from '../db/document.ts';
 import {
-  ADMIN_SESSIONS_DOCUMENT,
   APIS_DOCUMENT,
   BRANDING_DOCUMENT,
   CLIENTS_DOCUMENT,
@@ -20,6 +19,7 @@ import {
   SETTINGS_DOCUMENT,
   UPSTREAMS_DOCUMENT,
   USERS_DOCUMENT,
+  WEB_SESSIONS_DOCUMENT,
 } from '../db/documents.ts';
 import { forwardAuthUrls, proxyClientMetadata } from '../forward-auth/client.ts';
 import type { ForwardAuthConfig } from '../forward-auth/routes.ts';
@@ -32,7 +32,6 @@ import { createProviderHost, type ProviderHost } from '../oidc/host.ts';
 import { createPairingOffers, type PairingOffers } from '../oidc/pairing-offers.ts';
 import { claimNamesIn, createProvider, SCOPES } from '../oidc/provider.ts';
 import { createSessionTools, type SessionTools } from '../oidc/sessions.ts';
-import { type AdminSessionStore, createAdminSessionStore } from '../store/admin-sessions.ts';
 import { type ApiStore, createApiStore } from '../store/apis.ts';
 import { type AuditLog, AuditType, KEYS_TARGET, openAuditLog } from '../store/audit.ts';
 import { type BackupOptions, exportArchive, type RestoreSummary, restoreArchive } from '../store/backup.ts';
@@ -49,6 +48,7 @@ import { checkSecrets, openSealedDocument } from '../store/sealed-document.ts';
 import { createSettingsStore, type SettingsStore } from '../store/settings.ts';
 import { createUpstreamStore, type UpstreamStore, upstreamSecretsIn } from '../store/upstreams.ts';
 import { createUserStore, type UserStore } from '../store/users.ts';
+import { createWebSessionStore, type WebSessionStore } from '../store/web-sessions.ts';
 import { createUpstreamClient } from '../upstream/client.ts';
 import { createUpstreamFlows, type UpstreamFlows } from '../upstream/flows.ts';
 import type { ObjectStorage } from './object-storage.ts';
@@ -131,7 +131,7 @@ export interface Services {
   /** The upstream sign-ins and links under way. */
   upstreamFlows: UpstreamFlows;
   /** The web app's sessions, for admins and for users on their account page. */
-  adminSessions: AdminSessionStore;
+  webSessions: WebSessionStore;
   passwordLinks: PasswordLinkStore;
   /** Setup URLs handed out for apps to pair with. */
   pairings: PairingStore;
@@ -249,7 +249,7 @@ export async function openServices(settings: ServiceSettings): Promise<Services>
       detail: { kid: rotated.jwks[0]?.kid ?? '', reason: 'scheduled' },
     });
   }
-  const adminSessions = createAdminSessionStore(tracked(await openDocument(store, ADMIN_SESSIONS_DOCUMENT)));
+  const webSessions = createWebSessionStore(tracked(await openDocument(store, WEB_SESSIONS_DOCUMENT)));
   const passwordLinks = createPasswordLinkStore(tracked(await openDocument(store, PASSWORD_LINKS_DOCUMENT)));
   const pairings = createPairingStore(tracked(await openDocument(store, PAIRINGS_DOCUMENT)), settings.now);
   const branding = createBrandingStore(tracked(await openDocument(store, BRANDING_DOCUMENT)));
@@ -348,7 +348,7 @@ export async function openServices(settings: ServiceSettings): Promise<Services>
     factors,
     upstreams,
     upstreamFlows,
-    adminSessions,
+    webSessions,
     passwordLinks,
     pairings,
     pairingOffers: createPairingOffers({

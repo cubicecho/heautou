@@ -43,7 +43,7 @@ export const ADMIN_PATH = {
   login: '/admin/login',
   /** Where the provider sends the browser back to. */
   callback: '/admin/callback',
-  /** Ends the admin session (POST). */
+  /** Ends the web session (POST). */
   logout: '/admin/logout',
   /** Whether an admin is still to be made, and makes one (POST). */
   setup: '/admin/setup',

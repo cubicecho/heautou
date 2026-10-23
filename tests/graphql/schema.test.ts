@@ -40,7 +40,7 @@ describe('the generated schema', () => {
 
   it('reads none of the tables only the server reads', () => {
     const queries = fieldsOf(schema, 'Query');
-    const serverOnly = ['pairings', 'passkeys', 'totpFactors', 'recoveryCodes', 'adminSessions', 'proxySessions'];
+    const serverOnly = ['pairings', 'passkeys', 'totpFactors', 'recoveryCodes', 'webSessions', 'proxySessions'];
     const more = ['passwordLinks', 'oidcModels', 'documents', 'apiClients'];
     expect(queries.filter((field) => [...serverOnly, ...more].includes(field))).toEqual([]);
   });

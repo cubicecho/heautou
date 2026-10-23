@@ -4,7 +4,6 @@
 import { eq } from 'drizzle-orm';
 import type { AdapterPayload } from 'oidc-provider';
 import type { ModelDocument } from '../oidc/adapter.ts';
-import type { AdminSessionDocument } from '../store/admin-sessions.ts';
 import type { Api } from '../store/apis.ts';
 import type { Branding } from '../store/branding.ts';
 import { DEFAULT_GROUPS_CLAIM } from '../store/claims.ts';
@@ -19,9 +18,9 @@ import type { ProxySessionDocument } from '../store/proxy-sessions.ts';
 import type { SettingsDocument } from '../store/settings.ts';
 import { EMPTY_UPSTREAMS, UnknownIdentity, type UpstreamsDocument } from '../store/upstreams.ts';
 import type { User } from '../store/users.ts';
+import type { WebSessionDocument } from '../store/web-sessions.ts';
 import { type DocumentMapping, type LooseMapping, loosen } from './document.ts';
 import {
-  adminSessions,
   apiClients,
   apis,
   clients,
@@ -38,6 +37,7 @@ import {
   upstreamLinks,
   upstreams,
   users,
+  webSessions,
 } from './schema.ts';
 
 /** The backup file names of the documents, as the data directory named them before the database. */
@@ -45,7 +45,7 @@ export const DOCUMENT_FILES = {
   clients: 'clients.json',
   users: 'users.json',
   keys: 'keys.json',
-  adminSessions: 'admin-sessions.json',
+  webSessions: 'admin-sessions.json',
   passwordLinks: 'password-links.json',
   branding: 'branding.json',
   pairings: 'pairings.json',
@@ -465,10 +465,10 @@ export const PASSWORD_LINKS_DOCUMENT: DocumentMapping<PasswordLinkDocument, read
     Object.fromEntries(rows.map((row) => [row.tokenHash, { userId: row.userId, expiresAt: row.expiresAt.getTime() }])),
 };
 
-export const ADMIN_SESSIONS_DOCUMENT: DocumentMapping<AdminSessionDocument, readonly [typeof adminSessions]> = {
-  file: DOCUMENT_FILES.adminSessions,
+export const WEB_SESSIONS_DOCUMENT: DocumentMapping<WebSessionDocument, readonly [typeof webSessions]> = {
+  file: DOCUMENT_FILES.webSessions,
   fallback: {},
-  tables: [{ table: adminSessions, keys: ['tokenHash'] }],
+  tables: [{ table: webSessions, keys: ['tokenHash'] }],
   toRows: (document) => [
     Object.entries(document).map(([tokenHash, session]) => ({
       tokenHash,
@@ -613,7 +613,7 @@ export const DOCUMENT_MAPPINGS: readonly LooseMapping[] = [
   loosen(FACTORS_DOCUMENT),
   loosen(PAIRINGS_DOCUMENT),
   loosen(PASSWORD_LINKS_DOCUMENT),
-  loosen(ADMIN_SESSIONS_DOCUMENT),
+  loosen(WEB_SESSIONS_DOCUMENT),
   loosen(PROXY_SESSIONS_DOCUMENT),
   loosen(PROTECTED_SITES_DOCUMENT),
   loosen(KEYS_DOCUMENT),

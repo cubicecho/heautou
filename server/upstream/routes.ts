@@ -7,10 +7,10 @@ import { errorMessage } from '../core/errors.ts';
 import { HttpStatus } from '../core/wire.ts';
 import { sameOriginJson, sendRefusal } from '../http/guards.ts';
 import { INTERACTION_PATH } from '../oidc/provider.ts';
-import type { AdminSessionStore } from '../store/admin-sessions.ts';
 import { type AuditLog, AuditType, actorOf, upstreamTarget } from '../store/audit.ts';
 import type { UpstreamStore } from '../store/upstreams.ts';
 import type { UserStore } from '../store/users.ts';
+import type { WebSessionStore } from '../store/web-sessions.ts';
 import { FlowPurpose, UPSTREAM_PATH, type UpstreamFlows } from './flows.ts';
 
 /** The account routes of upstream identities. */
@@ -31,7 +31,7 @@ export const LINK_TICKET_PARAM = 'upstreamLink';
 /** What the upstream routes use. */
 export interface UpstreamRouteDeps {
   users: UserStore;
-  adminSessions: AdminSessionStore;
+  webSessions: WebSessionStore;
   upstreams: UpstreamStore;
   upstreamFlows: UpstreamFlows;
   audit: AuditLog;

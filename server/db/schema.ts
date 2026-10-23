@@ -253,7 +253,7 @@ export const passwordLinks = pgTable('password_links', {
 });
 
 /** A web app session, by the sha256 of its cookie's token. */
-export const adminSessions = pgTable('admin_sessions', {
+export const webSessions = pgTable('admin_sessions', {
   tokenHash: text('token_hash').primaryKey(),
   userId: text('user_id').notNull(),
   expiresAt: instant('expires_at').notNull(),
