@@ -14,7 +14,10 @@ green baseline. Everything else stays open, not approved. Decisions:
   names and comments change; stored and wire names don't. **Reversed 2026-10-23** (P28): the
   user approved renaming them, with fallbacks so existing installs keep working. The
   `admin_sessions` table is `web_sessions` (a migration renames it); the `heautou_admin`
-  cookie is `heautou_session`, the former one read and swapped for a session's lifetime.
+  cookie is `heautou_session`, the former one read and swapped for a session's lifetime; the
+  `documents.name` values drop `.json` and name the concept (`keys`, `web-sessions`; the
+  `document_names` migration renames the rows), while archive paths stay name + `.json`, so
+  `BACKUP_VERSION` stays 1 and older backups restore as they are.
 - **B1:** the generated activity list waits for queued entries, as the subscription does
   (`fix:` with a regression test).
 - **B2:** a paired app's registration entries name the client the way every other entry does

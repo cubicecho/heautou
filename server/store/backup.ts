@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { BACKUP_DEFAULTS, type BackupSettings } from '../core/defaults.ts';
 import { isSealed, type SecretBox, SecretKeyError } from '../core/secret-box.ts';
 import type { DataSet } from '../db/data-set.ts';
-import { DOCUMENT_NAMES } from '../db/documents.ts';
+import { archivePathOf, DOCUMENT_NAMES } from '../db/documents.ts';
 
 /** What the `format` member of every archive says. */
 export const BACKUP_FORMAT = 'heautou-backup';
@@ -38,8 +38,8 @@ export interface BackupLayout {
  */
 export const BACKUP_LAYOUT: BackupLayout = Object.freeze({
   /** The web app's sessions: a restore signs everyone out rather than bringing back sessions from the backup. */
-  skipped: Object.freeze([DOCUMENT_NAMES.webSessions, DOCUMENT_NAMES.proxySessions]),
-  required: Object.freeze([DOCUMENT_NAMES.keys]),
+  skipped: Object.freeze([archivePathOf(DOCUMENT_NAMES.webSessions), archivePathOf(DOCUMENT_NAMES.proxySessions)]),
+  required: Object.freeze([archivePathOf(DOCUMENT_NAMES.keys)]),
 });
 
 /** Where a restore was asked for, as its audit entry says. */

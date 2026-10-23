@@ -41,7 +41,7 @@ export const MAIL_OPTIONS_OFF: Readonly<MailOptions> = Object.freeze({
   notifyFactorRemoved: false,
 });
 
-/** `mail.json`: the server saved under Settings, and the options. */
+/** The `mail` document: the server saved under Settings, and the options. */
 export interface MailDocument {
   server?: MailServer;
   options?: Partial<MailOptions>;

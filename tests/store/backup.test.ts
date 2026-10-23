@@ -7,7 +7,7 @@ import { createSecretBox, SECRET_KEY_BYTES, type SecretKeys } from '../../server
 import { openServices, type Services } from '../../server/core/services.ts';
 import type { OpenDatabase } from '../../server/db/client.ts';
 import { readDataDirectory } from '../../server/db/import.ts';
-import { oidcModels, users, webSessions } from '../../server/db/schema.ts';
+import { documents, oidcModels, users, webSessions } from '../../server/db/schema.ts';
 import { AuditType, userTarget } from '../../server/store/audit.ts';
 import {
   BACKUP_FORMAT,
@@ -153,7 +153,7 @@ describe('backups', () => {
     expect(Object.keys(without.files)).toEqual(
       expect.arrayContaining(['clients.json', 'users.json', 'keys.json', 'audit.jsonl']),
     );
-    expect(Object.keys(without.files)).not.toContain('admin-sessions.json');
+    expect(Object.keys(without.files)).not.toContain('web-sessions.json');
     expect(Object.keys(without.files)).not.toContain('proxy-sessions.json');
     expect(Object.keys(without.files).some((name) => name.startsWith('oidc/'))).toBe(false);
     expect(without.files['clients.json']).toContain('enc:v1:');
@@ -226,6 +226,32 @@ describe('backups', () => {
     ]);
     // The restored data boots on its own.
     expect((await boot(target.database, key)).users.list().map((user) => user.username)).toEqual(['ada']);
+  });
+
+  it('restores an archive made before the documents were named for their concept', async () => {
+    const { files, createdAt } = await freshArchive();
+    // Version 1 as every build wrote it: the same paths, which a hand-made archive may add the web sessions' old one to.
+    const older = {
+      format: BACKUP_FORMAT,
+      version: 1,
+      createdAt,
+      includesSessions: false,
+      files: {
+        ...files,
+        'branding.json': `${JSON.stringify({ name: 'Home sign-in' })}\n`,
+        'admin-sessions.json': `${JSON.stringify({ hash: { userId: 'u-ada', expiresAt: Date.now() + 60_000 } })}\n`,
+      },
+    };
+
+    const target = await populated();
+    await target.services.backup.restore(zip(older));
+
+    expect(target.services.users.list().map((user) => user.username)).toEqual(['ada']);
+    expect(target.services.branding.read().name).toBe('Home sign-in');
+    const names = (await target.database.db.select({ name: documents.name }).from(documents)).map((row) => row.name);
+    expect(names).toEqual(expect.arrayContaining(['branding', 'keys']));
+    expect(names.filter((name) => name.endsWith('.json'))).toEqual([]);
+    expect(await target.database.db.select().from(webSessions)).toEqual([]);
   });
 
   it('brings back every store’s data, not only what the target held before', async () => {

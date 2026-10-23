@@ -223,8 +223,7 @@ Owner: `server/store/audit.ts`.
   the account page for anyone. Owner: `server/store/web-sessions.ts` (`services.webSessions`).
   Its rows are in the `web_sessions` table and its cookie is `heautou_session`; the former
   `heautou_admin` cookie is still read and swapped until the release after the rename
-  (`FORMER_SESSION_COOKIE`). Its document name and archive path keep "admin" (A1):
-  `admin-sessions.json`.
+  (`FORMER_SESSION_COOKIE`). Its document is `web-sessions`, never in a backup.
 - **Account page:** where any user changes their own profile, password, second factors,
   picture, sessions and linked accounts. Owner: `server/account/` (`routes.ts`,
   `factors.ts`; the picture routes are in `server/admin/pictures.ts`),
@@ -281,16 +280,17 @@ Owner: `server/store/audit.ts`.
   Owner: `server/db/document.ts` (`DataDocument`); each store takes its own as `document`.
 - **Document mapping:** how one document is laid out as rows and read back, including an
   older version's JSON file. Owner: `server/db/documents.ts` (`DocumentMapping`; its `name`,
-  from `DOCUMENT_NAMES`, is both the `documents.name` row key and the archive path, such as
-  `keys.json`, which keep their JSON-era values: A2).
+  from `DOCUMENT_NAMES`, is the concept, such as `keys`: the `documents.name` row key of a
+  single document; `archivePathOf` adds `.json` for its archive path).
 - **Sealed document:** a document whose secrets are sealed in the tables and plain in
   memory. Owner: `server/store/sealed-document.ts`.
 - **Write queue:** the one queue every write to the database waits in. Owner:
   `createWriteQueue` in `server/db/document.ts`.
 - **Data set:** everything kept, as the files a backup holds. Owner: `server/db/data-set.ts`.
 - **Archive file:** one entry of a backup, named as the data directory of a version before the
-  database named it (`users.json`, `audit.jsonl`, `oidc/Session.json`). Owner:
-  `DOCUMENT_NAMES` in `server/db/documents.ts`, `AUDIT_FILE` in `server/store/audit.ts`.
+  database named it (`users.json`, `audit.jsonl`, `oidc/Session.json`): a document's name
+  plus `.json`. Owner: `DOCUMENT_NAMES` and `archivePathOf` in `server/db/documents.ts`,
+  `AUDIT_FILE` in `server/store/audit.ts`.
 - **Backup layout:** which archive files a backup skips and which it needs. Owner:
   `BACKUP_LAYOUT` in `server/store/backup.ts`.
 - **Import:** the first boot on an older JSON data directory, which puts its files in the

@@ -7,11 +7,20 @@ import { DIR_MODE } from '../core/wire.ts';
 import { isDataFile, JSON_LINES_EXTENSION, linesOf, parseDataFile } from '../store/backup.ts';
 import { type Database, PGLITE_DIRECTORY } from './client.ts';
 import type { DataSet } from './data-set.ts';
-import { DOCUMENT_NAMES } from './documents.ts';
+import { archivePathOf, DOCUMENT_NAMES } from './documents.ts';
 import { documents } from './schema.ts';
 
 /** Where the imported files are moved, under the data directory. */
 export const IMPORTED_DIRECTORY = 'imported-json';
+
+/**
+ * Files an older data directory named otherwise than the archive does now, by their name on disk. The web sessions
+ * were `admin-sessions.json` before the document was named for the concept; reading it keeps those browsers signed
+ * in. It stays as long as the import does: the files on disk keep their names.
+ */
+const FORMER_FILES: Readonly<Record<string, string>> = Object.freeze({
+  'admin-sessions.json': archivePathOf(DOCUMENT_NAMES.webSessions),
+});
 
 /**
  * Says whether a database holds no data yet: no keys, which every server makes on its first boot.
@@ -122,10 +131,12 @@ export async function importDataDirectory(
     return null;
   }
   const files = readDataDirectory(dataDir, [PGLITE_DIRECTORY, IMPORTED_DIRECTORY]);
-  if (DOCUMENT_NAMES.keys in files === false) {
+  if (archivePathOf(DOCUMENT_NAMES.keys) in files === false) {
     return null;
   }
-  await dataSet.replaceAll(files);
+  await dataSet.replaceAll(
+    Object.fromEntries(Object.entries(files).map(([relative, text]) => [FORMER_FILES[relative] ?? relative, text])),
+  );
   const movedTo = path.join(dataDir, IMPORTED_DIRECTORY);
   for (const relative of Object.keys(files)) {
     const target = path.join(movedTo, ...relative.split('/'));

@@ -287,7 +287,7 @@ export const protectedSites = pgTable(
 
 /** The settings that are one document each: branding, the keys, mail, the operator's settings, the proxy cookie. */
 export const documents = pgTable('documents', {
-  /** The document's name, also its path in a backup, such as `branding.json`. */
+  /** The document's name, such as `branding`. A backup keeps it as `branding.json`. */
   name: text('name').primaryKey(),
   /** The document as the store keeps it, secrets sealed. */
   body: jsonb('body').$type<unknown>().notNull(),

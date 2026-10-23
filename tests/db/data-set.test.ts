@@ -1,8 +1,9 @@
+import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { createDataSet } from '../../server/db/data-set.ts';
 import { createWriteQueue } from '../../server/db/document.ts';
-import { DOCUMENT_NAMES } from '../../server/db/documents.ts';
+import { archivePathOf, DOCUMENT_NAMES } from '../../server/db/documents.ts';
 import { IMPORTED_DIRECTORY, importDataDirectory, isUnstarted } from '../../server/db/import.ts';
 import { auditEntries, oidcModels, users } from '../../server/db/schema.ts';
 import { AUDIT_FILE, AuditType } from '../../server/store/audit.ts';
@@ -78,22 +79,22 @@ describe('data set', () => {
   it('leaves out skipped files, untouched documents, and the provider sessions unless asked', async () => {
     const without = await app.services.dataSet.exportFiles({ includeSessions: false, skipped: BACKUP_LAYOUT.skipped });
     expect(Object.keys(without)).toEqual(
-      expect.arrayContaining([DOCUMENT_NAMES.users, DOCUMENT_NAMES.keys, AUDIT_FILE]),
+      expect.arrayContaining([archivePathOf(DOCUMENT_NAMES.users), archivePathOf(DOCUMENT_NAMES.keys), AUDIT_FILE]),
     );
-    expect(without).not.toHaveProperty(DOCUMENT_NAMES.webSessions);
-    expect(without).not.toHaveProperty(DOCUMENT_NAMES.branding);
+    expect(without).not.toHaveProperty(archivePathOf(DOCUMENT_NAMES.webSessions));
+    expect(without).not.toHaveProperty(archivePathOf(DOCUMENT_NAMES.branding));
     expect(Object.keys(without).some((file) => file.startsWith('oidc/'))).toBe(false);
 
     const withSessions = await app.services.dataSet.exportFiles({ includeSessions: true, skipped: [] });
     expect(Object.keys(withSessions).some((file) => file.startsWith('oidc/'))).toBe(true);
-    expect(withSessions).toHaveProperty(DOCUMENT_NAMES.webSessions);
+    expect(withSessions).toHaveProperty(archivePathOf(DOCUMENT_NAMES.webSessions));
   });
 
   it('changes nothing when a file is not JSON', async () => {
     const files = await app.services.dataSet.exportFiles({ includeSessions: true, skipped: [] });
     const before = await app.services.db.select().from(users);
-    const damaged = { ...files, [DOCUMENT_NAMES.clients]: '{ not json' };
-    await expect(app.services.dataSet.replaceAll(damaged)).rejects.toThrow(DOCUMENT_NAMES.clients);
+    const damaged = { ...files, [archivePathOf(DOCUMENT_NAMES.clients)]: '{ not json' };
+    await expect(app.services.dataSet.replaceAll(damaged)).rejects.toThrow(archivePathOf(DOCUMENT_NAMES.clients));
     expect(await app.services.db.select().from(users)).toEqual(before);
   });
 });
@@ -110,8 +111,8 @@ describe('importing an older data directory', () => {
   });
 
   it('puts every file in the tables once, and moves the files aside', async () => {
-    writeDataFile(dataDir, DOCUMENT_NAMES.users, OLDER_USERS);
-    writeDataFile(dataDir, DOCUMENT_NAMES.keys, OLDER_KEYS);
+    writeDataFile(dataDir, 'users.json', OLDER_USERS);
+    writeDataFile(dataDir, 'keys.json', OLDER_KEYS);
     writeDataFile(dataDir, 'audit.2.jsonl', auditLines('oldest'));
     writeDataFile(dataDir, 'audit.1.jsonl', auditLines('older'));
     writeDataFile(dataDir, AUDIT_FILE, auditLines('newest'));
@@ -127,8 +128,8 @@ describe('importing an older data directory', () => {
     expect((await database.db.select().from(oidcModels)).map((row) => row.id)).toEqual(['s1']);
     const audit = await database.db.select().from(auditEntries).orderBy(auditEntries.seq);
     expect(audit.map((row) => row.id)).toEqual(['oldest', 'older', 'newest']);
-    expect(existsSync(path.join(dataDir, DOCUMENT_NAMES.users))).toBe(false);
-    expect(existsSync(path.join(dataDir, IMPORTED_DIRECTORY, DOCUMENT_NAMES.users))).toBe(true);
+    expect(existsSync(path.join(dataDir, 'users.json'))).toBe(false);
+    expect(existsSync(path.join(dataDir, IMPORTED_DIRECTORY, 'users.json'))).toBe(true);
     expect(existsSync(path.join(dataDir, IMPORTED_DIRECTORY, 'oidc', 'Session.json'))).toBe(true);
 
     expect(await importDataDirectory(dataSet, dataDir, await isUnstarted(database.db))).toBeNull();
@@ -136,8 +137,8 @@ describe('importing an older data directory', () => {
   });
 
   it('lets the server start on what it imported', async () => {
-    writeDataFile(dataDir, DOCUMENT_NAMES.users, OLDER_USERS);
-    writeDataFile(dataDir, DOCUMENT_NAMES.keys, OLDER_KEYS);
+    writeDataFile(dataDir, 'users.json', OLDER_USERS);
+    writeDataFile(dataDir, 'keys.json', OLDER_KEYS);
     const database = await createTestDatabase();
     await importDataDirectory(createDataSet({ db: database.db, queue: createWriteQueue() }), dataDir, true);
     const app = await startTestApp({ database });
@@ -147,23 +148,42 @@ describe('importing an older data directory', () => {
     await database.close();
   });
 
+  it('keeps the web sessions an older directory held as admin-sessions.json', async () => {
+    const tokenHash = createHash('sha256').update('older-token').digest('base64url');
+    writeDataFile(dataDir, 'users.json', OLDER_USERS);
+    writeDataFile(dataDir, 'keys.json', OLDER_KEYS);
+    writeDataFile(dataDir, 'admin-sessions.json', { [tokenHash]: { userId: 'u-ada', expiresAt: Date.now() + 60_000 } });
+    const database = await createTestDatabase();
+    const imported = await importDataDirectory(
+      createDataSet({ db: database.db, queue: createWriteQueue() }),
+      dataDir,
+      true,
+    );
+    expect(imported?.files).toBe(3);
+    expect(existsSync(path.join(dataDir, IMPORTED_DIRECTORY, 'admin-sessions.json'))).toBe(true);
+    const app = await startTestApp({ database });
+    expect(app.services.webSessions.find('older-token')).toBe('u-ada');
+    await app.close();
+    await database.close();
+  });
+
   it('imports nothing from a directory a server never started in', async () => {
-    writeDataFile(dataDir, DOCUMENT_NAMES.users, OLDER_USERS);
+    writeDataFile(dataDir, 'users.json', OLDER_USERS);
     const database = await createTestDatabase();
     const dataSet = createDataSet({ db: database.db, queue: createWriteQueue() });
     expect(await importDataDirectory(dataSet, dataDir, true)).toBeNull();
-    expect(existsSync(path.join(dataDir, DOCUMENT_NAMES.users))).toBe(true);
+    expect(existsSync(path.join(dataDir, 'users.json'))).toBe(true);
     await database.close();
   });
 
   it('stops, writing and moving nothing, at a file that is not JSON', async () => {
-    writeDataFile(dataDir, DOCUMENT_NAMES.users, '[{ torn');
-    writeDataFile(dataDir, DOCUMENT_NAMES.keys, OLDER_KEYS);
+    writeDataFile(dataDir, 'users.json', '[{ torn');
+    writeDataFile(dataDir, 'keys.json', OLDER_KEYS);
     const database = await createTestDatabase();
     const dataSet = createDataSet({ db: database.db, queue: createWriteQueue() });
-    await expect(importDataDirectory(dataSet, dataDir, true)).rejects.toThrow(DOCUMENT_NAMES.users);
+    await expect(importDataDirectory(dataSet, dataDir, true)).rejects.toThrow('users.json');
     expect(await isUnstarted(database.db)).toBe(true);
-    expect(existsSync(path.join(dataDir, DOCUMENT_NAMES.users))).toBe(true);
+    expect(existsSync(path.join(dataDir, 'users.json'))).toBe(true);
     await database.close();
   });
 });
@@ -171,8 +191,8 @@ describe('importing an older data directory', () => {
 describe('the admin API over imported data', () => {
   it('lists the imported users through the generated reads', async () => {
     const dataDir = tempDir();
-    writeDataFile(dataDir, DOCUMENT_NAMES.users, OLDER_USERS);
-    writeDataFile(dataDir, DOCUMENT_NAMES.keys, OLDER_KEYS);
+    writeDataFile(dataDir, 'users.json', OLDER_USERS);
+    writeDataFile(dataDir, 'keys.json', OLDER_KEYS);
     const database = await createTestDatabase();
     await importDataDirectory(createDataSet({ db: database.db, queue: createWriteQueue() }), dataDir, true);
     const app = await startTestApp({ database });

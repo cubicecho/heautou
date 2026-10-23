@@ -59,8 +59,8 @@ export type RowsOf<TTables extends readonly PgTable[], Shape extends 'insert' | 
 /** How a document is laid out in its tables. */
 export interface DocumentMapping<T, TTables extends readonly PgTable[] = readonly PgTable[]> {
   /**
-   * Its name, such as `users.json`: the row a single document is kept in, and its path in a backup archive and in the
-   * data directory of a version before the database.
+   * Its name, such as `users`: the row a single document is kept in. Its path in a backup archive, and in the data
+   * directory of a version before the database, is the name as a JSON file (`archivePathOf`).
    */
   name: string;
   /** The document a new install starts with. */

@@ -41,30 +41,42 @@ import {
 } from './schema.ts';
 
 /**
- * The documents' names, as the data directory named their files before the database. A backup archive keeps each
- * document under its name, and the documents table keys a single document by it.
+ * The documents' names: the concept each one holds. The documents table keys a single document by its name, and a
+ * backup archive keeps each document as a JSON file named after it (`archivePathOf`). Until 2026-10-23 the names were
+ * the files the data directory held before the database (`keys.json`, `admin-sessions.json`); the `document_names`
+ * migration renamed the rows.
  */
 export const DOCUMENT_NAMES = {
-  clients: 'clients.json',
-  users: 'users.json',
-  keys: 'keys.json',
-  webSessions: 'admin-sessions.json',
-  passwordLinks: 'password-links.json',
-  branding: 'branding.json',
-  pairings: 'pairings.json',
-  settings: 'settings.json',
-  factors: 'factors.json',
-  upstreams: 'upstreams.json',
-  apis: 'apis.json',
-  mail: 'mail.json',
-  protectedSites: 'protected-sites.json',
-  proxySessions: 'proxy-sessions.json',
+  clients: 'clients',
+  users: 'users',
+  keys: 'keys',
+  webSessions: 'web-sessions',
+  passwordLinks: 'password-links',
+  branding: 'branding',
+  pairings: 'pairings',
+  settings: 'settings',
+  factors: 'factors',
+  upstreams: 'upstreams',
+  apis: 'apis',
+  mail: 'mail',
+  protectedSites: 'protected-sites',
+  proxySessions: 'proxy-sessions',
 } as const;
 
 /** The directory oidc-provider's models were kept in, one file per model. */
 export const OIDC_DIRECTORY = 'oidc';
-/** What a model's file is called after its name. */
+/** What a document's file in an archive or an older data directory is called after its name. */
 const JSON_EXTENSION = '.json';
+
+/**
+ * Says where a document is in a backup archive, which is also the file an older data directory kept it in.
+ *
+ * @param name - The document's name, such as `keys` or `oidc/Session`.
+ * @returns Its path, such as `keys.json`.
+ */
+export function archivePathOf(name: string): string {
+  return `${name}${JSON_EXTENSION}`;
+}
 
 /**
  * Reads an instant a document keeps as an ISO 8601 string.
@@ -566,7 +578,7 @@ export const MAIL_DOCUMENT = singleDocument<MailDocument>(DOCUMENT_NAMES.mail, {
  */
 export function oidcModelDocument(model: string): DocumentMapping<ModelDocument, readonly [typeof oidcModels]> {
   return {
-    name: `${OIDC_DIRECTORY}/${model}${JSON_EXTENSION}`,
+    name: `${OIDC_DIRECTORY}/${model}`,
     fallback: {},
     tables: [{ table: oidcModels, keys: ['model', 'id'], scope: eq(oidcModels.model, model) }],
     toRows: (document) => [
