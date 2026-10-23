@@ -48,6 +48,16 @@ function isLookingForOffers(pairing: PairingFieldsFragment | null | undefined, u
 }
 
 /**
+ * Names one pairing in the query cache.
+ *
+ * @param id - The pairing's id.
+ * @returns Its query key.
+ */
+function pairingKey(id: string): readonly string[] {
+  return [...QUERY_KEYS.pairings, id];
+}
+
+/**
  * Watches a pairing, asking again every couple of seconds while no app has registered with it. When one has, the
  * client list is fetched again so the new client shows.
  *
@@ -57,7 +67,6 @@ function isLookingForOffers(pairing: PairingFieldsFragment | null | undefined, u
  */
 export function usePairing(id: string) {
   const queryClient = useQueryClient();
-  const queryKey = [...QUERY_KEYS.pairings, id];
   useEffect(
     () =>
       subscribe(
@@ -65,7 +74,7 @@ export function usePairing(id: string) {
         { id },
         {
           onData: ({ pairingChanged }) => {
-            queryClient.setQueryData([...QUERY_KEYS.pairings, id], pairingChanged);
+            queryClient.setQueryData(pairingKey(id), pairingChanged);
             if (pairingChanged?.status === 'PAIRED') {
               void queryClient.invalidateQueries({ queryKey: QUERY_KEYS.clients });
             }
@@ -75,16 +84,16 @@ export function usePairing(id: string) {
     [queryClient, id],
   );
   const query = useQuery({
-    queryKey,
+    queryKey: pairingKey(id),
     queryFn: async () => (await request(PairingDocument, { id })).pairing,
     // An app is often still finishing its pairing when it first shows as paired, and describes its API only after,
     // so ask again for a while until it does.
     refetchInterval: (current) =>
       isLookingForOffers(current.state.data, current.state.dataUpdateCount) ? OFFER_POLL_MS : false,
+    // Render again on every answer, even one that changed nothing, so the count of answers read below is current.
+    notifyOnChangeProps: 'all',
   });
-  // Reading when it was last updated has the query render again on every answer, even one that changed nothing.
-  void query.dataUpdatedAt;
-  const updates = queryClient.getQueryState(queryKey)?.dataUpdateCount ?? 0;
+  const updates = queryClient.getQueryState(pairingKey(id))?.dataUpdateCount ?? 0;
   return { query, isLookingForOffers: isLookingForOffers(query.data, updates) };
 }
 
@@ -112,7 +121,7 @@ export function useFinishPairing() {
     mutationFn: async ({ id, input }: { id: string; input: FinishPairingInput }) =>
       (await request(FinishPairingDocument, { id, input })).finishPairing,
     onSuccess: (pairing) => {
-      queryClient.setQueryData([...QUERY_KEYS.pairings, pairing.id], pairing);
+      queryClient.setQueryData(pairingKey(pairing.id), pairing);
       return Promise.all([
         queryClient.invalidateQueries({ queryKey: QUERY_KEYS.clients }),
         queryClient.invalidateQueries({ queryKey: QUERY_KEYS.apis }),
