@@ -1,14 +1,11 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, Link } from '@tanstack/react-router';
 import { useState } from 'react';
-import type { UpstreamFieldsFragment } from '@/__generated__/graphql';
+import { z } from 'zod';
 import { BackupSection } from '@/backup/backup-section';
 import { InputField, useAppForm } from '@/components/app-form';
 import { Combobox } from '@/components/combobox';
 import { ConfirmButton } from '@/components/confirm-button';
 import { DescriptionList, PropertyRow } from '@/components/description-list';
-import { List } from '@/components/list';
-import { ListItem } from '@/components/list-item';
-import { EmptyState } from '@/components/page';
 import { PageLayout } from '@/components/page-layout';
 import { QueryError } from '@/components/query-state';
 import { Section } from '@/components/section';
@@ -19,11 +16,11 @@ import { Button } from '@/components/ui/button';
 import { FilePickerButton } from '@/components/ui/file-picker';
 import type { PickedFile } from '@/components/ui/file-picker-base';
 import { FormElement } from '@/components/ui/form-element';
-import { Pencil, Plus, RefreshCw, Trash2 } from '@/components/ui/icons';
+import { RefreshCw, Trash2 } from '@/components/ui/icons';
 import { Switch } from '@/components/ui/switch';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   useBranding,
-  useDeleteUpstream,
   useHttpRedirects,
   useKeys,
   usePasswordRules,
@@ -32,15 +29,17 @@ import {
   useSetBrandingName,
   useSetHttpRedirects,
   useSetPasswordRules,
-  useUpstreams,
 } from '@/core/admin';
 import { ImageUp } from '@/core/app-icons';
 import { messageOf } from '@/core/lists';
-import { formatAgo, formatBytes, formatDateTime, joinStats } from '@/lib/format';
+import { formatAgo, formatBytes, formatDateTime } from '@/lib/format';
+import type { SlotNode } from '@/lib/utils';
 import { MailSection } from '@/mail/mail-section';
-import { UpstreamFormDialog } from '@/upstreams/upstream-form-dialog';
 
-export const Route = createFileRoute('/settings')({ component: SettingsPage });
+export const Route = createFileRoute('/settings')({
+  component: SettingsPage,
+  validateSearch: (search) => settingsSearchSchema.parse(search),
+});
 
 /** The image types the server takes for a logo. */
 const LOGO_TYPES = 'image/png,image/jpeg,image/webp,image/svg+xml';
@@ -153,94 +152,6 @@ function BrandingSection() {
           {failure === null ? null : (
             <Alert variant="destructive" title="Branding not saved" description={messageOf(failure)} />
           )}
-        </div>
-      }
-    />
-  );
-}
-
-/** Which provider the dialog is open on: none, a new one, or one to edit. */
-type UpstreamDialog = { kind: 'closed' } | { kind: 'open'; upstream: UpstreamFieldsFragment | null };
-
-/**
- * The providers users may sign in through instead of with a password.
- */
-function UpstreamsSection() {
-  const upstreams = useUpstreams();
-  const remove = useDeleteUpstream();
-  const [dialog, setDialog] = useState<UpstreamDialog>({ kind: 'closed' });
-  const list = upstreams.data ?? [];
-
-  return (
-    <Section
-      title="Sign-in providers"
-      description="Accounts elsewhere, such as Google or GitHub, that users may sign in with. Each user links theirs from their account page."
-      surface="card"
-      actionSlot={
-        <Button
-          variant="outline"
-          size="sm"
-          iconSlot={<Plus />}
-          content="Add provider"
-          onClick={() => setDialog({ kind: 'open', upstream: null })}
-        />
-      }
-      contentSlot={
-        <div className="grid gap-2">
-          {upstreams.isError ? (
-            <QueryError error={upstreams.error} onRetry={upstreams.refetch} what="the sign-in providers" />
-          ) : null}
-          {upstreams.isSuccess && list.length === 0 ? (
-            <EmptyState compact title="Users sign in with a password or a passkey only." />
-          ) : null}
-          <List
-            label="Sign-in providers"
-            contentSlot={list.map((upstream) => (
-              <ListItem
-                key={upstream.id}
-                title={upstream.name}
-                description={joinStats(
-                  upstream.kind === 'GITHUB' ? 'GitHub' : upstream.issuer,
-                  upstream.unknownIdentity === 'CREATE' ? 'makes users' : 'linked accounts only',
-                  upstream.countsAsBothFactors && 'counts as both factors',
-                )}
-                meta={`${upstream.linksAggregate.count} linked`}
-                actionSlot={
-                  <>
-                    <Button
-                      aria-label={`Edit ${upstream.name}`}
-                      hint="Edit"
-                      variant="ghost"
-                      size="icon-sm"
-                      iconSlot={<Pencil />}
-                      onClick={() => setDialog({ kind: 'open', upstream })}
-                    />
-                    <ConfirmButton
-                      aria-label={`Remove ${upstream.name}`}
-                      hint="Remove"
-                      variant="ghost"
-                      size="icon-sm"
-                      iconSlot={<Trash2 />}
-                      title={`Remove ${upstream.name}?`}
-                      description={`Its ${upstream.linksAggregate.count} linked accounts are unlinked. Users who only sign in through it need a password link to get back in.`}
-                      confirmLabel="Remove"
-                      onConfirm={() => remove.mutate(upstream.id)}
-                    />
-                  </>
-                }
-              />
-            ))}
-          />
-          {remove.error === null ? null : (
-            <Alert variant="destructive" title="Provider not removed" description={messageOf(remove.error)} />
-          )}
-          {dialog.kind === 'open' ? (
-            <UpstreamFormDialog
-              upstream={dialog.upstream}
-              open
-              onOpenChange={(open) => (open ? undefined : setDialog({ kind: 'closed' }))}
-            />
-          ) : null}
         </div>
       }
     />
@@ -418,29 +329,76 @@ function PasswordRulesSection() {
   );
 }
 
+/** The parts of the settings page, each a tab, in the order the tabs show them. */
+const SETTINGS_SECTIONS = ['sign-in', 'email', 'branding', 'maintenance'] as const;
+type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
+
+/** What each tab is called. */
+const SECTION_LABELS = {
+  'sign-in': 'Sign-in',
+  email: 'Email',
+  branding: 'Branding',
+  maintenance: 'Keys and backup',
+} as const satisfies Record<SettingsSection, string>;
+
+/** The tab in the URL, so a link can open one. Left out, or one the page does not have, is the first. */
+const settingsSearchSchema = z.object({ section: z.enum(SETTINGS_SECTIONS).optional().catch(undefined) });
+
 /**
- * The provider's own settings: its branding, its redirect URI rule, its password rules, its keys and backups.
+ * The branding tab, which waits for the saved name since the name field starts from it.
+ */
+function BrandingTab() {
+  const branding = useBranding();
+  return branding.isPending ? null : <BrandingSection />;
+}
+
+/** What each tab holds. */
+const SECTION_CONTENT = {
+  'sign-in': () => (
+    <>
+      <PasswordRulesSection />
+      <RedirectUrisSection />
+    </>
+  ),
+  email: () => <MailSection />,
+  branding: () => <BrandingTab />,
+  maintenance: () => (
+    <>
+      <KeysSection />
+      <BackupSection />
+    </>
+  ),
+} as const satisfies Record<SettingsSection, () => SlotNode>;
+
+/**
+ * The provider's own settings, in tabs: sign-in (password rules and redirect URIs), email, branding, and keys and
+ * backups. Sign-in providers are on the Users page.
  */
 function SettingsPage() {
-  const branding = useBranding();
+  const { section = 'sign-in' } = Route.useSearch();
+  const Content = SECTION_CONTENT[section];
   return (
-    <PageLayout
-      title="Settings"
-      description="How the provider presents itself, where it sends applications back to, what passwords it takes, how it sends email, where else users may sign in, the keys it signs with, and backups of its data."
-      width="prose"
-      contentClassName="gap-6"
-      contentSlot={
-        <>
-          {/* The name field starts from the saved name, so it waits for it. */}
-          {branding.isPending ? null : <BrandingSection />}
-          <RedirectUrisSection />
-          <PasswordRulesSection />
-          <MailSection />
-          <UpstreamsSection />
-          <KeysSection />
-          <BackupSection />
-        </>
-      }
-    />
+    <Tabs value={section} className="h-full">
+      <PageLayout
+        title="Settings"
+        description="How this provider checks passwords and redirect URIs, sends email, presents itself, signs tokens and backs up its data."
+        width="prose"
+        headerContentSlot={
+          <TabsList aria-label="Settings">
+            {SETTINGS_SECTIONS.map((each) => (
+              <TabsTrigger key={each} value={each} linkSlot={<Link to="/settings" search={{ section: each }} />}>
+                {SECTION_LABELS[each]}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        }
+        contentClassName="gap-6"
+        contentSlot={
+          <TabsContent value={section} className="flex flex-col gap-6">
+            <Content />
+          </TabsContent>
+        }
+      />
+    </Tabs>
   );
 }

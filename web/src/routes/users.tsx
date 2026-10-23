@@ -25,6 +25,7 @@ import {
 } from '@/core/app-icons';
 import { messageOf } from '@/core/lists';
 import { useProfilePictures } from '@/core/pictures';
+import { UpstreamsSection } from '@/upstreams/upstreams-section';
 import { LinkedAccountsDialog } from '@/users/linked-accounts-dialog';
 import { PasswordDialog } from '@/users/password-dialog';
 import { PasswordLinkDialog } from '@/users/password-link-dialog';
@@ -138,7 +139,7 @@ function UsersPage() {
   return (
     <PageLayout
       title="Users"
-      description="The people who can sign in to your clients."
+      description="The people who can sign in to your clients, and the other accounts they may sign in with."
       actionSlot={
         <Button
           variant="info"
@@ -297,6 +298,7 @@ function UsersPage() {
               />
             ))}
           />
+          <UpstreamsSection />
           <ConfirmDialog
             open={isConfirmOpen}
             onOpenChange={setConfirmOpen}
