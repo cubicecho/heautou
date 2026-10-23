@@ -12,7 +12,7 @@ import { CodeBlock } from '@/components/ui/code';
 import { CopyButton } from '@/components/ui/copy-button';
 import { FormElement } from '@/components/ui/form-element';
 import { BrandIcon } from '@/core/brand';
-import { jsonReply, postJson } from '@/core/json-reply';
+import { jsonReply, postJson, redirectReplySchema } from '@/core/json-reply';
 import { messageOf } from '@/core/lists';
 import { QUERY_KEYS } from '@/core/query-keys';
 import { PasswordStrengthMeter } from '@/passwords/strength-meter';
@@ -35,7 +35,6 @@ function LogCommand() {
     <CodeBlock content={LOG_COMMAND} wrap actionSlot={<CopyButton value={LOG_COMMAND} label="Copy the command" />} />
   );
 }
-const resultSchema = z.object({ redirectTo: z.string() });
 
 /**
  * Reads the setup token from the link's fragment, which never reaches the server's logs or a proxy's.
@@ -66,7 +65,7 @@ function SetupPage() {
       setFailure(null);
       try {
         const body = { ...value, token: linkToken ?? value.token };
-        const { redirectTo } = await jsonReply(await postJson(SETUP_URL, body), resultSchema);
+        const { redirectTo } = await jsonReply(await postJson(SETUP_URL, body), redirectReplySchema);
         window.location.assign(redirectTo);
       } catch (error) {
         setFailure(messageOf(error));

@@ -1,11 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
-import { z } from 'zod';
 import { ViewerDocument } from '@/__generated__/graphql';
 import { request } from '@/core/gql';
-import { jsonReply, postJson } from '@/core/json-reply';
+import { jsonReply, postJson, redirectReplySchema } from '@/core/json-reply';
 import { QUERY_KEYS } from '@/core/query-keys';
-
-const signOutSchema = z.object({ redirectTo: z.string() });
 
 /**
  * Reads the signed-in admin.
@@ -20,6 +17,6 @@ export function useViewer() {
  * Ends the admin session, then sends the browser to the provider to sign out there too.
  */
 export async function signOut(): Promise<void> {
-  const { redirectTo } = await jsonReply(await postJson('/admin/logout', {}), signOutSchema);
+  const { redirectTo } = await jsonReply(await postJson('/admin/logout', {}), redirectReplySchema);
   window.location.assign(redirectTo);
 }

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
-import { jsonReply, postJson } from '@/core/json-reply';
+import { jsonReply, okReplySchema, postJson, redirectReplySchema } from '@/core/json-reply';
 import { QUERY_KEYS } from '@/core/query-keys';
 
 /** Where a browser with no session signs in, coming back to the account page. */
@@ -42,8 +42,6 @@ export type AccountSession = z.infer<typeof accountSchema>['sessions'][number];
 /** One of the signed-in user's recent sign-ins. */
 export type SignInEntry = z.infer<typeof activitySchema>['entries'][number];
 
-const okSchema = z.object({ ok: z.literal(true) });
-const redirectSchema = z.object({ redirectTo: z.string() });
 const linkSchema = z.object({ username: z.string(), isInvite: z.boolean() });
 
 /**
@@ -87,7 +85,7 @@ export function useAccountActivity() {
 export function useChangePassword() {
   return useMutation({
     mutationFn: async (body: { currentPassword: string; newPassword: string }) =>
-      jsonReply(await postJson('/api/account/password', body), okSchema),
+      jsonReply(await postJson('/api/account/password', body), okReplySchema),
   });
 }
 
@@ -99,7 +97,7 @@ export function useChangePassword() {
 export function useSignOutEverywhere() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async () => jsonReply(await postJson('/api/account/sign-out-everywhere', {}), redirectSchema),
+    mutationFn: async () => jsonReply(await postJson('/api/account/sign-out-everywhere', {}), redirectReplySchema),
     onSuccess: ({ redirectTo }) => {
       queryClient.removeQueries({ queryKey: QUERY_KEYS.account });
       window.location.assign(redirectTo);
@@ -130,7 +128,7 @@ export function usePasswordLink(token: string | null) {
 export function useSetPasswordWithLink() {
   return useMutation({
     mutationFn: async (body: { token: string; password: string }) =>
-      jsonReply(await postJson('/admin/password-link/set', body), redirectSchema),
+      jsonReply(await postJson('/admin/password-link/set', body), redirectReplySchema),
   });
 }
 
@@ -171,7 +169,10 @@ export function useAccountUpstreams() {
 export function useStartLink() {
   return useMutation({
     mutationFn: async (providerId: string) =>
-      jsonReply(await postJson(`/api/account/upstreams/${encodeURIComponent(providerId)}/link`, {}), redirectSchema),
+      jsonReply(
+        await postJson(`/api/account/upstreams/${encodeURIComponent(providerId)}/link`, {}),
+        redirectReplySchema,
+      ),
     onSuccess: ({ redirectTo }) => window.location.assign(redirectTo),
   });
 }
@@ -199,7 +200,7 @@ export function useUnlink() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (providerId: string) =>
-      jsonReply(await postJson(`/api/account/upstreams/${encodeURIComponent(providerId)}/unlink`, {}), okSchema),
+      jsonReply(await postJson(`/api/account/upstreams/${encodeURIComponent(providerId)}/unlink`, {}), okReplySchema),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: QUERY_KEYS.accountUpstreams }),
   });
 }

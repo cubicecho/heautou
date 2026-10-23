@@ -12,7 +12,7 @@ import {
   SetMailServerDocument,
 } from '@/__generated__/graphql';
 import { request } from '@/core/gql';
-import { jsonReply, postJson } from '@/core/json-reply';
+import { jsonReply, okReplySchema, postJson } from '@/core/json-reply';
 import { QUERY_KEYS } from '@/core/query-keys';
 
 /**
@@ -118,7 +118,6 @@ export async function signInAfterReset(fallback: string): Promise<string> {
 }
 
 const availableSchema = z.object({ isAvailable: z.boolean() });
-const okSchema = z.object({ ok: z.literal(true) });
 
 /**
  * Says whether the sign-in page offers "Forgot password?".
@@ -145,6 +144,9 @@ export function useForgotPasswordAvailable(uid: string) {
 export function useForgotPassword(uid: string) {
   return useMutation({
     mutationFn: async (identifier: string) =>
-      jsonReply(await postJson(`/interaction/${encodeURIComponent(uid)}/forgot-password`, { identifier }), okSchema),
+      jsonReply(
+        await postJson(`/interaction/${encodeURIComponent(uid)}/forgot-password`, { identifier }),
+        okReplySchema,
+      ),
   });
 }

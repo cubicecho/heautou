@@ -16,6 +16,7 @@ import { FieldSeparator } from '@/components/ui/field';
 import { FormElement } from '@/components/ui/form-element';
 import { KeyRound } from '@/components/ui/icons';
 import { BrandIcon, useBrandName } from '@/core/brand';
+import { redirectReplySchema } from '@/core/json-reply';
 import { messageOf } from '@/core/lists';
 import { useForgotPasswordAvailable } from '@/core/mail';
 import { QUERY_KEYS } from '@/core/query-keys';
@@ -38,8 +39,7 @@ const detailsSchema = z.object({
 /** Where the server says why a sign-in through a provider did not work: `/login/:uid?error=`. */
 const ERROR_PARAM = 'error';
 /** The login POST's reply: where to go next, or which second factors to ask for. */
-const loginSchema = z.union([z.object({ redirectTo: z.string() }), z.object({ secondFactor: choiceSchema })]);
-const resultSchema = z.object({ redirectTo: z.string() });
+const loginSchema = z.union([redirectReplySchema, z.object({ secondFactor: choiceSchema })]);
 const failureSchema = z.object({ error: z.string(), restart: z.boolean().optional() });
 const passkeyOptionsSchema = z.object({
   options: z.custom<PublicKeyCredentialRequestOptionsJSON>(
@@ -161,7 +161,7 @@ function LoginPage() {
     try {
       const { options } = await post(`${base}/passkey/options`, {}, passkeyOptionsSchema);
       const response = await startAuthentication({ optionsJSON: options });
-      const { redirectTo } = await post(`${base}/passkey`, { response }, resultSchema);
+      const { redirectTo } = await post(`${base}/passkey`, { response }, redirectReplySchema);
       window.location.assign(redirectTo);
     } catch (error) {
       refused(error);
@@ -192,7 +192,7 @@ function LoginPage() {
     onSubmit: async ({ value, formApi }) => {
       setFailure(null);
       try {
-        const { redirectTo } = await post(`${base}/second-factor`, value, resultSchema);
+        const { redirectTo } = await post(`${base}/second-factor`, value, redirectReplySchema);
         window.location.assign(redirectTo);
       } catch (error) {
         formApi.reset();
