@@ -110,9 +110,9 @@ average 13); every failing file passes alone. See T5 and T6.
 | B7 | Bug | The overview page always warns that secrets are plain text, even when they are sealed | The warning means something | — | open |
 | D1 | Doc | Makes one project guide the source: AGENTS.md still describes flat JSON files and modules that are gone | Agents stop reading a wrong map | — | open |
 | D2 | Doc | Brings CLAUDE.md up to date: device flow, pairing offers, code exchange and pages modules, a repeated phrase, `*.json` locations | The guide matches the code | D1 | open |
-| D3 | Doc | Rewrites README's storage parts: it says there is no database, lists JSON files and tells operators to edit or delete them | Operators follow steps that work | — | open |
+| D3 | Doc | Rewrites README's storage parts: it says there is no database, lists JSON files and tells operators to edit or delete them | Operators follow steps that work | — | done |
 | D4 | Doc | Fixes the docs site's "a few JSON files instead of a database" | The site matches the product | — | open |
-| D5 | Doc | Fixes forward-auth docs naming `proxy-sessions.json` | Matches the code | — | open |
+| D5 | Doc | Fixes forward-auth docs naming `proxy-sessions.json` | Matches the code | — | done |
 | D7 | Doc | Cuts document.ts's header comment, which is the history of the JSON files, to its point | P19 | — | open |
 | D8 | Doc | Fixes the web's backup section text ("on disk", the data directory, an incomplete list of what it holds) | Matches what a backup is now | B7 | open |
 | R16 | Refactor [reuse] · low value | One mapping for the two identical hashed-token documents | Removes a copy | — | open |

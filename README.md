@@ -9,11 +9,12 @@ A minimal OpenID Connect provider for self-hosted setups. It gives your apps one
   through the standard discovery URL.
 - **A small web UI** for adding the apps that sign in (clients) and the people who sign in (users), with
   groups, invite links, and a page where each user changes their own password.
-- **Flat-file storage.** Everything is in a few JSON files in one folder. There is no database.
+- **Nothing else to run.** The data is in PGlite, a Postgres that runs inside the server, in one folder. Point
+  `DATABASE_URL` at a Postgres server to keep it there instead.
 
 > [!WARNING]
 > Heautou is built for a home or office network you trust. The admin UI needs a sign-in, but client secrets
-> and signing keys are plain text in the data folder unless you set `SECRET_KEY`, and nothing has been audited. Don't expose
+> and signing keys are plain text in the database unless you set `SECRET_KEY`, and nothing has been audited. Don't expose
 > it to the internet. See [Security](#security).
 
 ## Quick start (Docker Compose)
@@ -59,8 +60,10 @@ A minimal OpenID Connect provider for self-hosted setups. It gives your apps one
    The log line holds a link, `http://<your-host>:3000/setup#token=…`, that fills the token in. The token changes
    on every restart, so restarting also reopens the 10 minutes. Once there is an admin, the page is closed.
 
-Your clients, users and keys are kept in the `heautou-data` volume, so they survive restarts and upgrades.
-To upgrade, run `docker compose pull && docker compose up -d`.
+Your clients, users and keys are kept in the `heautou-data` volume (the database is in `/data/pg`), so they
+survive restarts and upgrades. To upgrade, run `docker compose pull && docker compose up -d`; the new version
+updates the database as it starts. Upgrading from a version that kept JSON files is covered in
+[Your data](#upgrading-from-json-files).
 
 ### Without Compose
 
@@ -70,6 +73,21 @@ docker run -d --name heautou --restart unless-stopped \
   -e ISSUER_URL=http://192.168.1.10:3000/oidc \
   ghcr.io/cubicecho/heautou:latest
 ```
+
+### On a Postgres server
+
+Set `DATABASE_URL` to a `postgres://user:password@host:5432/database` URL (or `DATABASE_URL_FILE` to a file holding
+it, such as a Docker secret). Heautou creates its tables on the first start, and waits up to `DB_CONNECT_TIMEOUT_MS`
+(60 seconds) for Postgres to answer. To a host off your local network it requires TLS unless the URL sets `sslmode`.
+
+From a clone of this repository, `docker-compose.postgres.yml` adds a Postgres of its own:
+
+```sh
+POSTGRES_PASSWORD=… docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d --build
+```
+
+Only one Heautou may use a database at a time; a second one, or the backup CLI while the server runs, refuses to
+start.
 
 ## Connecting an app
 
@@ -194,33 +212,45 @@ user's sessions from **Account** or **Users** revokes the device's refresh token
   group renames it on every user and client. A group a client is limited to can't be deleted, and nor can
   `heautou-admin`.
 
+### Sign-in providers
+
+The **Sign-in providers** section of the **Users** page lets users sign in with an account they have elsewhere:
+any OpenID Connect provider (Google, Microsoft, GitLab, Authentik, another Heautou…) found from its issuer URL, or
+GitHub. Register Heautou at the provider with the redirect URI the dialog shows
+(`<your-host>/upstream/<id>/callback`), then paste the client ID and secret. The sign-in page gets a
+**Sign in with …** button for each.
+
+- An account elsewhere is only ever matched to a user it is **linked** to, never by its email address. Each user
+  links theirs under **Linked accounts** on `/account`; an admin can unlink one from the user's row.
+- An account no one has linked is turned away, unless the provider is set to **make a user** for it: for
+  anybody, or only for addresses at the domains you list (the provider must say the address is verified). New
+  users start in the groups you pick and have no password.
+- A user with a second factor here is still asked for it, unless you turn on **Counts as both factors** to trust
+  the provider's own check. The ID token's `amr` says `fed` for these sign-ins.
+- **Group mapping** reads a groups claim from the provider and, at each sign-in, puts the user in the groups
+  mapped from theirs, and takes away mapped groups they no longer hold. `heautou-admin` can never come from a
+  provider.
+
 ## Settings
 
+**Settings** has four tabs.
+
+- **Sign-in.** How hard to guess a new password must be (a zxcvbn score, "Hard to guess" by default), whether new
+  passwords are looked up in Have I Been Pwned (off by default; only the first 5 characters of the SHA-1 hash are
+  sent), and **Allow plain http** for redirect URIs (see [Security](#security)).
+- **Email.** The SMTP server and what is sent; see [Email](#email).
 - **Branding.** A name and a logo (PNG, JPEG, WebP or SVG, up to 256 KB) for the sign-in page, the account
   page and the sidebar, in place of "Heautou".
-- **Signing keys.** Heautou rotates its signing key at start-up once it is 90 days old, and **Rotate now** does it
-  at once. The previous key stays published, so tokens it signed still verify; tokens signed with keys older than
-  that stop verifying, and those users sign in again.
-- **Sign-in providers.** Let users sign in with an account they have elsewhere: any OpenID Connect provider
-  (Google, Microsoft, GitLab, Authentik, another Heautou…) found from its issuer URL, or GitHub. Register Heautou
-  at the provider with the redirect URI the dialog shows (`<your-host>/upstream/<id>/callback`), then paste the
-  client ID and secret. The sign-in page gets a **Sign in with …** button for each.
-  - An account elsewhere is only ever matched to a user it is **linked** to, never by its email address. Each user
-    links theirs under **Linked accounts** on `/account`; an admin can unlink one from the user's row.
-  - An account no one has linked is turned away, unless the provider is set to **make a user** for it: for
-    anybody, or only for addresses at the domains you list (the provider must say the address is verified). New
-    users start in the groups you pick and have no password.
-  - A user with a second factor here is still asked for it, unless you turn on **Counts as both factors** to trust
-    the provider's own check. The ID token's `amr` says `fed` for these sign-ins.
-  - **Group mapping** reads a groups claim from the provider and, at each sign-in, puts the user in the groups
-    mapped from theirs, and takes away mapped groups they no longer hold. `heautou-admin` can never come from a
-    provider.
+- **Keys and backup.** Heautou rotates its signing key at start-up once it is 90 days old, and **Rotate now** does
+  it at once. The previous key stays published, so tokens it signed still verify; tokens signed with keys older
+  than that stop verifying, and those users sign in again. The backup and restore are described in
+  [Your data](#backup-and-restore).
 
 ### Email
 
 Optional. Without it, everything works as before and links are copied by hand. Set the SMTP server under
 **Settings → Email**, or with `SMTP_URL` (or `SMTP_HOST` and the rest) and `SMTP_FROM` in the environment, which
-wins and locks the section. **Send test email** checks it. A password saved under Settings is sealed under
+wins and locks the section. **Send a test email** checks it. A password saved under Settings is sealed under
 `SECRET_KEY` like the other secrets. Emails carry the branding's name and logo.
 
 Each of these is off until you turn it on:
@@ -243,9 +273,11 @@ Set these as environment variables, under `environment:` in Compose.
 | ------------- | ----------------------------- | ------------------------------------------------------------------------------------------------ |
 | `ISSUER_URL`  | `http://localhost:3000/oidc`  | The public URL of Heautou plus `/oidc`. It must be reachable by your apps and your browser.        |
 | `PORT`        | `3000`                        | The port the server listens on inside the container.                                              |
-| `DATA_DIR`    | `/data` (Docker)              | Where the JSON files are written.                                                                 |
+| `DATA_DIR`    | `/data` (Docker), else `data` | Where the database is kept (PGlite, in `DATA_DIR/pg`) when `DATABASE_URL` is unset.              |
+| `DATABASE_URL` | none                         | A `postgres://` URL to keep the data in a Postgres server instead. `DATABASE_URL_FILE` wins over it. |
+| `DB_CONNECT_TIMEOUT_MS` | `60000`             | How long to wait at start-up for Postgres to answer, in milliseconds.                            |
 | `TRUST_PROXY` | `false`                       | Set to `1` behind one reverse proxy, so the forwarded `https` and host headers are believed.      |
-| `SECRET_KEY`  | none                          | Seals client secrets and signing keys on disk. 32 bytes of base64: `openssl rand -base64 32`.     |
+| `SECRET_KEY`  | none                          | Seals the secrets in the database. 32 bytes of base64: `openssl rand -base64 32`.     |
 | `SECRET_KEY_FILE` | none                      | A file holding the key, such as a Docker secret. It wins over `SECRET_KEY`.                       |
 | `SECRET_KEY_PREVIOUS` | none                  | The old key while changing keys (`_FILE` works too). Remove it after one start.                   |
 | `SMTP_URL`    | none                          | Turns email on: `smtp://user:password@host:587` (STARTTLS) or `smtps://…:465`. `_FILE` works too. |
@@ -260,8 +292,8 @@ Set these as environment variables, under `environment:` in Compose.
 
 ### Profile pictures
 
-Pictures are kept in an S3-compatible bucket (RustFS, MinIO, Garage), addressed path-style, never in the data
-folder. Make the bucket and a key that may read, write and delete in it, and set the `S3_` variables. Heautou checks
+Pictures are kept in an S3-compatible bucket (RustFS, MinIO, Garage), addressed path-style, never in the
+database. Make the bucket and a key that may read, write and delete in it, and set the `S3_` variables. Heautou checks
 the bucket at start-up and logs a `[preflight]` warning when it can't reach it or is refused; sign-ins work either
 way. Setting only some of them stops start-up with the names of the missing ones.
 
@@ -273,17 +305,18 @@ picture.
 
 ### Sealing secrets at rest
 
-Without `SECRET_KEY`, client secrets and the private signing keys are plain text in the data folder, and Heautou
+Without `SECRET_KEY`, client secrets, the private signing and cookie keys, authenticator app secrets, sign-in
+providers' client secrets and the SMTP password saved under Settings are plain text in the database, and Heautou
 logs a warning at start-up. Set the key and restart: the next start seals what is there, and everything written
 after that is sealed (AES-256-GCM). Keep the key **outside** the data folder (an env file or a Docker secret, not the
-volume), so a copy of the folder or a backup of it is not enough to read them.
+volume), so a copy of the database or a backup of it is not enough to read them.
 
-**Losing the key loses the client secrets and the signing keys.** Heautou refuses to start with the wrong key,
-and changes nothing, so put the right one back. If it is gone for good, delete `keys.json` (every app has to
-sign in again), give each confidential client a new secret by hand in `clients.json`, then start and rotate them.
+**Losing the key loses those secrets.** Heautou refuses to start with the wrong key, or with none once anything is
+sealed, and changes nothing, so put the right one back. A backup is sealed under the same key, so it doesn't help.
+There is no supported way to recover the data without the key: keep a copy of it somewhere safe.
 
-To change the key, set the new one as `SECRET_KEY` and the old one as `SECRET_KEY_PREVIOUS`, start once, then
-remove `SECRET_KEY_PREVIOUS`.
+To change the key, set the new one as `SECRET_KEY` and the old one as `SECRET_KEY_PREVIOUS`, start once (that
+start seals everything again under the new key), then remove `SECRET_KEY_PREVIOUS`.
 
 With Compose, a Docker secret keeps the key out of the environment:
 
@@ -335,28 +368,58 @@ buffers responses holds them back: HAProxy and Caddy pass them straight through;
 
 ## Your data
 
-Everything lives in the data folder, which is the `heautou-data` volume in Docker:
+Everything is in one database: PGlite in `DATA_DIR/pg` (the `heautou-data` volume in Docker) by default, or the
+Postgres server `DATABASE_URL` names. It holds the clients, users, groups, keys, second factors, sign-in providers
+and linked accounts, APIs, protected sites, settings, branding, open invite and reset links, browser sessions, the
+provider's sessions, codes and tokens, and the activity log (the newest 20,000 entries). Profile pictures are not in
+it but in the S3 bucket: back the bucket up on its own.
 
-- `clients.json`: apps and their secrets (sealed with `SECRET_KEY`)
-- `users.json`: users, with hashed passwords
-- `keys.json`: the token signing and cookie keys (their private halves sealed with `SECRET_KEY`)
-- `admin-sessions.json`: browsers signed in to the admin UI or the account page (hashed tokens)
-- `password-links.json`: open invite and reset links (hashed tokens)
-- `branding.json`: the name and logo
-- `upstreams.json`: sign-in providers (client secrets sealed with `SECRET_KEY`) and the accounts linked to users
-- `apis.json`: your APIs, their scopes and the clients allowed to ask for them
-- `protected-sites.json`: the sites forward auth protects, and the cookie domain
-- `proxy-sessions.json`: browsers signed in to the protected sites (hashed tokens)
-- `audit.jsonl`: the activity log, one entry a line; at 1 MB it moves to `audit.1.jsonl`, and two old files are kept
-- `oidc/`: sessions, codes and tokens. These are not sealed: they are short-lived, and the provider looks
-  tokens up by their value, so they sit in the clear until they expire.
+Heautou updates the database's tables (its migrations) as it starts. `npm run db:migrate` does the same without
+starting the server; with PGlite, stop the server first. Only one Heautou may use a database at a time; a second
+one, or the backup CLI while the server runs, refuses to start.
 
-Profile pictures are not in the folder but in the S3 bucket, so neither a copy of the folder nor a backup from
-Settings has them: back the bucket up on its own. A restored user whose picture is gone has a broken `picture` URL
-until they upload a new one.
+### Backup and restore
 
-Heautou makes its files readable by its own user only (mode 0600). Back up the folder to back up Heautou. Deleting `keys.json` makes new keys on the next start, and
-every app has to sign in again.
+**Settings → Keys and backup** downloads a backup (a `.json.gz` file) and restores one. A restore checks the whole
+file first, and that its sealed secrets open under this server's `SECRET_KEY` (or `SECRET_KEY_PREVIOUS`), then
+replaces all the data at once. Everyone is signed out, you too.
+
+The same from the shell, with the server stopped and the same `DATA_DIR`, `DATABASE_URL` and `SECRET_KEY` as the
+server:
+
+```sh
+npm run backup -- export heautou-backup.json.gz              # add --sessions to take the provider's sessions too
+npm run backup -- restore heautou-backup.json.gz
+```
+
+In Docker, stop the server, run it in the image against the same volume, then start the server and copy the file out:
+
+```sh
+docker compose stop heautou
+docker compose run --rm heautou npm run backup -- export /data/heautou-backup.json.gz
+docker compose start heautou
+docker compose cp heautou:/data/heautou-backup.json.gz .
+```
+
+A backup holds everything above except the browser sessions (for the admin UI, the account page and protected
+sites; a restore signs everyone out) and, unless you ask for them, the provider's sessions, codes and tokens
+(without them, users sign in to their apps again). Secrets go in sealed under `SECRET_KEY` as they are in the
+database, so restoring needs the same key. Password hashes are in it too: keep it as safe as the database.
+
+### Upgrading from JSON files
+
+Versions before the database kept the data in JSON files in `DATA_DIR`. The first start of this version on such a
+folder, with an empty database, puts the files in the database and moves them to `DATA_DIR/imported-json/`. Nothing
+reads them after that; delete them once you are happy. This works for Postgres too: keep the old volume mounted at
+`/data` for that first start. If a file can't be read, Heautou stops without importing or moving anything.
+
+### Locked out of the admin UI
+
+While there is no admin, Heautou prints a setup link with a token to its log at every start
+(`docker compose logs heautou | grep setup`), and `/setup` takes it; see [Quick start](#quick-start-docker-compose).
+Heautou refuses to remove the last admin, so that is mostly for a fresh or restored database. An admin who forgot
+their password can be sent a reset link by another admin, or use **Forgot password?** when email is set up and it is
+on. There is no supported way to edit the database by hand.
 
 ## Security
 
@@ -375,15 +438,17 @@ What Heautou does:
   refuse as wrong passwords.
 - **Setup URLs are single use.** A pairing's token registers one client, lasts 10 minutes, and can be
   cancelled. Registration is rate-limited like sign-in.
-- **Secrets can be sealed at rest.** With `SECRET_KEY` set, client secrets and the private signing and cookie
-  keys are encrypted in the data folder, under a key kept outside it.
+- **Secrets can be sealed at rest.** With `SECRET_KEY` set, client secrets, the private signing and cookie
+  keys and the other secrets listed under [Sealing secrets at rest](#sealing-secrets-at-rest) are encrypted in the
+  database, under a key kept outside it. Passwords, recovery codes and the tokens of browser sessions and password
+  links are stored hashed.
 - **Redirect URIs must be `https`.** Plain `http` is allowed on `localhost`, `127.0.0.1` and `[::1]`, and a
   native app's own scheme (such as `com.example.app:/callback`) is allowed for a public client. To allow plain
-  `http` on any host, turn on **Allow plain http** under Settings. Until you choose, it follows `ISSUER_URL`:
-  allowed when that is `http://`, refused when it is `https://`. Clients saved before it was refused keep working
-  and are marked in the client list.
+  `http` on any host, turn on **Allow plain http** under **Settings → Sign-in**. Until you choose, it follows
+  `ISSUER_URL`: allowed when that is `http://`, refused when it is `https://`. Clients saved before it was refused
+  keep working and are marked in the client list.
 - **Sign-ins and changes are logged.** Every sign-in, failed or refused one, admin change, password link use
-  and account change goes in `audit.jsonl`, shown on the Activity page, which updates live while it is open; each
+  and account change goes in the activity log, shown on the Activity page, which updates live while it is open; each
   user sees their own sign-ins on their account page. Each time Heautou sends someone back to an app, it logs
   "Signed in to an app" with the app, the redirect URI, and whether a password was typed or the session they
   already had let them straight through. Refused sign-in and token requests from apps, sign-outs, machine
@@ -392,8 +457,9 @@ What Heautou does:
   the clients an API lists can get one. The audit log names the API each sign-in and machine token was for.
 - **The pages can't be framed**, send no referrer, and the web app runs only its own scripts.
 
-What it does not do: seal anything without `SECRET_KEY` (then anyone who can read the data folder has the
-signing keys and client secrets), seal the live sessions, codes and tokens in `oidc/`, or terminate TLS.
+What it does not do: seal anything without `SECRET_KEY` (then anyone who can read the database has the
+signing keys and client secrets), seal the provider's live sessions, codes and tokens (they are short-lived, and
+the provider looks tokens up by their value), or terminate TLS.
 
 ## Running from source
 
@@ -404,6 +470,7 @@ npm install
 npm run dev                    # UI on http://localhost:3000, API on :8787
 npm run build && npm start     # production, one process on port 3000
 npm run check && npm test
+npm run db:migrate             # apply the migrations without starting the server
 ```
 
 `AGENTS.md` describes how the code is laid out.
