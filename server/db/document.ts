@@ -56,8 +56,14 @@ export type RowsOf<TTables extends readonly PgTable[], Shape extends 'insert' | 
   [K in keyof TTables]: Shape extends 'insert' ? InferInsertModel<TTables[K]>[] : InferSelectModel<TTables[K]>[];
 };
 
-/** How a document is laid out in its tables. */
-export interface DocumentMapping<T, TTables extends readonly PgTable[] = readonly PgTable[]> {
+/**
+ * How a document is laid out in its tables.
+ *
+ * @typeParam T - The document, as its store holds it.
+ * @typeParam TTables - Its tables.
+ * @typeParam TOlder - The document as an older version's file may hold it, missing fields that version did not write.
+ */
+export interface DocumentMapping<T, TTables extends readonly PgTable[] = readonly PgTable[], TOlder = T> {
   /**
    * Its name, such as `users`: the row a single document is kept in. Its path in a backup archive, and in the data
    * directory of a version before the database, is the name as a JSON file (`archivePathOf`).
@@ -68,12 +74,12 @@ export interface DocumentMapping<T, TTables extends readonly PgTable[] = readonl
   /** Its tables, each one a table before any that points at it. */
   tables: { [K in keyof TTables]: RowSet<TTables[K]> };
   /**
-   * Lays a document out as rows. It also reads a file an older version wrote, so it fills in what that lacks.
+   * Lays a document out as rows, filling in what an older version's file lacks.
    *
-   * @param document - The document, secrets sealed.
+   * @param document - The document, secrets sealed, or an older version's file of it.
    * @returns The rows of each table.
    */
-  toRows: (document: T) => RowsOf<TTables, 'insert'>;
+  toRows: (document: T | TOlder) => RowsOf<TTables, 'insert'>;
   /**
    * Builds the document from its rows.
    *
@@ -112,17 +118,20 @@ export interface LooseMapping {
  *
  * @typeParam T - The document's shape.
  * @typeParam TTables - Its tables.
+ * @typeParam TOlder - The document as an older version's file may hold it.
  * @param mapping - The mapping.
  * @returns The same mapping, loosely typed.
  */
-export function loosen<T, TTables extends readonly PgTable[]>(mapping: DocumentMapping<T, TTables>): LooseMapping {
+export function loosen<T, TTables extends readonly PgTable[], TOlder>(
+  mapping: DocumentMapping<T, TTables, TOlder>,
+): LooseMapping {
   const tables: readonly RowSet[] = mapping.tables;
   return {
     name: mapping.name,
     fallback: mapping.fallback,
     tables,
-    // A document handed in is one this store wrote, or the file an older version of it wrote, which its toRows fills in.
-    toRows: (document) => mapping.toRows(document as T) as Row[][],
+    // A document handed in is one this store wrote, or the file an older version of it wrote.
+    toRows: (document) => mapping.toRows(document as T | TOlder) as Row[][],
     fromRows: (rows) => fromRowsOf(mapping, rows),
   };
 }
@@ -132,12 +141,13 @@ export function loosen<T, TTables extends readonly PgTable[]>(mapping: DocumentM
  *
  * @typeParam T - The document's shape.
  * @typeParam TTables - Its tables.
+ * @typeParam TOlder - The document as an older version's file may hold it.
  * @param mapping - How the document is laid out.
  * @param rows - The rows of each table, in the order of its `tables`.
  * @returns The document.
  */
-function fromRowsOf<T, TTables extends readonly PgTable[]>(
-  mapping: DocumentMapping<T, TTables>,
+function fromRowsOf<T, TTables extends readonly PgTable[], TOlder>(
+  mapping: DocumentMapping<T, TTables, TOlder>,
   rows: readonly Row[][],
 ): T {
   // The rows the queries here read are loose; they are the ones these tables hold.
