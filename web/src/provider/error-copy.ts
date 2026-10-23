@@ -29,7 +29,7 @@ const COPY: Record<string, ErrorCopy> = {
   invalid_scope: {
     title: 'The app asked for something Heautou doesn’t offer',
     description:
-      'Heautou offers the scopes openid, profile, email, groups and offline_access. Remove any others from the app’s settings.',
+      'Heautou offers the scopes openid, profile, email, groups and offline_access, and an API’s own scopes when the app names that API as its resource. Remove any others from the app’s settings.',
     isClientSetup: false,
   },
   unsupported_response_type: {
