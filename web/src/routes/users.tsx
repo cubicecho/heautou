@@ -1,7 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { useState } from 'react';
 import type { UserFieldsFragment } from '@/__generated__/graphql';
-import { ConfirmButton } from '@/components/confirm-button';
 import { List } from '@/components/list';
 import { ListItem } from '@/components/list-item';
 import { EmptyState } from '@/components/page';
@@ -10,8 +9,10 @@ import { QueryState } from '@/components/query-state';
 import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { KeyRound, Pencil, Plus, Trash2 } from '@/components/ui/icons';
-import { useDeleteUser, useResetSecondFactors, useSetUserDisabled, useUsers } from '@/core/admin';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { Ellipsis, KeyRound, Pencil, Plus, Trash2 } from '@/components/ui/icons';
+import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '@/components/ui/menu';
+import { useDeleteUser, useGroups, useResetSecondFactors, useSetUserDisabled, useUsers } from '@/core/admin';
 import {
   Ban,
   ImageUp,
@@ -44,6 +45,16 @@ type Dialog =
   | { kind: 'linked'; user: UserFieldsFragment }
   | { kind: 'picture'; user: UserFieldsFragment };
 
+/** A destructive action a menu row asked to confirm. */
+interface Confirming {
+  title: string;
+  /** What is lost. */
+  description: string;
+  /** The verb on the destructive button. */
+  confirmLabel: string;
+  onConfirm: () => void;
+}
+
 /**
  * A line on who a user is: their name, email and groups, whichever they have.
  *
@@ -67,13 +78,16 @@ function hasTwoFactor(user: UserFieldsFragment): boolean {
 }
 
 /**
- * The badges a user's row carries: whether they are disabled, or invited and not signed up yet, whether they
+ * The badges a user's row carries: whether they are an admin, disabled, or invited and not signed up yet, whether they
  * use a second factor, and the sign-in providers they have linked.
  *
  * @param user - The user.
+ * @param adminGroup - The group that makes a user an admin, or undefined while it loads.
  * @returns The badges, or null for a user with none.
  */
-function badgesOf(user: UserFieldsFragment) {
+function badgesOf(user: UserFieldsFragment, adminGroup: string | undefined) {
+  const isAdmin = adminGroup !== undefined && user.groups.includes(adminGroup);
+  const admin = isAdmin ? <Badge variant="secondary">Admin</Badge> : null;
   const state = user.disabled ? (
     <Badge variant="destructive">Disabled</Badge>
   ) : user.hasPassword ? null : (
@@ -84,8 +98,9 @@ function badgesOf(user: UserFieldsFragment) {
     user.upstreamLinks.length === 0 ? null : (
       <Badge variant="outline">{user.upstreamLinks.map((link) => link.provider.name).join(', ')}</Badge>
     );
-  return state === null && twoFactor === null && linked === null ? null : (
+  return admin === null && state === null && twoFactor === null && linked === null ? null : (
     <>
+      {admin}
       {state}
       {twoFactor}
       {linked}
@@ -105,6 +120,15 @@ function UsersPage() {
   const failure = remove.error ?? setDisabled.error ?? resetTwoFactor.error;
   const users = query.data ?? [];
   const [dialog, setDialog] = useState<Dialog>({ kind: 'closed' });
+  // Kept after the dialog closes, so its words stay put while it fades out.
+  const [confirming, setConfirming] = useState<Confirming | null>(null);
+  const [isConfirmOpen, setConfirmOpen] = useState(false);
+  /** Opens the confirm for a destructive row. */
+  const askToConfirm = (next: Confirming): void => {
+    setConfirming(next);
+    setConfirmOpen(true);
+  };
+  const adminGroup = useGroups().data?.find((group) => group.isProtected)?.name;
   const close = (open: boolean) => {
     if (open === false) {
       setDialog({ kind: 'closed' });
@@ -163,7 +187,7 @@ function UsersPage() {
                   ) : undefined
                 }
                 description={summaryOf(user)}
-                meta={badgesOf(user)}
+                meta={badgesOf(user, adminGroup)}
                 actionSlot={
                   <>
                     <Button
@@ -173,100 +197,113 @@ function UsersPage() {
                       iconSlot={<Pencil />}
                       onClick={() => setDialog({ kind: 'edit', user })}
                     />
-                    <Button
-                      aria-label={`Set ${user.username}'s password`}
-                      hint="Set password"
-                      variant="outline"
-                      size="icon-sm"
-                      iconSlot={<KeyRound />}
-                      onClick={() => setDialog({ kind: 'password', user })}
-                    />
-                    <Button
-                      aria-label={
-                        user.hasPassword ? `Make a reset link for ${user.username}` : `Invite ${user.username}`
-                      }
-                      hint={user.hasPassword ? 'Reset link' : 'Invite link'}
-                      variant="outline"
-                      size="icon-sm"
-                      iconSlot={<Link2 />}
-                      onClick={() => setDialog({ kind: 'link', user })}
-                    />
-                    {pictures?.isEnabled ? (
-                      <Button
-                        aria-label={`Set ${user.username}'s picture`}
-                        hint="Picture"
-                        variant="outline"
-                        size="icon-sm"
-                        iconSlot={<ImageUp />}
-                        onClick={() => setDialog({ kind: 'picture', user })}
-                      />
-                    ) : null}
-                    <Button
-                      aria-label={`${user.username}'s sessions`}
-                      hint="Sessions"
-                      variant="outline"
-                      size="icon-sm"
-                      iconSlot={<MonitorSmartphone />}
-                      onClick={() => setDialog({ kind: 'sessions', user })}
-                    />
-                    {user.upstreamLinks.length > 0 ? (
-                      <Button
-                        aria-label={`${user.username}'s linked accounts`}
-                        hint="Linked accounts"
-                        variant="outline"
-                        size="icon-sm"
-                        iconSlot={<ShieldCheck />}
-                        onClick={() => setDialog({ kind: 'linked', user })}
-                      />
-                    ) : null}
-                    {hasTwoFactor(user) ? (
-                      <ConfirmButton
-                        aria-label={`Reset ${user.username}'s two-factor sign-in`}
-                        hint="Reset two-factor"
-                        variant="destructive-outline"
-                        size="icon-sm"
-                        iconSlot={<ShieldOff />}
-                        title={`Reset ${user.username}'s two-factor sign-in?`}
-                        description="Their authenticator app, passkeys and recovery codes are removed, as for a lost phone. They sign in with their password alone until they add one again."
-                        confirmLabel="Reset"
-                        onConfirm={() => resetTwoFactor.mutate(user.id)}
-                      />
-                    ) : null}
-                    {user.disabled ? (
-                      <Button
-                        aria-label={`Enable ${user.username}`}
-                        hint="Enable"
-                        variant="outline"
-                        size="icon-sm"
-                        iconSlot={<UserRoundCheck />}
-                        onClick={() => setDisabled.mutate({ id: user.id, disabled: false })}
-                      />
-                    ) : (
-                      <ConfirmButton
-                        aria-label={`Disable ${user.username}`}
-                        hint="Disable"
-                        variant="destructive-outline"
-                        size="icon-sm"
-                        iconSlot={<Ban />}
-                        title={`Disable ${user.username}?`}
-                        description="They are signed out of every browser and application at once, and cannot sign in until enabled again."
-                        confirmLabel="Disable"
-                        onConfirm={() => setDisabled.mutate({ id: user.id, disabled: true })}
-                      />
-                    )}
-                    <ConfirmButton
-                      aria-label={`Delete ${user.username}`}
-                      variant="destructive-outline"
-                      size="icon-sm"
-                      iconSlot={<Trash2 />}
-                      title={`Delete ${user.username}?`}
-                      description="They can no longer sign in to any client, and their sessions and tokens end at once."
-                      onConfirm={() => remove.mutate(user.id)}
-                    />
+                    <Menu>
+                      <MenuTrigger asChild>
+                        <Button
+                          aria-label={`More for ${user.username}`}
+                          variant="outline"
+                          size="icon-sm"
+                          iconSlot={<Ellipsis />}
+                        />
+                      </MenuTrigger>
+                      <MenuContent align="end" aria-label={`More for ${user.username}`}>
+                        <MenuItem
+                          iconSlot={<KeyRound />}
+                          label="Set password"
+                          onSelect={() => setDialog({ kind: 'password', user })}
+                        />
+                        <MenuItem
+                          iconSlot={<Link2 />}
+                          label={user.hasPassword ? 'Reset link' : 'Invite link'}
+                          onSelect={() => setDialog({ kind: 'link', user })}
+                        />
+                        {pictures?.isEnabled ? (
+                          <MenuItem
+                            iconSlot={<ImageUp />}
+                            label="Picture"
+                            onSelect={() => setDialog({ kind: 'picture', user })}
+                          />
+                        ) : null}
+                        <MenuItem
+                          iconSlot={<MonitorSmartphone />}
+                          label="Sessions"
+                          onSelect={() => setDialog({ kind: 'sessions', user })}
+                        />
+                        {user.upstreamLinks.length > 0 ? (
+                          <MenuItem
+                            iconSlot={<ShieldCheck />}
+                            label="Linked accounts"
+                            onSelect={() => setDialog({ kind: 'linked', user })}
+                          />
+                        ) : null}
+                        {user.disabled ? (
+                          <MenuItem
+                            iconSlot={<UserRoundCheck />}
+                            label="Enable"
+                            onSelect={() => setDisabled.mutate({ id: user.id, disabled: false })}
+                          />
+                        ) : null}
+                        <MenuSeparator />
+                        {hasTwoFactor(user) ? (
+                          <MenuItem
+                            iconSlot={<ShieldOff />}
+                            label="Reset two-factor"
+                            destructive
+                            onSelect={() =>
+                              askToConfirm({
+                                title: `Reset ${user.username}'s two-factor sign-in?`,
+                                description:
+                                  'Their authenticator app, passkeys and recovery codes are removed, as for a lost phone. They sign in with their password alone until they add one again.',
+                                confirmLabel: 'Reset',
+                                onConfirm: () => resetTwoFactor.mutate(user.id),
+                              })
+                            }
+                          />
+                        ) : null}
+                        {user.disabled ? null : (
+                          <MenuItem
+                            iconSlot={<Ban />}
+                            label="Disable"
+                            destructive
+                            onSelect={() =>
+                              askToConfirm({
+                                title: `Disable ${user.username}?`,
+                                description:
+                                  'They are signed out of every browser and application at once, and cannot sign in until enabled again.',
+                                confirmLabel: 'Disable',
+                                onConfirm: () => setDisabled.mutate({ id: user.id, disabled: true }),
+                              })
+                            }
+                          />
+                        )}
+                        <MenuItem
+                          iconSlot={<Trash2 />}
+                          label="Delete"
+                          destructive
+                          onSelect={() =>
+                            askToConfirm({
+                              title: `Delete ${user.username}?`,
+                              description:
+                                'They can no longer sign in to any client, and their sessions and tokens end at once.',
+                              confirmLabel: 'Delete',
+                              onConfirm: () => remove.mutate(user.id),
+                            })
+                          }
+                        />
+                      </MenuContent>
+                    </Menu>
                   </>
                 }
               />
             ))}
+          />
+          <ConfirmDialog
+            open={isConfirmOpen}
+            onOpenChange={setConfirmOpen}
+            title={confirming?.title}
+            description={confirming?.description}
+            confirmLabel={confirming?.confirmLabel}
+            onConfirm={() => confirming?.onConfirm()}
           />
           {dialog.kind === 'new' || dialog.kind === 'edit' ? (
             <UserFormDialog
