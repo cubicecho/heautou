@@ -1,7 +1,9 @@
 import { execFileSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { gunzipSync } from 'node:zlib';
 import { SECRET_KEY_BYTES, type SecretKeys } from '../server/core/secret-box.ts';
 import { openServices, type Services } from '../server/core/services.ts';
 import { openDatabase } from '../server/db/client.ts';
@@ -41,6 +43,16 @@ function run(args: string[], env: Record<string, string>): { output: string; sta
     const failed = error as { stderr: string; status: number };
     return { output: failed.stderr, status: failed.status };
   }
+}
+
+/**
+ * Reads an archive the CLI wrote.
+ *
+ * @param file - The archive.
+ * @returns Its document.
+ */
+function unzip(file: string): { includesSessions: boolean } {
+  return JSON.parse(gunzipSync(readFileSync(file)).toString('utf8'));
 }
 
 /**
@@ -131,6 +143,31 @@ describe('the backup CLI', () => {
       });
 
       expect(run(['upload', file], { DATA_DIR: target }).status).toBe(1);
+    },
+    CLI_TIMEOUT_MS,
+  );
+
+  it(
+    'takes the provider sessions with --sessions, and refuses a flag or a missing file with its usage',
+    async () => {
+      const secretKeys = { current: randomBytes(SECRET_KEY_BYTES), previous: null };
+      const dataDir = tempDir();
+      await withDataDir(dataDir, secretKeys, async () => {});
+      const SECRET_KEY = secretKeys.current.toString('base64');
+      const plain = path.join(tempDir(), 'plain.json.gz');
+      const withSessions = path.join(tempDir(), 'sessions.json.gz');
+
+      expect(run(['export', plain], { DATA_DIR: dataDir, SECRET_KEY }).status).toBe(0);
+      expect(run(['export', withSessions, '--sessions'], { DATA_DIR: dataDir, SECRET_KEY }).status).toBe(0);
+      expect(unzip(plain).includesSessions).toBe(false);
+      expect(unzip(withSessions).includesSessions).toBe(true);
+
+      const usage = /Usage:/;
+      for (const args of [['restore', plain, '--sessions'], ['export', plain, '--everything'], ['export']]) {
+        const refused = run(args, { DATA_DIR: dataDir, SECRET_KEY });
+        expect(refused.status).toBe(1);
+        expect(refused.output).toMatch(usage);
+      }
     },
     CLI_TIMEOUT_MS,
   );
