@@ -40,8 +40,11 @@ import {
   webSessions,
 } from './schema.ts';
 
-/** The backup file names of the documents, as the data directory named them before the database. */
-export const DOCUMENT_FILES = {
+/**
+ * The documents' names, as the data directory named their files before the database. A backup archive keeps each
+ * document under its name, and the documents table keys a single document by it.
+ */
+export const DOCUMENT_NAMES = {
   clients: 'clients.json',
   users: 'users.json',
   keys: 'keys.json',
@@ -123,23 +126,23 @@ function byPosition<R extends { position: number }>(rows: readonly R[]): R[] {
  * Lays out a document that is one row of `documents`.
  *
  * @typeParam T - The document's shape.
- * @param file - Its file name, which is its row's name.
+ * @param name - Its name, which is its row's name.
  * @param fallback - The document a new install starts with. A null document has no row.
  * @returns The mapping.
  */
-function singleDocument<T>(file: string, fallback: T): DocumentMapping<T, readonly [typeof documents]> {
+function singleDocument<T>(name: string, fallback: T): DocumentMapping<T, readonly [typeof documents]> {
   return {
-    file,
+    name,
     fallback,
-    tables: [{ table: documents, keys: ['name'], scope: eq(documents.name, file) }],
-    toRows: (document) => [document === null ? [] : [{ name: file, body: document }]],
+    tables: [{ table: documents, keys: ['name'], scope: eq(documents.name, name) }],
+    toRows: (document) => [document === null ? [] : [{ name, body: document }]],
     // The body is what toRows wrote: this document, as JSON.
     fromRows: ([rows]) => (rows[0]?.body as T | undefined) ?? fallback,
   };
 }
 
 export const USERS_DOCUMENT: DocumentMapping<User[], readonly [typeof users]> = {
-  file: DOCUMENT_FILES.users,
+  name: DOCUMENT_NAMES.users,
   fallback: [],
   tables: [{ table: users, keys: ['id'] }],
   toRows: (list) => [
@@ -172,7 +175,7 @@ export const USERS_DOCUMENT: DocumentMapping<User[], readonly [typeof users]> = 
 };
 
 export const CLIENTS_DOCUMENT: DocumentMapping<OidcClient[], readonly [typeof clients]> = {
-  file: DOCUMENT_FILES.clients,
+  name: DOCUMENT_NAMES.clients,
   fallback: [],
   tables: [{ table: clients, keys: ['clientId'] }],
   toRows: (list) => [
@@ -229,7 +232,7 @@ export const CLIENTS_DOCUMENT: DocumentMapping<OidcClient[], readonly [typeof cl
 };
 
 export const APIS_DOCUMENT: DocumentMapping<Api[], readonly [typeof apis, typeof apiClients]> = {
-  file: DOCUMENT_FILES.apis,
+  name: DOCUMENT_NAMES.apis,
   fallback: [],
   tables: [
     { table: apis, keys: ['identifier'] },
@@ -270,7 +273,7 @@ export const UPSTREAMS_DOCUMENT: DocumentMapping<
   UpstreamsDocument,
   readonly [typeof upstreams, typeof upstreamGroupMappings, typeof upstreamLinks]
 > = {
-  file: DOCUMENT_FILES.upstreams,
+  name: DOCUMENT_NAMES.upstreams,
   fallback: EMPTY_UPSTREAMS,
   tables: [
     { table: upstreams, keys: ['id'] },
@@ -354,7 +357,7 @@ export const FACTORS_DOCUMENT: DocumentMapping<
   FactorsDocument,
   readonly [typeof totpFactors, typeof recoveryCodes, typeof passkeys]
 > = {
-  file: DOCUMENT_FILES.factors,
+  name: DOCUMENT_NAMES.factors,
   fallback: {},
   tables: [
     { table: totpFactors, keys: ['userId'] },
@@ -416,7 +419,7 @@ export const FACTORS_DOCUMENT: DocumentMapping<
 };
 
 export const PAIRINGS_DOCUMENT: DocumentMapping<PairingDocument, readonly [typeof pairings]> = {
-  file: DOCUMENT_FILES.pairings,
+  name: DOCUMENT_NAMES.pairings,
   fallback: {},
   tables: [{ table: pairings, keys: ['id'] }],
   toRows: (document) => [
@@ -451,7 +454,7 @@ export const PAIRINGS_DOCUMENT: DocumentMapping<PairingDocument, readonly [typeo
 };
 
 export const PASSWORD_LINKS_DOCUMENT: DocumentMapping<PasswordLinkDocument, readonly [typeof passwordLinks]> = {
-  file: DOCUMENT_FILES.passwordLinks,
+  name: DOCUMENT_NAMES.passwordLinks,
   fallback: {},
   tables: [{ table: passwordLinks, keys: ['tokenHash'] }],
   toRows: (document) => [
@@ -466,7 +469,7 @@ export const PASSWORD_LINKS_DOCUMENT: DocumentMapping<PasswordLinkDocument, read
 };
 
 export const WEB_SESSIONS_DOCUMENT: DocumentMapping<WebSessionDocument, readonly [typeof webSessions]> = {
-  file: DOCUMENT_FILES.webSessions,
+  name: DOCUMENT_NAMES.webSessions,
   fallback: {},
   tables: [{ table: webSessions, keys: ['tokenHash'] }],
   toRows: (document) => [
@@ -481,7 +484,7 @@ export const WEB_SESSIONS_DOCUMENT: DocumentMapping<WebSessionDocument, readonly
 };
 
 export const PROXY_SESSIONS_DOCUMENT: DocumentMapping<ProxySessionDocument, readonly [typeof proxySessions]> = {
-  file: DOCUMENT_FILES.proxySessions,
+  name: DOCUMENT_NAMES.proxySessions,
   fallback: {},
   tables: [{ table: proxySessions, keys: ['tokenHash'] }],
   toRows: (document) => [
@@ -513,7 +516,7 @@ export const PROXY_SESSIONS_DOCUMENT: DocumentMapping<ProxySessionDocument, read
 
 /** The part of the protected sites document kept as one row: everything but the sites. */
 const PROTECTED_SITES_SETTINGS = singleDocument<Omit<ProtectedSitesDocument, 'sites'>>(
-  DOCUMENT_FILES.protectedSites,
+  DOCUMENT_NAMES.protectedSites,
   {},
 );
 
@@ -521,7 +524,7 @@ export const PROTECTED_SITES_DOCUMENT: DocumentMapping<
   ProtectedSitesDocument,
   readonly [typeof documents, typeof protectedSites]
 > = {
-  file: DOCUMENT_FILES.protectedSites,
+  name: DOCUMENT_NAMES.protectedSites,
   fallback: EMPTY_PROTECTED_SITES,
   tables: [PROTECTED_SITES_SETTINGS.tables[0], { table: protectedSites, keys: ['id'] }],
   toRows: ({ sites = [], ...settings }) => [
@@ -550,10 +553,10 @@ export const PROTECTED_SITES_DOCUMENT: DocumentMapping<
   }),
 };
 
-export const KEYS_DOCUMENT = singleDocument<ProviderKeys | null>(DOCUMENT_FILES.keys, null);
-export const BRANDING_DOCUMENT = singleDocument<Partial<Branding>>(DOCUMENT_FILES.branding, {});
-export const SETTINGS_DOCUMENT = singleDocument<SettingsDocument>(DOCUMENT_FILES.settings, {});
-export const MAIL_DOCUMENT = singleDocument<MailDocument>(DOCUMENT_FILES.mail, {});
+export const KEYS_DOCUMENT = singleDocument<ProviderKeys | null>(DOCUMENT_NAMES.keys, null);
+export const BRANDING_DOCUMENT = singleDocument<Partial<Branding>>(DOCUMENT_NAMES.branding, {});
+export const SETTINGS_DOCUMENT = singleDocument<SettingsDocument>(DOCUMENT_NAMES.settings, {});
+export const MAIL_DOCUMENT = singleDocument<MailDocument>(DOCUMENT_NAMES.mail, {});
 
 /**
  * Lays out one oidc-provider model's entries.
@@ -563,7 +566,7 @@ export const MAIL_DOCUMENT = singleDocument<MailDocument>(DOCUMENT_FILES.mail, {
  */
 export function oidcModelDocument(model: string): DocumentMapping<ModelDocument, readonly [typeof oidcModels]> {
   return {
-    file: `${OIDC_DIRECTORY}/${model}${JSON_EXTENSION}`,
+    name: `${OIDC_DIRECTORY}/${model}${JSON_EXTENSION}`,
     fallback: {},
     tables: [{ table: oidcModels, keys: ['model', 'id'], scope: eq(oidcModels.model, model) }],
     toRows: (document) => [

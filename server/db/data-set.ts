@@ -110,8 +110,8 @@ export function createDataSet(store: DocumentStore): DataSet {
         for (const mapping of DOCUMENT_MAPPINGS) {
           const document: unknown = await readDocument(db, mapping);
           const isUntouched = JSON.stringify(document) === JSON.stringify(mapping.fallback);
-          if (isTaken(mapping.file) && isUntouched === false) {
-            files[mapping.file] = `${JSON.stringify(document, null, JSON_INDENT)}\n`;
+          if (isTaken(mapping.name) && isUntouched === false) {
+            files[mapping.name] = `${JSON.stringify(document, null, JSON_INDENT)}\n`;
           }
         }
         const audit = await db.select().from(auditEntries).orderBy(asc(auditEntries.seq));
@@ -126,7 +126,7 @@ export function createDataSet(store: DocumentStore): DataSet {
           for (const [model, rows] of byModel) {
             const mapping = loosen(oidcModelDocument(model));
             const document = mapping.fromRows([rows]);
-            files[mapping.file] = `${JSON.stringify(document, null, JSON_INDENT)}\n`;
+            files[mapping.name] = `${JSON.stringify(document, null, JSON_INDENT)}\n`;
           }
         }
         return files;
@@ -135,8 +135,8 @@ export function createDataSet(store: DocumentStore): DataSet {
       queue.run(() =>
         db.transaction(async (tx) => {
           for (const mapping of DOCUMENT_MAPPINGS) {
-            const text = files[mapping.file];
-            const document = text === undefined ? mapping.fallback : parseFile(mapping.file, text);
+            const text = files[mapping.name];
+            const document = text === undefined ? mapping.fallback : parseFile(mapping.name, text);
             await replaceDocument(tx, mapping, document);
           }
           await replaceAudit(tx, files);

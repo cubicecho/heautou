@@ -7,7 +7,7 @@ import { DIR_MODE } from '../core/wire.ts';
 import { isDataFile, JSON_LINES_EXTENSION, linesOf, parseDataFile } from '../store/backup.ts';
 import { type Database, PGLITE_DIRECTORY } from './client.ts';
 import type { DataSet } from './data-set.ts';
-import { DOCUMENT_FILES } from './documents.ts';
+import { DOCUMENT_NAMES } from './documents.ts';
 import { documents } from './schema.ts';
 
 /** Where the imported files are moved, under the data directory. */
@@ -20,7 +20,7 @@ export const IMPORTED_DIRECTORY = 'imported-json';
  * @returns True for a database no server has started on.
  */
 export async function isUnstarted(db: Database): Promise<boolean> {
-  const keys = await db.select({ name: documents.name }).from(documents).where(eq(documents.name, DOCUMENT_FILES.keys));
+  const keys = await db.select({ name: documents.name }).from(documents).where(eq(documents.name, DOCUMENT_NAMES.keys));
   return keys.length === 0;
 }
 
@@ -122,7 +122,7 @@ export async function importDataDirectory(
     return null;
   }
   const files = readDataDirectory(dataDir, [PGLITE_DIRECTORY, IMPORTED_DIRECTORY]);
-  if (DOCUMENT_FILES.keys in files === false) {
+  if (DOCUMENT_NAMES.keys in files === false) {
     return null;
   }
   await dataSet.replaceAll(files);

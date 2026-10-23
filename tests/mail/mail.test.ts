@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { SECRET_KEY_BYTES, SecretKeyError } from '../../server/core/secret-box.ts';
 import { openServices } from '../../server/core/services.ts';
-import { DOCUMENT_FILES } from '../../server/db/documents.ts';
+import { DOCUMENT_NAMES } from '../../server/db/documents.ts';
 import { documents } from '../../server/db/schema.ts';
 import { AuditType } from '../../server/store/audit.ts';
 import { BACKUP_LAYOUT, BackupErrorCode, readBackup } from '../../server/store/backup.ts';
@@ -26,7 +26,7 @@ const NEW_PASSWORD = 'a brand new one';
  * @returns The stored document, secrets as stored.
  */
 async function storedMail(app: TestApp): Promise<{ server?: { password?: string } } | undefined> {
-  const [row] = await app.services.db.select().from(documents).where(eq(documents.name, DOCUMENT_FILES.mail));
+  const [row] = await app.services.db.select().from(documents).where(eq(documents.name, DOCUMENT_NAMES.mail));
   return row?.body as { server?: { password?: string } } | undefined;
 }
 

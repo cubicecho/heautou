@@ -277,8 +277,9 @@ Owner: `server/store/audit.ts`.
 - **Document:** a store's data in memory, written through to its tables as row differences.
   Owner: `server/db/document.ts` (`DataDocument`); each store takes its own as `document`.
 - **Document mapping:** how one document is laid out as rows and read back, including an
-  older version's JSON file. Owner: `server/db/documents.ts` (`DocumentMapping`; its `file`
-  is both the `documents.name` row key and the archive path, such as `keys.json`).
+  older version's JSON file. Owner: `server/db/documents.ts` (`DocumentMapping`; its `name`,
+  from `DOCUMENT_NAMES`, is both the `documents.name` row key and the archive path, such as
+  `keys.json`, which keep their JSON-era values: A2).
 - **Sealed document:** a document whose secrets are sealed in the tables and plain in
   memory. Owner: `server/store/sealed-document.ts`.
 - **Write queue:** the one queue every write to the database waits in. Owner:
@@ -286,7 +287,7 @@ Owner: `server/store/audit.ts`.
 - **Data set:** everything kept, as the files a backup holds. Owner: `server/db/data-set.ts`.
 - **Archive file:** one entry of a backup, named as the data directory of a version before the
   database named it (`users.json`, `audit.jsonl`, `oidc/Session.json`). Owner:
-  `DOCUMENT_FILES` in `server/db/documents.ts`, `AUDIT_FILE` in `server/store/audit.ts`.
+  `DOCUMENT_NAMES` in `server/db/documents.ts`, `AUDIT_FILE` in `server/store/audit.ts`.
 - **Backup layout:** which archive files a backup skips and which it needs. Owner:
   `BACKUP_LAYOUT` in `server/store/backup.ts`.
 - **Import:** the first boot on an older JSON data directory, which puts its files in the
