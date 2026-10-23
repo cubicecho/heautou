@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { CopyButton } from '@/components/ui/copy-button';
 import { Spinner } from '@/components/ui/spinner';
 import { Mail } from '@/core/app-icons';
-import { messageOf } from '@/core/lists';
+import { messageOf } from '@/core/errors';
 import { useEmailPasswordLink, useMail } from '@/core/mail';
 import { useCreatePasswordLink } from '@/core/users';
 import { formatDateTime } from '@/lib/format';

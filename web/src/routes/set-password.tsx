@@ -8,7 +8,7 @@ import { FormElement } from '@/components/ui/form-element';
 import { Spinner } from '@/components/ui/spinner';
 import { usePasswordLink, useSetPasswordWithLink } from '@/core/account';
 import { BrandIcon, useBrandName } from '@/core/brand';
-import { messageOf } from '@/core/lists';
+import { messageOf } from '@/core/errors';
 import { signInAfterReset } from '@/core/mail';
 import { fragmentParam } from '@/core/url-fragment';
 import { PasswordStrengthMeter } from '@/passwords/strength-meter';

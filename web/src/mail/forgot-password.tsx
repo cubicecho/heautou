@@ -4,7 +4,7 @@ import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { FormElement } from '@/components/ui/form-element';
 import { BrandIcon, useBrandName } from '@/core/brand';
-import { messageOf } from '@/core/lists';
+import { messageOf } from '@/core/errors';
 import { useForgotPassword } from '@/core/mail';
 
 const FORM_ID = 'forgot-password-form';

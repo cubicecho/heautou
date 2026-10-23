@@ -12,8 +12,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Pencil, Trash2 } from '@/components/ui/icons';
 import { Tags } from '@/core/app-icons';
+import { messageOf } from '@/core/errors';
 import { useDeleteGroup, useGroups } from '@/core/groups';
-import { messageOf } from '@/core/lists';
 import { RenameGroupDialog } from '@/groups/rename-group-dialog';
 import { formatCount, joinStats } from '@/lib/format';
 

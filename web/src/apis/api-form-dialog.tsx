@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { FormElement } from '@/components/ui/form-element';
 import { useApiLifetimeBounds, useCreateApi, useUpdateApi } from '@/core/apis';
 import { useClients } from '@/core/clients';
-import { messageOf } from '@/core/lists';
+import { messageOf } from '@/core/errors';
 
 /** What each token format is called, and what it means for the API. */
 export const TOKEN_FORMATS: Record<TokenFormat, { label: string; description: string }> = {

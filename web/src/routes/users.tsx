@@ -22,8 +22,8 @@ import {
   UserRoundCheck,
   UsersRound,
 } from '@/core/app-icons';
+import { messageOf } from '@/core/errors';
 import { useGroups } from '@/core/groups';
-import { messageOf } from '@/core/lists';
 import { useProfilePictures } from '@/core/pictures';
 import { useDeleteUser, useResetSecondFactors, useSetUserDisabled, useUsers } from '@/core/users';
 import { UpstreamsSection } from '@/upstreams/upstreams-section';

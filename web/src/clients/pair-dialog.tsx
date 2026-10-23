@@ -7,8 +7,8 @@ import { Button } from '@/components/ui/button';
 import { CopyButton } from '@/components/ui/copy-button';
 import { FormElement } from '@/components/ui/form-element';
 import { Spinner } from '@/components/ui/spinner';
+import { messageOf } from '@/core/errors';
 import { useGroupOptions } from '@/core/groups';
-import { messageOf } from '@/core/lists';
 import { useCancelPairing, useFinishPairing, usePairing, useStartPairing } from '@/core/pairing';
 import { formatDateTime } from '@/lib/format';
 

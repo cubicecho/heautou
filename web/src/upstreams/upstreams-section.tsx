@@ -9,7 +9,7 @@ import { Section } from '@/components/section';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Pencil, Plus, Trash2 } from '@/components/ui/icons';
-import { messageOf } from '@/core/lists';
+import { messageOf } from '@/core/errors';
 import { useDeleteUpstream, useUpstreams } from '@/core/upstreams';
 import { joinStats } from '@/lib/format';
 import { UpstreamFormDialog } from '@/upstreams/upstream-form-dialog';

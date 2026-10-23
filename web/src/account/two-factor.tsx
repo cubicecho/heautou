@@ -16,6 +16,7 @@ import { FormElement } from '@/components/ui/form-element';
 import { KeyRound, Plus, Trash2 } from '@/components/ui/icons';
 import { Spinner } from '@/components/ui/spinner';
 import { ShieldCheck } from '@/core/app-icons';
+import { messageOf } from '@/core/errors';
 import {
   type PasskeyInfo,
   useAddPasskey,
@@ -26,7 +27,6 @@ import {
   useRemoveTotp,
   useStartTotp,
 } from '@/core/factors';
-import { messageOf } from '@/core/lists';
 import { QUERY_KEYS } from '@/core/query-keys';
 import { formatAgo, formatDate, joinStats } from '@/lib/format';
 

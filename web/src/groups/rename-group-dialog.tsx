@@ -3,8 +3,8 @@ import { DialogLayout } from '@/components/dialog-layout';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { FormElement } from '@/components/ui/form-element';
+import { messageOf } from '@/core/errors';
 import { useRenameGroup } from '@/core/groups';
-import { messageOf } from '@/core/lists';
 
 interface RenameGroupDialogProps {
   /** The group's current name. */

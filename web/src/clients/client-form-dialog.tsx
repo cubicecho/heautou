@@ -13,8 +13,9 @@ import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { FormElement } from '@/components/ui/form-element';
 import { useCreateClient, useTokenLifetimeDefaults, useUpdateClient } from '@/core/clients';
+import { messageOf } from '@/core/errors';
 import { useGroupOptions } from '@/core/groups';
-import { linesOf, messageOf } from '@/core/lists';
+import { linesOf } from '@/core/lists';
 
 const URI_ROWS = 3;
 /** The claim groups are released in unless the application reads another. */

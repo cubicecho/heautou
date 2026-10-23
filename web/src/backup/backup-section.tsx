@@ -11,7 +11,7 @@ import type { PickedFile } from '@/components/ui/file-picker-base';
 import { Download, Upload } from '@/components/ui/icons';
 import { Switch } from '@/components/ui/switch';
 import { useBackupInfo, useDownloadBackup, useRestoreBackup } from '@/core/backup';
-import { messageOf } from '@/core/lists';
+import { messageOf } from '@/core/errors';
 import { formatBytes } from '@/lib/format';
 
 /** What the restore picker offers: the gzipped archives a download saves. */

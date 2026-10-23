@@ -17,7 +17,7 @@ import { CopyButton } from '@/components/ui/copy-button';
 import { Pencil, Plus, Trash2 } from '@/components/ui/icons';
 import { useApis, useDeleteApi } from '@/core/apis';
 import { Server } from '@/core/app-icons';
-import { messageOf } from '@/core/lists';
+import { messageOf } from '@/core/errors';
 import { useProviderInfo } from '@/core/provider';
 
 export const Route = createFileRoute('/apis')({ component: ApisPage });

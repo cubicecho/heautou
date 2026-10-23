@@ -6,7 +6,7 @@ import { FilePickerButton } from '@/components/ui/file-picker';
 import type { PickedFile } from '@/components/ui/file-picker-base';
 import { Trash2 } from '@/components/ui/icons';
 import { ImageUp } from '@/core/app-icons';
-import { messageOf } from '@/core/lists';
+import { messageOf } from '@/core/errors';
 import { PICTURE_TYPES, type PictureUpload } from '@/core/pictures';
 import { formatBytes } from '@/lib/format';
 

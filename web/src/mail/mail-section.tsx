@@ -12,7 +12,7 @@ import { FormElement } from '@/components/ui/form-element';
 import { Trash2 } from '@/components/ui/icons';
 import { Switch } from '@/components/ui/switch';
 import { Send } from '@/core/app-icons';
-import { messageOf } from '@/core/lists';
+import { messageOf } from '@/core/errors';
 import { useMail, useRemoveMailServer, useSendTestEmail, useSetMailOptions, useSetMailServer } from '@/core/mail';
 
 /** The optional emails, each a switch under the server. */

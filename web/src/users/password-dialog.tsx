@@ -5,7 +5,7 @@ import { PasswordField } from '@/components/password-field';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { FormElement } from '@/components/ui/form-element';
-import { messageOf } from '@/core/lists';
+import { messageOf } from '@/core/errors';
 import { useSetUserPassword } from '@/core/users';
 import { PasswordStrengthMeter } from '@/passwords/strength-meter';
 import { passwordProblem } from '@/users/user-form-dialog';

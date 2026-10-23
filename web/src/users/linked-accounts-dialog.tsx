@@ -6,7 +6,7 @@ import { ListItem } from '@/components/list-item';
 import { EmptyState } from '@/components/page';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { messageOf } from '@/core/lists';
+import { messageOf } from '@/core/errors';
 import { useUnlinkUserUpstream } from '@/core/upstreams';
 import { useUsers } from '@/core/users';
 import { formatAgo, joinStats } from '@/lib/format';

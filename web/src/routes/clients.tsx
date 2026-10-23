@@ -23,7 +23,7 @@ import { CopyButton } from '@/components/ui/copy-button';
 import { Pencil, Plug, Plus, RefreshCw, Trash2 } from '@/components/ui/icons';
 import { AppWindow } from '@/core/app-icons';
 import { useClients, useDeleteClient, useRotateClientSecret } from '@/core/clients';
-import { messageOf } from '@/core/lists';
+import { messageOf } from '@/core/errors';
 import { useProviderInfo } from '@/core/provider';
 import type { SlotNode } from '@/lib/utils';
 

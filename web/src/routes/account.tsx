@@ -26,7 +26,7 @@ import {
 } from '@/core/account';
 import { LogOut } from '@/core/app-icons';
 import { useBrandName } from '@/core/brand';
-import { messageOf } from '@/core/lists';
+import { messageOf } from '@/core/errors';
 import { signOut } from '@/core/session';
 import { formatAgo, formatDateTime, joinStats } from '@/lib/format';
 import { PasswordStrengthMeter } from '@/passwords/strength-meter';

@@ -5,8 +5,8 @@ import { DialogLayout } from '@/components/dialog-layout';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { FormElement } from '@/components/ui/form-element';
+import { messageOf } from '@/core/errors';
 import { useGroupOptions } from '@/core/groups';
-import { messageOf } from '@/core/lists';
 import { useCreateProtectedSite, useUpdateProtectedSite } from '@/core/protected-sites';
 
 interface SiteFormDialogProps {

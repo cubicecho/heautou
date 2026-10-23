@@ -5,8 +5,9 @@ import { PasswordField } from '@/components/password-field';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { FormElement } from '@/components/ui/form-element';
+import { claimsOf, claimsProblem, claimsText } from '@/core/claims';
+import { messageOf } from '@/core/errors';
 import { useGroupOptions } from '@/core/groups';
-import { claimsOf, claimsProblem, claimsText, messageOf } from '@/core/lists';
 import { useCreateUser, useUpdateUser } from '@/core/users';
 import { PasswordStrengthMeter } from '@/passwords/strength-meter';
 

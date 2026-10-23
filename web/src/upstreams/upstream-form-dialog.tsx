@@ -12,8 +12,9 @@ import { CodeBlock } from '@/components/ui/code';
 import { CopyButton } from '@/components/ui/copy-button';
 import { FormElement } from '@/components/ui/form-element';
 import { useBackupInfo } from '@/core/backup';
+import { messageOf } from '@/core/errors';
 import { useGroupOptions } from '@/core/groups';
-import { commaListOf, linesOf, messageOf } from '@/core/lists';
+import { commaListOf, linesOf } from '@/core/lists';
 import { useCreateUpstream, useUpdateUpstream, useUpstreamRedirectUri } from '@/core/upstreams';
 import {
   OTHER_UPSTREAM,
