@@ -465,34 +465,56 @@ export const PAIRINGS_DOCUMENT: DocumentMapping<PairingDocument, readonly [typeo
     ),
 };
 
+/** Tokens kept by their hash, each naming a user until it expires: the password links and the web sessions. */
+type HashedTokens = Record<string, { userId: string; expiresAt: number }>;
+
+/** A hashed token's row, in either of their tables. */
+interface HashedTokenRow {
+  tokenHash: string;
+  userId: string;
+  expiresAt: Date;
+}
+
+/**
+ * Lays out hashed tokens as rows.
+ *
+ * @param document - The tokens, by hash.
+ * @returns Their rows.
+ */
+function hashedTokenRows(document: HashedTokens): HashedTokenRow[] {
+  return Object.entries(document).map(([tokenHash, { userId, expiresAt }]) => ({
+    tokenHash,
+    userId,
+    expiresAt: new Date(expiresAt),
+  }));
+}
+
+/**
+ * Builds hashed tokens from their rows.
+ *
+ * @param rows - The rows.
+ * @returns The tokens, by hash.
+ */
+function hashedTokensOf(rows: readonly HashedTokenRow[]): HashedTokens {
+  return Object.fromEntries(
+    rows.map((row) => [row.tokenHash, { userId: row.userId, expiresAt: row.expiresAt.getTime() }]),
+  );
+}
+
 export const PASSWORD_LINKS_DOCUMENT: DocumentMapping<PasswordLinkDocument, readonly [typeof passwordLinks]> = {
   name: DOCUMENT_NAMES.passwordLinks,
   fallback: {},
   tables: [{ table: passwordLinks, keys: ['tokenHash'] }],
-  toRows: (document) => [
-    Object.entries(document).map(([tokenHash, link]) => ({
-      tokenHash,
-      userId: link.userId,
-      expiresAt: new Date(link.expiresAt),
-    })),
-  ],
-  fromRows: ([rows]) =>
-    Object.fromEntries(rows.map((row) => [row.tokenHash, { userId: row.userId, expiresAt: row.expiresAt.getTime() }])),
+  toRows: (document) => [hashedTokenRows(document)],
+  fromRows: ([rows]) => hashedTokensOf(rows),
 };
 
 export const WEB_SESSIONS_DOCUMENT: DocumentMapping<WebSessionDocument, readonly [typeof webSessions]> = {
   name: DOCUMENT_NAMES.webSessions,
   fallback: {},
   tables: [{ table: webSessions, keys: ['tokenHash'] }],
-  toRows: (document) => [
-    Object.entries(document).map(([tokenHash, session]) => ({
-      tokenHash,
-      userId: session.userId,
-      expiresAt: new Date(session.expiresAt),
-    })),
-  ],
-  fromRows: ([rows]) =>
-    Object.fromEntries(rows.map((row) => [row.tokenHash, { userId: row.userId, expiresAt: row.expiresAt.getTime() }])),
+  toRows: (document) => [hashedTokenRows(document)],
+  fromRows: ([rows]) => hashedTokensOf(rows),
 };
 
 export const PROXY_SESSIONS_DOCUMENT: DocumentMapping<ProxySessionDocument, readonly [typeof proxySessions]> = {
