@@ -115,8 +115,8 @@ export interface ApiStoreOptions {
   clientExists: (clientId: string) => boolean;
   /** The provider's own scopes (`openid`, `profile`...), which an API may not list. */
   reservedScopes: readonly string[];
-  /** The clock, for `createdAt`. */
-  now?: () => Date;
+  /** The clock, in epoch milliseconds, for `createdAt`. */
+  now?: () => number;
 }
 
 /**
@@ -127,7 +127,7 @@ export interface ApiStoreOptions {
  * @returns The store.
  */
 export function createApiStore(document: DataDocument<Api[]>, options: ApiStoreOptions): ApiStore {
-  const { clientExists, reservedScopes, now = () => new Date() } = options;
+  const { clientExists, reservedScopes, now = Date.now } = options;
   const fieldsSchema = apiFieldsSchemaFor(reservedScopes);
   const find = (identifier: string): Api | null => document.read().find((api) => api.identifier === identifier) ?? null;
 
@@ -160,7 +160,7 @@ export function createApiStore(document: DataDocument<Api[]>, options: ApiStoreO
       }
       const fields = parseInput(fieldsSchema, withoutBlanks(input));
       checkClients(fields.allowedClientIds);
-      const api: Api = { identifier, ...fields, createdAt: now().toISOString() };
+      const api: Api = { identifier, ...fields, createdAt: new Date(now()).toISOString() };
       await document.update((apis) => [...apis, api]);
       return api;
     },

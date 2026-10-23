@@ -70,10 +70,13 @@ describe('data set', () => {
     const options = { includeSessions: true, skipped: [] };
     const files = await app.services.dataSet.exportFiles(options);
     const target = await createTestDatabase();
-    const copy = createDataSet({ db: target.db, queue: createWriteQueue() });
-    await copy.replaceAll(files);
-    expect(await copy.exportFiles(options)).toEqual(files);
-    await target.close();
+    try {
+      const copy = createDataSet({ db: target.db, queue: createWriteQueue() });
+      await copy.replaceAll(files);
+      expect(await copy.exportFiles(options)).toEqual(files);
+    } finally {
+      await target.close();
+    }
   });
 
   it('leaves out skipped files, untouched documents, and the provider sessions unless asked', async () => {

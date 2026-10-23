@@ -31,7 +31,7 @@ describe('API store', () => {
     return createApiStore(await openDocument(db, APIS_DOCUMENT), {
       clientExists: (clientId) => KNOWN_CLIENTS.includes(clientId),
       reservedScopes: SCOPES,
-      now: () => new Date('2026-10-18T00:00:00Z'),
+      now: () => Date.parse('2026-10-18T00:00:00Z'),
     });
   }
 

@@ -46,12 +46,12 @@ export interface BrandingStore {
  * Opens the branding store on its document.
  *
  * @param document - The document. Missing, the defaults apply.
- * @param [now] - The clock.
+ * @param [now] - The clock, in epoch milliseconds.
  * @returns The store.
  */
 export function createBrandingStore(
   document: DataDocument<Partial<Branding>>,
-  now: () => Date = () => new Date(),
+  now: () => number = Date.now,
 ): BrandingStore {
   const read = (): Branding => {
     const { name = BRANDING_DEFAULTS.name, logo = null } = document.read();
@@ -79,7 +79,7 @@ export function createBrandingStore(
       }
       await document.update(() => ({
         ...read(),
-        logo: { type: type as LogoType, data, updatedAt: now().toISOString() },
+        logo: { type: type as LogoType, data, updatedAt: new Date(now()).toISOString() },
       }));
       return read();
     },

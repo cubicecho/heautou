@@ -243,8 +243,8 @@ export interface ClientStore {
 
 /** What the client store is built with besides its document. */
 export interface ClientStoreOptions {
-  /** The clock, for `createdAt`. */
-  now?: () => Date;
+  /** The clock, in epoch milliseconds, for `createdAt`. */
+  now?: () => number;
   /** Whether plain http redirect URIs are allowed on any host. Asked on every save; refused when left out. */
   allowsHttpRedirects?: () => boolean;
   /** Told after a client is removed, so what names it (an API's allowed clients) can let it go. */
@@ -318,7 +318,7 @@ export const clientSecretsIn: SecretMapper<OidcClient[]> = (clients, change) =>
  * @returns The store.
  */
 export function createClientStore(document: DataDocument<OidcClient[]>, options: ClientStoreOptions = {}): ClientStore {
-  const { now = () => new Date(), allowsHttpRedirects = () => false, onRemove = async () => {} } = options;
+  const { now = Date.now, allowsHttpRedirects = () => false, onRemove = async () => {} } = options;
   type CheckedUris = Pick<
     OidcClient,
     'authMethod' | 'redirectUris' | 'postLogoutRedirectUris' | 'backchannelLogoutUri'
@@ -364,7 +364,12 @@ export function createClientStore(document: DataDocument<OidcClient[]>, options:
         throw badInput(`clientId: "${clientId}" is already taken.`);
       }
       checkRedirects(fields);
-      const client = withSecretFor({ ...fields, clientId, clientSecret: null, createdAt: now().toISOString() });
+      const client = withSecretFor({
+        ...fields,
+        clientId,
+        clientSecret: null,
+        createdAt: new Date(now()).toISOString(),
+      });
       await document.update(() => [...stored(), client]);
       return client;
     },

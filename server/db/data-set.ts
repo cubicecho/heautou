@@ -4,7 +4,7 @@
 import { asc } from 'drizzle-orm';
 import { AUDIT_FILE, auditEntryOf, auditRowOf, entriesOfLines, linesOfEntries } from '../store/audit.ts';
 import type { Transaction } from './client.ts';
-import { type DocumentStore, loosen, type Row, readDocument, replaceDocument } from './document.ts';
+import { type DocumentStore, loosen, readDocument, replaceDocument } from './document.ts';
 import { archivePathOf, DOCUMENT_MAPPINGS, modelOfFile, oidcModelDocument } from './documents.ts';
 import { auditEntries, oidcModels } from './schema.ts';
 
@@ -120,12 +120,9 @@ export function createDataSet(store: DocumentStore): DataSet {
           files[AUDIT_FILE] = linesOfEntries(audit.map(auditEntryOf));
         }
         if (options.includeSessions) {
-          const byModel = new Map<string, Row[]>();
-          for (const row of await db.select().from(oidcModels)) {
-            byModel.set(row.model, [...(byModel.get(row.model) ?? []), row]);
-          }
+          const byModel = Map.groupBy(await db.select().from(oidcModels), (row) => row.model);
           for (const [model, rows] of byModel) {
-            const mapping = loosen(oidcModelDocument(model));
+            const mapping = oidcModelDocument(model);
             const document = mapping.fromRows([rows]);
             files[archivePathOf(mapping.name)] = `${JSON.stringify(document, null, JSON_INDENT)}\n`;
           }

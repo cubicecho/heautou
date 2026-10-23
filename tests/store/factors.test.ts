@@ -1,4 +1,4 @@
-import { createSecretBox } from '../../server/core/secret-box.ts';
+import { createSecretBox, isSealed } from '../../server/core/secret-box.ts';
 import { newTotpSecret, totpCode, totpStepAt } from '../../server/core/totp.ts';
 import { openDocument } from '../../server/db/document.ts';
 import { FACTORS_DOCUMENT } from '../../server/db/documents.ts';
@@ -92,7 +92,7 @@ describe('factor store', () => {
     await (await open()).setTotp('ada', secret, -1);
     const rows = await db.db.select().from(totpFactors);
     expect(JSON.stringify(rows)).not.toContain(secret);
-    expect(rows[0]?.secret).toMatch(/^enc:v1:/);
+    expect(isSealed(rows[0]?.secret ?? '')).toBe(true);
     expect(await (await open()).checkTotp('ada', totpCode(secret, totpStepAt(NOW)))).toBe(true);
   });
 });

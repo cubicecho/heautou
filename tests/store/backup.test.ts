@@ -1,14 +1,14 @@
-import { randomBytes } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { gunzipSync, gzipSync } from 'node:zlib';
 import { BACKUP_DEFAULTS } from '../../server/core/defaults.ts';
-import { createSecretBox, SECRET_KEY_BYTES, type SecretKeys } from '../../server/core/secret-box.ts';
+import { createSecretBox, isSealed, type SecretKeys } from '../../server/core/secret-box.ts';
 import { openServices, type Services } from '../../server/core/services.ts';
 import type { OpenDatabase } from '../../server/db/client.ts';
+import { archivePathOf, DOCUMENT_NAMES, oidcModelDocument } from '../../server/db/documents.ts';
 import { readDataDirectory } from '../../server/db/import.ts';
 import { documents, oidcModels, users, webSessions } from '../../server/db/schema.ts';
-import { AuditType, userTarget } from '../../server/store/audit.ts';
+import { AUDIT_FILE, AuditType, userTarget } from '../../server/store/audit.ts';
 import {
   BACKUP_FORMAT,
   BACKUP_LAYOUT,
@@ -21,12 +21,19 @@ import {
 import { ClientAuthMethod } from '../../server/store/clients.ts';
 import { UpstreamKind } from '../../server/store/upstreams.ts';
 import { createTestDatabase } from '../db.ts';
-import { tempDir } from '../helpers.ts';
+import { newSecretKey, newSecretKeys, tempDir } from '../helpers.ts';
 import { PASSWORD, REDIRECT_URI } from '../oidc/browser.ts';
 
 const ISSUER = 'http://127.0.0.1:1/oidc';
 /** The provider session each populated database starts with, standing in for its sessions and tokens. */
 const PROVIDER_SESSION = { model: 'Session', id: 'session-1', payload: { kind: 'Session' }, expiresAt: null };
+
+/** Where the documents these tests look at are in an archive. */
+const USERS_FILE = archivePathOf(DOCUMENT_NAMES.users);
+const CLIENTS_FILE = archivePathOf(DOCUMENT_NAMES.clients);
+const KEYS_FILE = archivePathOf(DOCUMENT_NAMES.keys);
+const BRANDING_FILE = archivePathOf(DOCUMENT_NAMES.branding);
+const SESSION_MODEL_FILE = archivePathOf(oidcModelDocument(PROVIDER_SESSION.model).name);
 
 /** The databases and services a test opened, settled and handed back after it. */
 const opened: { databases: OpenDatabase[]; services: Services[] } = { databases: [], services: [] };
@@ -43,13 +50,6 @@ afterEach(async () => {
   opened.services = [];
   opened.databases = [];
 });
-
-/**
- * Makes a random sealing key.
- *
- * @returns 32 random bytes.
- */
-const newKey = (): Buffer => randomBytes(SECRET_KEY_BYTES);
 
 /**
  * Opens the services on a database, as a boot does.
@@ -145,30 +145,30 @@ async function refusal(run: () => unknown): Promise<string> {
 
 describe('backups', () => {
   it('takes every store, secrets sealed, leaving out web sessions and, unless asked, provider sessions', async () => {
-    const key = newKey();
+    const key = newSecretKey();
     const { services, client } = await populated(key);
 
     const without = unzip(await services.backup.create({ includeSessions: false }));
     expect(without).toMatchObject({ format: BACKUP_FORMAT, version: BACKUP_VERSION, includesSessions: false });
     expect(Object.keys(without.files)).toEqual(
-      expect.arrayContaining(['clients.json', 'users.json', 'keys.json', 'audit.jsonl']),
+      expect.arrayContaining([CLIENTS_FILE, USERS_FILE, KEYS_FILE, AUDIT_FILE]),
     );
-    expect(Object.keys(without.files)).not.toContain('web-sessions.json');
-    expect(Object.keys(without.files)).not.toContain('proxy-sessions.json');
+    expect(Object.keys(without.files)).not.toContain(archivePathOf(DOCUMENT_NAMES.webSessions));
+    expect(Object.keys(without.files)).not.toContain(archivePathOf(DOCUMENT_NAMES.proxySessions));
     expect(Object.keys(without.files).some((name) => name.startsWith('oidc/'))).toBe(false);
-    expect(without.files['clients.json']).toContain('enc:v1:');
-    expect(without.files['clients.json']).not.toContain(client.clientSecret ?? 'no secret');
-    expect(without.files['keys.json']).toContain('enc:v1:');
-    expect(without.files['audit.jsonl']).toContain(AuditType.UserCreated);
+    expect(isSealed(JSON.parse(without.files[CLIENTS_FILE] ?? '[]')[0]?.clientSecret ?? '')).toBe(true);
+    expect(without.files[CLIENTS_FILE]).not.toContain(client.clientSecret ?? 'no secret');
+    expect(isSealed(JSON.parse(without.files[KEYS_FILE] ?? '{}').jwks?.[0]?.d ?? '')).toBe(true);
+    expect(without.files[AUDIT_FILE]).toContain(AuditType.UserCreated);
 
     const withSessions = unzip(await services.backup.create({ includeSessions: true }));
-    expect(JSON.parse(withSessions.files['oidc/Session.json'] ?? '{}')).toMatchObject({
+    expect(JSON.parse(withSessions.files[SESSION_MODEL_FILE] ?? '{}')).toMatchObject({
       [PROVIDER_SESSION.id]: { payload: PROVIDER_SESSION.payload, expiresAt: null },
     });
   });
 
   it('builds an archive from the files it is given, and refuses one without the files a server needs', async () => {
-    const files = { 'keys.json': '{"jwks":[],"cookieKeys":[]}\n', 'users.json': '[]\n' };
+    const files = { [KEYS_FILE]: '{"jwks":[],"cookieKeys":[]}\n', [USERS_FILE]: '[]\n' };
     const archive = unzip(createBackup(files, BACKUP_LAYOUT, { includeSessions: false }, () => 0));
     expect(archive).toEqual({
       format: BACKUP_FORMAT,
@@ -177,7 +177,7 @@ describe('backups', () => {
       includesSessions: false,
       files,
     });
-    expect(await refusal(() => createBackup({ 'users.json': '[]\n' }, BACKUP_LAYOUT, { includeSessions: false }))).toBe(
+    expect(await refusal(() => createBackup({ [USERS_FILE]: '[]\n' }, BACKUP_LAYOUT, { includeSessions: false }))).toBe(
       BackupErrorCode.BadFile,
     );
   });
@@ -187,15 +187,15 @@ describe('backups', () => {
     mkdirSync(path.join(dataDir, 'pg'));
     writeFileSync(path.join(dataDir, 'pg', 'ignored.json'), '{');
     writeFileSync(path.join(dataDir, 'notes.txt'), 'not data');
-    writeFileSync(path.join(dataDir, 'audit.jsonl'), '{"id":"1","at":"x","type":"t"}\n{"id":"2",\n');
-    expect(readDataDirectory(dataDir, ['pg'])).toEqual({ 'audit.jsonl': '{"id":"1","at":"x","type":"t"}\n' });
+    writeFileSync(path.join(dataDir, AUDIT_FILE), '{"id":"1","at":"x","type":"t"}\n{"id":"2",\n');
+    expect(readDataDirectory(dataDir, ['pg'])).toEqual({ [AUDIT_FILE]: '{"id":"1","at":"x","type":"t"}\n' });
 
-    writeFileSync(path.join(dataDir, 'users.json'), '[{');
+    writeFileSync(path.join(dataDir, USERS_FILE), '[{');
     expect(await refusal(() => readDataDirectory(dataDir, ['pg']))).toBe(BackupErrorCode.BadFile);
   });
 
   it('round trips through a restore into a running server, signing everyone out', async () => {
-    const key = newKey();
+    const key = newSecretKey();
     const source = await populated(key);
     const apiIdentifier = 'https://photos-api.home.lan';
     await source.services.apis.create({
@@ -212,6 +212,7 @@ describe('backups', () => {
 
     expect(restored).toMatchObject({ includesSessions: true });
     expect(target.services.users.list().map((user) => user.username)).toEqual(['ada']);
+    expect(await target.services.users.authenticate('ada', PASSWORD)).not.toBeNull();
     const client = target.services.clients.find(source.client.clientId);
     expect(client?.clientSecret).toBe(source.client.clientSecret);
     expect(target.services.apis.find(apiIdentifier)?.allowedClientIds).toEqual([source.client.clientId]);
@@ -238,7 +239,7 @@ describe('backups', () => {
       includesSessions: false,
       files: {
         ...files,
-        'branding.json': `${JSON.stringify({ name: 'Home sign-in' })}\n`,
+        [BRANDING_FILE]: `${JSON.stringify({ name: 'Home sign-in' })}\n`,
         'admin-sessions.json': `${JSON.stringify({ hash: { userId: 'u-ada', expiresAt: Date.now() + 60_000 } })}\n`,
       },
     };
@@ -249,13 +250,13 @@ describe('backups', () => {
     expect(target.services.users.list().map((user) => user.username)).toEqual(['ada']);
     expect(target.services.branding.read().name).toBe('Home sign-in');
     const names = (await target.database.db.select({ name: documents.name }).from(documents)).map((row) => row.name);
-    expect(names).toEqual(expect.arrayContaining(['branding', 'keys']));
+    expect(names).toEqual(expect.arrayContaining([DOCUMENT_NAMES.branding, DOCUMENT_NAMES.keys]));
     expect(names.filter((name) => name.endsWith('.json'))).toEqual([]);
     expect(await target.database.db.select().from(webSessions)).toEqual([]);
   });
 
   it('brings back every store’s data, not only what the target held before', async () => {
-    const key = newKey();
+    const key = newSecretKey();
     /**
      * Fills every store a restore reloads, each with values its server is told apart by.
      *
@@ -323,10 +324,10 @@ describe('backups', () => {
   });
 
   it('opens secrets sealed under the previous key, and re-seals them under the current one', async () => {
-    const oldKey = newKey();
+    const oldKey = newSecretKey();
     const source = await populated(oldKey);
     const archive = await source.services.backup.create({ includeSessions: false });
-    const newer = newKey();
+    const newer = newSecretKey();
     const target = await populated(newer);
     const targetServices = await boot(target.database, newer, oldKey);
     await targetServices.backup.restore(archive);
@@ -339,9 +340,9 @@ describe('backups', () => {
   });
 
   it('refuses an archive sealed under another key, or when no key is set, writing nothing', async () => {
-    const source = await populated(newKey());
+    const source = await populated(newSecretKey());
     const archive = await source.services.backup.create({ includeSessions: false });
-    const target = await populated(newKey());
+    const target = await populated(newSecretKey());
     const before = await target.database.db.select().from(users);
 
     expect(await refusal(() => target.services.backup.restore(archive))).toBe(BackupErrorCode.WrongKey);
@@ -351,7 +352,7 @@ describe('backups', () => {
   });
 
   it('refuses a file that is not an archive, another version, or damaged contents', async () => {
-    const box = createSecretBox({ current: newKey(), previous: null });
+    const box = createSecretBox(newSecretKeys());
     const read = (archive: Buffer) => () => readBackup(archive, BACKUP_LAYOUT, box);
     const fresh = await freshArchive();
     /**
@@ -379,12 +380,12 @@ describe('backups', () => {
       BackupErrorCode.WrongVersion,
     );
     expect(await altered((archive) => ({ ...archive, files: [] }))).toBe(BackupErrorCode.NotAnArchive);
-    expect(await withFiles({ 'users.json': '[{' })).toBe(BackupErrorCode.BadFile);
-    expect(await withFiles({ 'audit.jsonl': '{"a":1}\n{' })).toBe(BackupErrorCode.BadFile);
+    expect(await withFiles({ [USERS_FILE]: '[{' })).toBe(BackupErrorCode.BadFile);
+    expect(await withFiles({ [AUDIT_FILE]: '{"a":1}\n{' })).toBe(BackupErrorCode.BadFile);
     expect(await withFiles({ '../escape.json': '{}' })).toBe(BackupErrorCode.BadFile);
     expect(await withFiles({ 'run.sh': 'echo' })).toBe(BackupErrorCode.BadFile);
     expect(
-      await altered(({ files: { 'keys.json': _keys, ...rest }, ...archive }) => ({ ...archive, files: rest })),
+      await altered(({ files: { [KEYS_FILE]: _keys, ...rest }, ...archive }) => ({ ...archive, files: rest })),
     ).toBe(BackupErrorCode.BadFile);
   });
 

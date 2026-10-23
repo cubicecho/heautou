@@ -1,12 +1,11 @@
-import { randomBytes } from 'node:crypto';
 import { eq } from 'drizzle-orm';
-import { SECRET_KEY_BYTES, SecretKeyError } from '../../server/core/secret-box.ts';
+import { isSealed, SecretKeyError } from '../../server/core/secret-box.ts';
 import { openServices } from '../../server/core/services.ts';
 import { DOCUMENT_NAMES } from '../../server/db/documents.ts';
 import { documents } from '../../server/db/schema.ts';
 import { AuditType } from '../../server/store/audit.ts';
 import { BACKUP_LAYOUT, BackupErrorCode, readBackup } from '../../server/store/backup.ts';
-import { startTestApp, type TestApp } from '../helpers.ts';
+import { newSecretKeys, startTestApp, type TestApp } from '../helpers.ts';
 import { adminGql, type Browser, PASSWORD, signInAsAdmin } from '../oidc/browser.ts';
 import { createFakeTransport, type FakeTransport, TEST_SERVER, waitFor } from './fake-transport.ts';
 
@@ -40,7 +39,7 @@ describe('email', () => {
     fake = createFakeTransport();
     app = await startTestApp({
       mailTransport: fake.factory,
-      secretKeys: { current: randomBytes(SECRET_KEY_BYTES), previous: null },
+      secretKeys: newSecretKeys(),
     });
     admin = await signInAsAdmin(app);
     await app.services.users.update(app.services.users.list()[0]?.id ?? '', {
@@ -86,7 +85,7 @@ describe('email', () => {
     await app.services.settled();
     const stored = await storedMail(app);
     expect(JSON.stringify(stored)).not.toContain(TEST_SERVER.password);
-    expect(stored?.server?.password).toMatch(/^enc:v1:/);
+    expect(isSealed(stored?.server?.password ?? '')).toBe(true);
     expect(JSON.stringify(await adminGql(admin, MAIL))).not.toContain(TEST_SERVER.password);
 
     // A blank password keeps the saved one.
@@ -102,7 +101,7 @@ describe('email', () => {
         database: app.database.db,
         issuer: app.services.issuer,
         isProxied: false,
-        secretKeys: { current: randomBytes(SECRET_KEY_BYTES), previous: null },
+        secretKeys: newSecretKeys(),
       }),
     ).rejects.toThrow(SecretKeyError);
     expect(await storedMail(app)).toEqual(before);

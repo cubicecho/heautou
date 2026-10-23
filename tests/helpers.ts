@@ -1,7 +1,9 @@
+import { randomBytes } from 'node:crypto';
 import { mkdtempSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { SECRET_KEY_BYTES, type SecretKeys } from '../server/core/secret-box.ts';
 import { openServices, type ServiceSettings, type Services } from '../server/core/services.ts';
 import type { OpenDatabase } from '../server/db/client.ts';
 import { createApp } from '../server/http/app.ts';
@@ -20,6 +22,25 @@ export function portOf(server: Server): number {
     throw new Error('The test server is not listening on a TCP port.');
   }
   return address.port;
+}
+
+/**
+ * Makes a random sealing key, as `SECRET_KEY` holds one.
+ *
+ * @returns 32 random bytes.
+ */
+export function newSecretKey(): Buffer {
+  return randomBytes(SECRET_KEY_BYTES);
+}
+
+/**
+ * Makes sealing keys around a random current key.
+ *
+ * @param [previous] - The key before it, or null for none.
+ * @returns The keys.
+ */
+export function newSecretKeys(previous: Buffer | null = null): SecretKeys {
+  return { current: newSecretKey(), previous };
 }
 
 /**

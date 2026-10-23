@@ -151,10 +151,10 @@ function withDefaults(user: User): User {
  * Builds the user store over its document.
  *
  * @param document - The document holding every user.
- * @param [now] - The clock, for `createdAt`.
+ * @param [now] - The clock, in epoch milliseconds, for `createdAt`.
  * @returns The store.
  */
-export function createUserStore(document: DataDocument<User[]>, now: () => Date = () => new Date()): UserStore {
+export function createUserStore(document: DataDocument<User[]>, now: () => number = Date.now): UserStore {
   const stored = (): User[] => document.read().map(withDefaults);
   const findStored = (id: string): User | null => stored().find((user) => user.id === id) ?? null;
 
@@ -213,7 +213,7 @@ export function createUserStore(document: DataDocument<User[]>, now: () => Date 
         pictureVersion: null,
         id: randomUUID(),
         passwordHash: password === undefined ? '' : hashPassword(password),
-        createdAt: now().toISOString(),
+        createdAt: new Date(now()).toISOString(),
       };
       await write((users) => [...users, user]);
       return toPublic(user);
