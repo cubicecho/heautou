@@ -1,3 +1,4 @@
+import { BRANDING_DEFAULTS } from '@server/core/defaults.ts';
 import { createFileRoute } from '@tanstack/react-router';
 import { useState } from 'react';
 import type { UpstreamFieldsFragment } from '@/__generated__/graphql';
@@ -44,8 +45,6 @@ export const Route = createFileRoute('/settings')({ component: SettingsPage });
 
 /** The image types the server takes for a logo. */
 const LOGO_TYPES = 'image/png,image/jpeg,image/webp,image/svg+xml';
-/** The largest logo the server takes, in bytes: `BRANDING_DEFAULTS.maxLogoBytes`. */
-const MAX_LOGO_BYTES = 262_144;
 /** How many bytes go to `String.fromCharCode` at once, well under the engines' argument limits. */
 const CHUNK_BYTES = 0x8000;
 
@@ -87,8 +86,10 @@ function BrandingSection() {
     if (file === undefined) {
       return;
     }
-    if (file.size > MAX_LOGO_BYTES) {
-      setTooBig(`${file.name} is ${formatBytes(file.size)}. Use an image under ${formatBytes(MAX_LOGO_BYTES)}.`);
+    if (file.size > BRANDING_DEFAULTS.maxLogoBytes) {
+      setTooBig(
+        `${file.name} is ${formatBytes(file.size)}. Use an image under ${formatBytes(BRANDING_DEFAULTS.maxLogoBytes)}.`,
+      );
       return;
     }
     setTooBig(null);

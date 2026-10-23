@@ -19,7 +19,11 @@ export default defineConfig({
     tailwindcss(),
   ],
   resolve: {
-    alias: { '@': fileURLToPath(new URL('./web/src', import.meta.url)) },
+    alias: {
+      '@': fileURLToPath(new URL('./web/src', import.meta.url)),
+      // The server modules the web app shares rules and limits with. Each imports nothing (tests/web/server-imports).
+      '@server': fileURLToPath(new URL('./server', import.meta.url)),
+    },
   },
   build: { outDir: '../dist', emptyOutDir: true },
   server: {

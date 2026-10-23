@@ -1,5 +1,5 @@
 {
   "extends": "./web/tsconfig.json",
-  "compilerOptions": { "paths": { "@/*": ["./web/src/*"] } },
+  "compilerOptions": { "paths": { "@/*": ["./web/src/*"], "@server/*": ["./server/*"] } },
   "files": []
 }

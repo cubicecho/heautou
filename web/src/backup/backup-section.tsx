@@ -1,3 +1,4 @@
+import { BACKUP_DEFAULTS } from '@server/core/defaults.ts';
 import { useState } from 'react';
 import { ConfirmButton } from '@/components/confirm-button';
 import { QueryError } from '@/components/query-state';
@@ -15,8 +16,6 @@ import { formatBytes } from '@/lib/format';
 
 /** What the restore picker offers: the gzipped archives a download saves. */
 const ARCHIVE_TYPES = '.gz,application/gzip';
-/** The largest archive the server takes, in bytes: `BACKUP_DEFAULTS.maxArchiveBytes`. */
-const MAX_ARCHIVE_BYTES = 33_554_432;
 
 /** An archive picked for a restore, waiting for the admin to confirm it. */
 interface PickedArchive {
@@ -69,9 +68,11 @@ export function BackupSection() {
       return;
     }
     restore.reset();
-    if (file.size > MAX_ARCHIVE_BYTES) {
+    if (file.size > BACKUP_DEFAULTS.maxArchiveBytes) {
       setPicked(null);
-      setTooBig(`${file.name} is ${formatBytes(file.size)}. A restore takes up to ${formatBytes(MAX_ARCHIVE_BYTES)}.`);
+      setTooBig(
+        `${file.name} is ${formatBytes(file.size)}. A restore takes up to ${formatBytes(BACKUP_DEFAULTS.maxArchiveBytes)}.`,
+      );
       return;
     }
     setTooBig(null);

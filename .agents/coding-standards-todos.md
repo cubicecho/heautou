@@ -64,9 +64,9 @@ average 13); every failing file passes alone. See T5 and T6.
 | R13 | Refactor [readability] | Renames the document mapping's `file` field and `DOCUMENT_FILES` to say they are the document's name; the stored values stay | M5 | M5, A2 | done |
 | D6 | Doc [sweep] | Rewrites comments that say "the file" or "model files" where they mean the document or its tables | M5 | M5 | done |
 | A2 | API change | Asks whether the stored document names and archive paths (`keys.json`, …) keep their JSON-era values | Decides R13's scope | — | done |
-| M6 | Model change | Gives each rule or limit both sides check one owner on the server, imported by the web or held to it by a test | Ends silent drift between form checks and server checks | — | approved |
+| M6 | Model change | Gives each rule or limit both sides check one owner on the server, imported by the web or held to it by a test | Ends silent drift between form checks and server checks | — | done |
 | B4 | Bug (question) | Asks whether the web's host check should match the server's, which also limits label and total length | Settles a copy that already drifted | — | done |
-| R28 | Refactor [reuse] | Has the web import the server's limits and patterns (archive size, logo size, host and ID patterns, password user inputs) instead of copying them | M6 | M6, B4 | approved |
+| R28 | Refactor [reuse] | Has the web import the server's limits and patterns (archive size, logo size, host and ID patterns, password user inputs) instead of copying them | M6 | M6, B4 | done |
 | R1 | Refactor [reuse] | One "signed-in user or 401" middleware, with a typed way to read the viewer, replacing seven copies | Removes copies in five route modules and an unchecked `res.locals` read | — | done |
 | R2 | Refactor [simplify] | Makes the GraphQL context the services plus viewer and address, so nobody lists every service twice more | Removes two hand-kept lists in two of the most-changed files (P14) | R1 | open |
 | R3 | Refactor [reuse] | Uses the shared JSON refusal helper in the sign-in routes instead of its exact copy | Removes a copy | — | open |
@@ -209,7 +209,7 @@ already drifted (B4). To-be: the server module that owns each rule exports it fr
 that imports nothing server-only (`core/defaults.ts` already imports nothing), and the web
 imports it; where that can't be, a test holds the two together. Why it is simpler: one
 place to change a limit. Needs a decision on web/tsconfig `include` and the Vite build.
-Implemented by: B4, R28. Status: open.
+Implemented by: B4, R28. Status: done.
 
 ---
 

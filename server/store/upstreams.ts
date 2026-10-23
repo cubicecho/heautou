@@ -6,6 +6,7 @@ import type { DataDocument } from '../db/document.ts';
 import { replaceGroupIn } from './claims.ts';
 import { redirectUriProblem } from './redirect-uris.ts';
 import type { SecretMapper } from './sealed-document.ts';
+import { UPSTREAM_ID_PATTERN } from './upstream-id.ts';
 
 /** How an upstream provider signs users in. */
 export const UpstreamKind = {
@@ -97,7 +98,6 @@ export const EMPTY_UPSTREAMS: Readonly<UpstreamsDocument> = Object.freeze({ prov
 /** Who an identity is, as the sign-in learned it, without what it says about the person. */
 export type IdentityKey = Pick<UpstreamLink, 'providerId' | 'issuer' | 'subject'>;
 
-const ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 /** A domain an address may end in, such as `example.com`. */
 const DOMAIN_PATTERN = /^[a-z0-9-]+(\.[a-z0-9-]+)+$/;
 /** What a scope may hold (RFC 6749 section 3.3). */
@@ -189,7 +189,7 @@ const idSchema = z
   .trim()
   .min(1, 'give the provider an id')
   .max(UPSTREAM_DEFAULTS.maxIdLength)
-  .regex(ID_PATTERN, 'use lower-case letters, digits and "-", starting with a letter or digit');
+  .regex(UPSTREAM_ID_PATTERN, 'use lower-case letters, digits and "-", starting with a letter or digit');
 
 /** The upstream providers and the identities linked to users, kept in one document. */
 export interface UpstreamStore {

@@ -1,3 +1,4 @@
+import { HOST_PATTERN } from '@server/store/site-host.ts';
 import type { ProtectedSiteFieldsFragment } from '@/__generated__/graphql';
 import { ComboboxField, InputField, SwitchField, useAppForm } from '@/components/app-form';
 import { DialogLayout } from '@/components/dialog-layout';
@@ -7,9 +8,6 @@ import { FormElement } from '@/components/ui/form-element';
 import { useGroupOptions } from '@/core/admin';
 import { messageOf } from '@/core/lists';
 import { useCreateProtectedSite, useUpdateProtectedSite } from '@/core/protected-sites';
-
-/** A host as the server takes it once lowercased: a DNS name of up to 253 characters, labels of up to 63. */
-const HOST_PATTERN = /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/;
 
 interface SiteFormDialogProps {
   /** The site to edit, or null to add one. */

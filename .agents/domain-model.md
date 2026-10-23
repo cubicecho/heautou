@@ -151,6 +151,7 @@ Owner: `server/store/audit.ts`.
 | A setup URL works once, for `PAIRING_DEFAULTS.linkSeconds` | `server/oidc/pairing.ts`, `server/store/pairings.ts` |
 | A user outside a client's `allowedGroups`, or disabled, gets no code | `findAccount` in `server/oidc/provider.ts`, the `account_refused` policy check |
 | A protected site that requires a second factor sees only `acr` `mfa` sessions | `server/forward-auth/routes.ts` |
+| A rule or limit the web checks too (a site host, an upstream id, the archive and logo sizes, a password's guessable words) is the server's own, imported | `@server/` imports of `server/core/defaults.ts`, `server/core/password-words.ts`, `server/store/site-host.ts`, `server/store/upstream-id.ts`; `tests/web/server-imports.test.ts` keeps what the web imports free of Node-only code |
 | A restore writes nothing unless every file parses and every sealed value opens | `readBackup` in `server/store/backup.ts`, then one transaction in `server/db/data-set.ts` |
 
 ## Glossary

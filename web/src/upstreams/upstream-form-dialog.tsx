@@ -1,3 +1,4 @@
+import { UPSTREAM_ID_PATTERN } from '@server/store/upstream-id.ts';
 import type { UnknownIdentity, UpstreamFieldsFragment, UpstreamKind } from '@/__generated__/graphql';
 import { ComboboxField, InputField, SelectField, SwitchField, TextareaField, useAppForm } from '@/components/app-form';
 import { DescriptionList, PropertyRow } from '@/components/description-list';
@@ -19,7 +20,6 @@ const UNKNOWN_OPTIONS: { value: UnknownIdentity; label: string }[] = [
   { value: 'REFUSE', label: 'Turn them away until a user links the account' },
   { value: 'CREATE', label: 'Make a user for them' },
 ];
-const ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 const MAPPING_ROWS = 3;
 /** What separates the upstream group from the local one in a mapping line. */
 const MAPPING_SEPARATOR = '=';
@@ -149,12 +149,12 @@ export function UpstreamFormDialog({ upstream, open, onOpenChange }: UpstreamFor
               description="Lower-case letters, digits and dashes. It is part of the redirect URI, so it cannot change."
               validators={{
                 onChange: ({ value }) =>
-                  ID_PATTERN.test(value.trim()) ? undefined : 'Use lower-case letters, digits and dashes.',
+                  UPSTREAM_ID_PATTERN.test(value.trim()) ? undefined : 'Use lower-case letters, digits and dashes.',
               }}
             />
           )}
           <form.Subscribe selector={(state) => state.values.id.trim()}>
-            {(id) => <RedirectUri id={isEdit ? upstream.id : ID_PATTERN.test(id) ? id : ''} />}
+            {(id) => <RedirectUri id={isEdit ? upstream.id : UPSTREAM_ID_PATTERN.test(id) ? id : ''} />}
           </form.Subscribe>
           <form.Subscribe selector={(state) => kindOf(state.values.kind)}>
             {(kind) =>

@@ -5,9 +5,8 @@ import { badInput, notFound } from '../core/errors.ts';
 import { parseInput } from '../core/validation.ts';
 import type { DataDocument } from '../db/document.ts';
 import { replaceGroupIn } from './claims.ts';
+import { HOST_PATTERN } from './site-host.ts';
 
-/** A DNS name in lowercase: labels of letters, digits and inner dashes, joined by dots. */
-const HOST_PATTERN = /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/;
 /** A path prefix: one or more `/segment`s of URL path characters, no dot segments. */
 const PATH_PREFIX_PATTERN = /^(?:\/(?!\.\.?(?:\/|$))[A-Za-z0-9._~!$&'()*+,;=:@%-]+)+$/;
 const PATH_SEPARATOR = '/';
