@@ -3,9 +3,19 @@ import { RouteError } from '@/components/route-error';
 import { BarNavItem, Sidebar, SidebarNavItem, SidebarSection } from '@/components/sidebar';
 import { SidebarLayout } from '@/components/split-layout';
 import { Button } from '@/components/ui/button';
-import { Settings, UserRound } from '@/components/ui/icons';
+import { Ellipsis, Monitor, Moon, Settings, Sun, UserRound } from '@/components/ui/icons';
+import {
+  Menu,
+  MenuContent,
+  MenuItem,
+  MenuRadioGroup,
+  MenuRadioItem,
+  MenuSeparator,
+  MenuTrigger,
+} from '@/components/ui/menu';
 import { ThemePicker } from '@/components/ui/theme-picker';
 import { useThemePreference } from '@/components/ui/theme-preference';
+import { isThemePreference, type ThemePreference } from '@/components/ui/theme-preference-base';
 import { signOut, useViewer } from '@/core/admin';
 import { Activity, AppWindow, LayoutDashboard, LogOut, Server, ShieldCheck, Tags, UsersRound } from '@/core/app-icons';
 import { BrandIcon, useBrandName } from '@/core/brand';
@@ -30,15 +40,22 @@ const PROVIDER_PAGES = [
 
 /** The admin pages, in the order the sidebar lists them. */
 const PLACES = [
-  { to: '/', label: 'Overview', Icon: LayoutDashboard },
-  { to: '/clients', label: 'Clients', Icon: AppWindow },
-  { to: '/apis', label: 'APIs', Icon: Server },
-  { to: '/users', label: 'Users', Icon: UsersRound },
-  { to: '/groups', label: 'Groups', Icon: Tags },
-  { to: '/sites', label: 'Protected sites', Icon: ShieldCheck },
-  { to: '/activity', label: 'Activity', Icon: Activity },
-  { to: '/settings', label: 'Settings', Icon: Settings },
+  { to: '/', label: 'Overview', Icon: LayoutDashboard, isInBar: true },
+  { to: '/clients', label: 'Clients', Icon: AppWindow, isInBar: true },
+  { to: '/apis', label: 'APIs', Icon: Server, isInBar: false },
+  { to: '/users', label: 'Users', Icon: UsersRound, isInBar: true },
+  { to: '/groups', label: 'Groups', Icon: Tags, isInBar: false },
+  { to: '/sites', label: 'Protected sites', Icon: ShieldCheck, isInBar: true },
+  { to: '/activity', label: 'Activity', Icon: Activity, isInBar: false },
+  { to: '/settings', label: 'Settings', Icon: Settings, isInBar: false },
 ] as const;
+
+/** The theme choices the narrow bar's menu offers, in its order. */
+const THEMES = [
+  { value: 'light', label: 'Light', Icon: Sun },
+  { value: 'dark', label: 'Dark', Icon: Moon },
+  { value: 'system', label: 'System', Icon: Monitor },
+] as const satisfies readonly { value: ThemePreference; label: string; Icon: unknown }[];
 
 export const Route = createRootRoute({
   component: RootRoute,
@@ -58,17 +75,42 @@ function Brand() {
 }
 
 /**
- * The narrow bar's way to the signed-in user's own page.
+ * The narrow bar's menu: the places the bar has no room for, the user's own page, the theme and signing out.
+ *
+ * @param props - What the sign-out row says.
+ * @param props.signOutLabel - The sign-out row's label, naming who is signed in.
  */
-function AccountLink() {
+function NarrowMenu({ signOutLabel }: { signOutLabel: string }) {
+  const [theme, setTheme] = useThemePreference();
   return (
-    <Button
-      variant="ghost"
-      size="icon-sm"
-      aria-label="My account"
-      iconSlot={<UserRound />}
-      linkSlot={<Link to="/account" />}
-    />
+    <Menu>
+      <MenuTrigger asChild>
+        <Button variant="outline" size="icon-sm" aria-label="More" iconSlot={<Ellipsis />} />
+      </MenuTrigger>
+      <MenuContent align="end" aria-label="More">
+        {PLACES.filter((place) => place.isInBar === false).map(({ to, label, Icon }) => (
+          <MenuItem key={to} iconSlot={<Icon />} label={label} linkSlot={<Link to={to} />} />
+        ))}
+        <MenuSeparator />
+        <MenuItem iconSlot={<UserRound />} label="My account" linkSlot={<Link to="/account" />} />
+        <MenuSeparator />
+        <MenuRadioGroup
+          aria-label="Theme"
+          value={theme}
+          onValueChange={(next) => {
+            if (isThemePreference(next)) {
+              setTheme(next);
+            }
+          }}
+        >
+          {THEMES.map(({ value, label, Icon }) => (
+            <MenuRadioItem key={value} value={value} label={label} iconSlot={<Icon />} />
+          ))}
+        </MenuRadioGroup>
+        <MenuSeparator />
+        <MenuItem iconSlot={<LogOut />} label={signOutLabel} onSelect={signOut} />
+      </MenuContent>
+    </Menu>
   );
 }
 
@@ -105,16 +147,10 @@ function AdminShell({ pathname }: { pathname: string }) {
       sidebarHideBelow="md"
       brandSlot={<Brand />}
       navLabel="Main"
-      navSlot={PLACES.map(({ to, label, Icon }) => (
+      navSlot={PLACES.filter((place) => place.isInBar).map(({ to, label, Icon }) => (
         <BarLink key={to} to={to} label={label} iconSlot={<Icon />} active={pathname === to} />
       ))}
-      actionSlot={
-        <div className="flex items-center gap-1">
-          <ThemePicker variant="compact" />
-          <AccountLink />
-          <Button variant="ghost" size="icon-sm" aria-label={signOutLabel} iconSlot={<LogOut />} onClick={signOut} />
-        </div>
-      }
+      actionSlot={<NarrowMenu signOutLabel={signOutLabel} />}
       sidebarSlot={
         <Sidebar
           label="Main"
