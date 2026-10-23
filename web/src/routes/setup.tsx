@@ -14,6 +14,7 @@ import { FormElement } from '@/components/ui/form-element';
 import { BrandIcon } from '@/core/brand';
 import { jsonReply, postJson } from '@/core/json-reply';
 import { messageOf } from '@/core/lists';
+import { QUERY_KEYS } from '@/core/query-keys';
 import { PasswordStrengthMeter } from '@/passwords/strength-meter';
 
 export const Route = createFileRoute('/setup')({ component: SetupPage });
@@ -54,7 +55,7 @@ function SetupPage() {
   const [linkToken] = useState(tokenFromLink);
   const [failure, setFailure] = useState<string | null>(null);
   const status = useQuery({
-    queryKey: ['setup'],
+    queryKey: QUERY_KEYS.setup,
     queryFn: async () => jsonReply(await fetch(SETUP_URL), statusSchema),
     retry: false,
   });

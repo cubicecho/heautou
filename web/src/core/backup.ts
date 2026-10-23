@@ -1,6 +1,7 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { z } from 'zod';
 import { jsonReply, postJson } from '@/core/json-reply';
+import { QUERY_KEYS } from '@/core/query-keys';
 
 /** The server's backup routes. */
 const BACKUP_URL = '/admin/backup';
@@ -22,7 +23,7 @@ const restoredSchema = z.object({ redirectTo: z.string() });
  */
 export function useBackupInfo() {
   return useQuery({
-    queryKey: ['backup'],
+    queryKey: QUERY_KEYS.backup,
     queryFn: async () => jsonReply(await fetch(BACKUP_URL), infoSchema),
   });
 }

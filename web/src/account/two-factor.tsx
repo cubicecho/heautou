@@ -27,6 +27,7 @@ import {
   useStartTotp,
 } from '@/core/factors';
 import { messageOf } from '@/core/lists';
+import { QUERY_KEYS } from '@/core/query-keys';
 import { formatAgo, formatDate, joinStats } from '@/lib/format';
 
 /** The QR code's width and height, in CSS pixels. */
@@ -94,7 +95,7 @@ function TotpSetupDialog({ onOpenChange, onCodes }: TotpSetupDialogProps) {
   }, [mutate]);
   const uri = start.data?.uri;
   const qr = useQuery({
-    queryKey: ['totp-qr', uri],
+    queryKey: [...QUERY_KEYS.totpQr, uri],
     queryFn: async () => (await import('qrcode')).toDataURL(uri ?? '', { width: QR_SIZE, margin: 1 }),
     enabled: uri !== undefined,
     staleTime: Number.POSITIVE_INFINITY,

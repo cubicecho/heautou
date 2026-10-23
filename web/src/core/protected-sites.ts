@@ -1,4 +1,4 @@
-import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   CreateProtectedSiteDocument,
   DeleteProtectedSiteDocument,
@@ -9,24 +9,7 @@ import {
   UpdateProtectedSiteDocument,
 } from '@/__generated__/graphql';
 import { request } from '@/core/gql';
-
-/** The react-query keys forward auth reads, and the groups list its sites add to. */
-const KEYS = {
-  sites: ['protectedSites'],
-  forwardAuth: ['forwardAuth'],
-  groups: ['groups'],
-} as const;
-
-/**
- * Builds a mutation hook's `onSuccess` that refetches the lists a change touched.
- *
- * @param queryClient - The app's query client.
- * @param keys - The lists to refetch.
- * @returns The handler.
- */
-function refetching(queryClient: QueryClient, ...keys: (readonly string[])[]) {
-  return () => Promise.all(keys.map((key) => queryClient.invalidateQueries({ queryKey: key })));
-}
+import { QUERY_KEYS, refetching } from '@/core/query-keys';
 
 /**
  * Reads the protected sites.
@@ -35,7 +18,7 @@ function refetching(queryClient: QueryClient, ...keys: (readonly string[])[]) {
  */
 export function useProtectedSites() {
   return useQuery({
-    queryKey: KEYS.sites,
+    queryKey: QUERY_KEYS.protectedSites,
     queryFn: async () => (await request(ProtectedSitesDocument)).protectedSites,
   });
 }
@@ -47,7 +30,7 @@ export function useProtectedSites() {
  */
 export function useForwardAuth() {
   return useQuery({
-    queryKey: KEYS.forwardAuth,
+    queryKey: QUERY_KEYS.forwardAuth,
     queryFn: async () => (await request(ForwardAuthDocument)).forwardAuth,
   });
 }
@@ -62,7 +45,7 @@ export function useCreateProtectedSite() {
   return useMutation({
     mutationFn: async (input: ProtectedSiteInput) =>
       (await request(CreateProtectedSiteDocument, { input })).createProtectedSite,
-    onSuccess: refetching(queryClient, KEYS.sites, KEYS.groups),
+    onSuccess: refetching(queryClient, QUERY_KEYS.protectedSites, QUERY_KEYS.groups),
   });
 }
 
@@ -76,7 +59,7 @@ export function useUpdateProtectedSite() {
   return useMutation({
     mutationFn: async (vars: { id: string; input: ProtectedSiteInput }) =>
       (await request(UpdateProtectedSiteDocument, vars)).updateProtectedSite,
-    onSuccess: refetching(queryClient, KEYS.sites, KEYS.groups),
+    onSuccess: refetching(queryClient, QUERY_KEYS.protectedSites, QUERY_KEYS.groups),
   });
 }
 
@@ -89,7 +72,7 @@ export function useDeleteProtectedSite() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => (await request(DeleteProtectedSiteDocument, { id })).deleteProtectedSite,
-    onSuccess: refetching(queryClient, KEYS.sites, KEYS.groups),
+    onSuccess: refetching(queryClient, QUERY_KEYS.protectedSites, QUERY_KEYS.groups),
   });
 }
 
@@ -103,6 +86,6 @@ export function useSetForwardAuthCookieDomain() {
   return useMutation({
     mutationFn: async (domain: string | null) =>
       (await request(SetForwardAuthCookieDomainDocument, { domain })).setForwardAuthCookieDomain,
-    onSuccess: refetching(queryClient, KEYS.forwardAuth),
+    onSuccess: refetching(queryClient, QUERY_KEYS.forwardAuth),
   });
 }

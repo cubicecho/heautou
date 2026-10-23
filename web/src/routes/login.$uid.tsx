@@ -18,6 +18,7 @@ import { KeyRound } from '@/components/ui/icons';
 import { BrandIcon, useBrandName } from '@/core/brand';
 import { messageOf } from '@/core/lists';
 import { useForgotPasswordAvailable } from '@/core/mail';
+import { QUERY_KEYS } from '@/core/query-keys';
 import { ForgotPassword } from '@/mail/forgot-password';
 
 export const Route = createFileRoute('/login/$uid')({ component: LoginPage });
@@ -121,7 +122,7 @@ function LoginPage() {
   const canReset = useForgotPasswordAvailable(uid).data === true;
 
   const details = useQuery({
-    queryKey: ['interaction', uid],
+    queryKey: [...QUERY_KEYS.interaction, uid],
     queryFn: async () => {
       const response = await fetch(`${base}/details`);
       const reply: unknown = await response.json().catch(() => null);

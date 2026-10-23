@@ -1,13 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 import { jsonReply, postJson } from '@/core/json-reply';
+import { QUERY_KEYS } from '@/core/query-keys';
 
 /** Where a browser with no session signs in, coming back to the account page. */
 export const ACCOUNT_LOGIN = '/admin/login?return=%2Faccount';
 /** What `/api/account` answers a browser with no session. */
 const HTTP_UNAUTHORIZED = 401;
-
-const KEY = ['account'] as const;
 
 const accountSchema = z.object({
   id: z.string(),
@@ -54,7 +53,7 @@ const linkSchema = z.object({ username: z.string(), isInvite: z.boolean() });
  */
 export function useAccount() {
   return useQuery({
-    queryKey: KEY,
+    queryKey: QUERY_KEYS.account,
     queryFn: async () => {
       const response = await fetch('/api/account');
       if (response.status === HTTP_UNAUTHORIZED) {
@@ -74,7 +73,7 @@ export function useAccount() {
  */
 export function useAccountActivity() {
   return useQuery({
-    queryKey: [...KEY, 'activity'],
+    queryKey: QUERY_KEYS.accountActivity,
     queryFn: async () => (await jsonReply(await fetch('/api/account/activity'), activitySchema)).entries,
     retry: false,
   });
@@ -102,7 +101,7 @@ export function useSignOutEverywhere() {
   return useMutation({
     mutationFn: async () => jsonReply(await postJson('/api/account/sign-out-everywhere', {}), redirectSchema),
     onSuccess: ({ redirectTo }) => {
-      queryClient.removeQueries({ queryKey: KEY });
+      queryClient.removeQueries({ queryKey: QUERY_KEYS.account });
       window.location.assign(redirectTo);
     },
   });
@@ -116,7 +115,7 @@ export function useSignOutEverywhere() {
  */
 export function usePasswordLink(token: string | null) {
   return useQuery({
-    queryKey: ['password-link', token],
+    queryKey: [...QUERY_KEYS.passwordLink, token],
     queryFn: async () => jsonReply(await postJson('/admin/password-link', { token }), linkSchema),
     enabled: token !== null,
     retry: false,
@@ -134,8 +133,6 @@ export function useSetPasswordWithLink() {
       jsonReply(await postJson('/admin/password-link/set', body), redirectSchema),
   });
 }
-
-const UPSTREAMS_KEY = [...KEY, 'upstreams'] as const;
 
 const upstreamsSchema = z.object({
   /** Whether the user has a password, so unlinking their last provider would not lock them out. */
@@ -160,7 +157,7 @@ export type AccountUpstream = z.infer<typeof upstreamsSchema>['providers'][numbe
  */
 export function useAccountUpstreams() {
   return useQuery({
-    queryKey: UPSTREAMS_KEY,
+    queryKey: QUERY_KEYS.accountUpstreams,
     queryFn: async () => jsonReply(await fetch('/api/account/upstreams'), upstreamsSchema),
     retry: false,
   });
@@ -189,7 +186,7 @@ export function useFinishLink() {
   return useMutation({
     mutationFn: async (ticket: string) =>
       jsonReply(await postJson('/api/account/upstreams/finish', { ticket }), linkedSchema),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: UPSTREAMS_KEY }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: QUERY_KEYS.accountUpstreams }),
   });
 }
 
@@ -203,6 +200,6 @@ export function useUnlink() {
   return useMutation({
     mutationFn: async (providerId: string) =>
       jsonReply(await postJson(`/api/account/upstreams/${encodeURIComponent(providerId)}/unlink`, {}), okSchema),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: UPSTREAMS_KEY }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: QUERY_KEYS.accountUpstreams }),
   });
 }

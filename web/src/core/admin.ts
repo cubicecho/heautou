@@ -1,11 +1,4 @@
-import {
-  type InfiniteData,
-  type QueryClient,
-  useInfiniteQuery,
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from '@tanstack/react-query';
+import { type InfiniteData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { z } from 'zod';
 import {
@@ -64,40 +57,9 @@ import {
   UsersDocument,
   ViewerDocument,
 } from '@/__generated__/graphql';
-import { APIS_KEY } from '@/core/apis';
 import { request, subscribe } from '@/core/gql';
 import { jsonReply, postJson } from '@/core/json-reply';
-
-/** The react-query keys of the admin API's lists. */
-export const KEYS = {
-  viewer: ['viewer'],
-  provider: ['provider'],
-  clients: ['clients'],
-  users: ['users'],
-  sessions: ['sessions'],
-  groups: ['groups'],
-  keys: ['keys'],
-  branding: ['branding'],
-  pairings: ['pairings'],
-  httpRedirects: ['httpRedirects'],
-  passwordRules: ['passwordRules'],
-  /** The public part of the password rules, which every strength meter reads. */
-  passwordStrength: ['passwordStrength'],
-  tokenLifetimeDefaults: ['tokenLifetimeDefaults'],
-  audit: ['audit'],
-  upstreams: ['upstreams'],
-} as const;
-
-/**
- * Builds a mutation hook's `onSuccess` that refetches one list.
- *
- * @param queryClient - The app's query client.
- * @param key - The list to refetch.
- * @returns The handler.
- */
-function refetching(queryClient: QueryClient, ...keys: (readonly string[])[]) {
-  return () => Promise.all(keys.map((key) => queryClient.invalidateQueries({ queryKey: key })));
-}
+import { QUERY_KEYS, refetching } from '@/core/query-keys';
 
 const brandingSchema = z.object({ name: z.string(), logoUrl: z.string().nullable() });
 
@@ -112,7 +74,7 @@ const signOutSchema = z.object({ redirectTo: z.string() });
  * @returns The query.
  */
 export function useViewer() {
-  return useQuery({ queryKey: KEYS.viewer, queryFn: async () => (await request(ViewerDocument)).viewer });
+  return useQuery({ queryKey: QUERY_KEYS.viewer, queryFn: async () => (await request(ViewerDocument)).viewer });
 }
 
 /**
@@ -129,7 +91,7 @@ export async function signOut(): Promise<void> {
  * @returns The query.
  */
 export function useProviderInfo() {
-  return useQuery({ queryKey: KEYS.provider, queryFn: async () => (await request(ProviderDocument)).provider });
+  return useQuery({ queryKey: QUERY_KEYS.provider, queryFn: async () => (await request(ProviderDocument)).provider });
 }
 
 /**
@@ -139,7 +101,7 @@ export function useProviderInfo() {
  */
 export function useTokenLifetimeDefaults() {
   return useQuery({
-    queryKey: KEYS.tokenLifetimeDefaults,
+    queryKey: QUERY_KEYS.tokenLifetimeDefaults,
     queryFn: async () => (await request(TokenLifetimeDefaultsDocument)).tokenLifetimeDefaults,
     staleTime: Number.POSITIVE_INFINITY,
   });
@@ -151,7 +113,7 @@ export function useTokenLifetimeDefaults() {
  * @returns The query.
  */
 export function useClients() {
-  return useQuery({ queryKey: KEYS.clients, queryFn: async () => (await request(ClientsDocument)).clients });
+  return useQuery({ queryKey: QUERY_KEYS.clients, queryFn: async () => (await request(ClientsDocument)).clients });
 }
 
 /**
@@ -160,7 +122,7 @@ export function useClients() {
  * @returns The query.
  */
 export function useUsers() {
-  return useQuery({ queryKey: KEYS.users, queryFn: async () => (await request(UsersDocument)).users });
+  return useQuery({ queryKey: QUERY_KEYS.users, queryFn: async () => (await request(UsersDocument)).users });
 }
 
 /**
@@ -172,7 +134,7 @@ export function useCreateClient() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (input: NewClientInput) => (await request(CreateClientDocument, { input })).createClient,
-    onSuccess: refetching(queryClient, KEYS.clients, KEYS.groups),
+    onSuccess: refetching(queryClient, QUERY_KEYS.clients, QUERY_KEYS.groups),
   });
 }
 
@@ -186,7 +148,7 @@ export function useUpdateClient() {
   return useMutation({
     mutationFn: async (vars: { clientId: string; input: ClientInput }) =>
       (await request(UpdateClientDocument, vars)).updateClient,
-    onSuccess: refetching(queryClient, KEYS.clients, KEYS.groups, APIS_KEY),
+    onSuccess: refetching(queryClient, QUERY_KEYS.clients, QUERY_KEYS.groups, QUERY_KEYS.apis),
   });
 }
 
@@ -200,7 +162,7 @@ export function useRotateClientSecret() {
   return useMutation({
     mutationFn: async (clientId: string) =>
       (await request(RotateClientSecretDocument, { clientId })).rotateClientSecret,
-    onSuccess: refetching(queryClient, KEYS.clients),
+    onSuccess: refetching(queryClient, QUERY_KEYS.clients),
   });
 }
 
@@ -213,7 +175,7 @@ export function useDeleteClient() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (clientId: string) => (await request(DeleteClientDocument, { clientId })).deleteClient,
-    onSuccess: refetching(queryClient, KEYS.clients, KEYS.groups, APIS_KEY),
+    onSuccess: refetching(queryClient, QUERY_KEYS.clients, QUERY_KEYS.groups, QUERY_KEYS.apis),
   });
 }
 
@@ -226,7 +188,7 @@ export function useCreateUser() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (input: NewUserInput) => (await request(CreateUserDocument, { input })).createUser,
-    onSuccess: refetching(queryClient, KEYS.users, KEYS.groups),
+    onSuccess: refetching(queryClient, QUERY_KEYS.users, QUERY_KEYS.groups),
   });
 }
 
@@ -239,7 +201,7 @@ export function useUpdateUser() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (vars: { id: string; input: UserInput }) => (await request(UpdateUserDocument, vars)).updateUser,
-    onSuccess: refetching(queryClient, KEYS.users, KEYS.groups),
+    onSuccess: refetching(queryClient, QUERY_KEYS.users, QUERY_KEYS.groups),
   });
 }
 
@@ -253,7 +215,7 @@ export function useSetUserPassword() {
   return useMutation({
     mutationFn: async (vars: { id: string; password: string }) =>
       (await request(SetUserPasswordDocument, vars)).setUserPassword,
-    onSuccess: refetching(queryClient, KEYS.users),
+    onSuccess: refetching(queryClient, QUERY_KEYS.users),
   });
 }
 
@@ -266,7 +228,7 @@ export function useDeleteUser() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => (await request(DeleteUserDocument, { id })).deleteUser,
-    onSuccess: refetching(queryClient, KEYS.users, KEYS.groups),
+    onSuccess: refetching(queryClient, QUERY_KEYS.users, QUERY_KEYS.groups),
   });
 }
 
@@ -280,7 +242,7 @@ export function useSetUserDisabled() {
   return useMutation({
     mutationFn: async (vars: { id: string; disabled: boolean }) =>
       (await request(SetUserDisabledDocument, vars)).setUserDisabled,
-    onSuccess: refetching(queryClient, KEYS.users, KEYS.sessions),
+    onSuccess: refetching(queryClient, QUERY_KEYS.users, QUERY_KEYS.sessions),
   });
 }
 
@@ -292,7 +254,7 @@ export function useSetUserDisabled() {
  */
 export function useUserSessions(id: string) {
   return useQuery({
-    queryKey: [...KEYS.sessions, id],
+    queryKey: [...QUERY_KEYS.sessions, id],
     queryFn: async () => (await request(UserSessionsDocument, { id })).user?.sessions ?? [],
   });
 }
@@ -307,7 +269,7 @@ export function useEndUserSession() {
   return useMutation({
     mutationFn: async (vars: { id: string; sessionId: string }) =>
       (await request(EndUserSessionDocument, vars)).endUserSession,
-    onSuccess: refetching(queryClient, KEYS.sessions),
+    onSuccess: refetching(queryClient, QUERY_KEYS.sessions),
   });
 }
 
@@ -320,7 +282,7 @@ export function useSignOutUser() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => (await request(SignOutUserDocument, { id })).signOutUser,
-    onSuccess: refetching(queryClient, KEYS.sessions),
+    onSuccess: refetching(queryClient, QUERY_KEYS.sessions),
   });
 }
 
@@ -333,7 +295,7 @@ export function useResetSecondFactors() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => (await request(ResetSecondFactorsDocument, { id })).resetSecondFactors,
-    onSuccess: refetching(queryClient, KEYS.users),
+    onSuccess: refetching(queryClient, QUERY_KEYS.users),
   });
 }
 
@@ -380,7 +342,7 @@ function isLookingForOffers(pairing: PairingFieldsFragment | null | undefined, u
  */
 export function usePairing(id: string) {
   const queryClient = useQueryClient();
-  const queryKey = [...KEYS.pairings, id];
+  const queryKey = [...QUERY_KEYS.pairings, id];
   useEffect(
     () =>
       subscribe(
@@ -388,9 +350,9 @@ export function usePairing(id: string) {
         { id },
         {
           onData: ({ pairingChanged }) => {
-            queryClient.setQueryData([...KEYS.pairings, id], pairingChanged);
+            queryClient.setQueryData([...QUERY_KEYS.pairings, id], pairingChanged);
             if (pairingChanged?.status === 'PAIRED') {
-              void queryClient.invalidateQueries({ queryKey: KEYS.clients });
+              void queryClient.invalidateQueries({ queryKey: QUERY_KEYS.clients });
             }
           },
         },
@@ -420,7 +382,7 @@ export function useCancelPairing() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => (await request(CancelPairingDocument, { id })).cancelPairing,
-    onSuccess: refetching(queryClient, KEYS.pairings),
+    onSuccess: refetching(queryClient, QUERY_KEYS.pairings),
   });
 }
 
@@ -435,10 +397,10 @@ export function useFinishPairing() {
     mutationFn: async ({ id, input }: { id: string; input: FinishPairingInput }) =>
       (await request(FinishPairingDocument, { id, input })).finishPairing,
     onSuccess: (pairing) => {
-      queryClient.setQueryData([...KEYS.pairings, pairing.id], pairing);
+      queryClient.setQueryData([...QUERY_KEYS.pairings, pairing.id], pairing);
       return Promise.all([
-        queryClient.invalidateQueries({ queryKey: KEYS.clients }),
-        queryClient.invalidateQueries({ queryKey: APIS_KEY }),
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.clients }),
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.apis }),
       ]);
     },
   });
@@ -461,7 +423,7 @@ export function useCreatePasswordLink() {
  * @returns The query.
  */
 export function useGroups() {
-  return useQuery({ queryKey: KEYS.groups, queryFn: async () => (await request(GroupsDocument)).groups });
+  return useQuery({ queryKey: QUERY_KEYS.groups, queryFn: async () => (await request(GroupsDocument)).groups });
 }
 
 /**
@@ -484,7 +446,7 @@ export function useRenameGroup() {
   return useMutation({
     mutationFn: async (vars: { name: string; newName: string }) =>
       (await request(RenameGroupDocument, vars)).renameGroup,
-    onSuccess: refetching(queryClient, KEYS.groups, KEYS.users, KEYS.clients),
+    onSuccess: refetching(queryClient, QUERY_KEYS.groups, QUERY_KEYS.users, QUERY_KEYS.clients),
   });
 }
 
@@ -497,7 +459,7 @@ export function useDeleteGroup() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (name: string) => (await request(DeleteGroupDocument, { name })).deleteGroup,
-    onSuccess: refetching(queryClient, KEYS.groups, KEYS.users),
+    onSuccess: refetching(queryClient, QUERY_KEYS.groups, QUERY_KEYS.users),
   });
 }
 
@@ -507,7 +469,7 @@ export function useDeleteGroup() {
  * @returns The query.
  */
 export function useKeys() {
-  return useQuery({ queryKey: KEYS.keys, queryFn: async () => (await request(KeysDocument)).keys });
+  return useQuery({ queryKey: QUERY_KEYS.signingKeys, queryFn: async () => (await request(KeysDocument)).keys });
 }
 
 /**
@@ -519,7 +481,7 @@ export function useRotateKeys() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async () => (await request(RotateKeysDocument)).rotateKeys,
-    onSuccess: (keys) => queryClient.setQueryData(KEYS.keys, keys),
+    onSuccess: (keys) => queryClient.setQueryData(QUERY_KEYS.signingKeys, keys),
   });
 }
 
@@ -530,7 +492,7 @@ export function useRotateKeys() {
  */
 export function useHttpRedirects() {
   return useQuery({
-    queryKey: KEYS.httpRedirects,
+    queryKey: QUERY_KEYS.httpRedirects,
     queryFn: async () => (await request(HttpRedirectsDocument)).httpRedirects,
   });
 }
@@ -547,8 +509,8 @@ export function useSetHttpRedirects() {
     mutationFn: async (allowed: boolean | null) =>
       (await request(SetHttpRedirectsDocument, { allowed })).setHttpRedirects,
     onSuccess: async (setting) => {
-      queryClient.setQueryData(KEYS.httpRedirects, setting);
-      await queryClient.invalidateQueries({ queryKey: KEYS.clients });
+      queryClient.setQueryData(QUERY_KEYS.httpRedirects, setting);
+      await queryClient.invalidateQueries({ queryKey: QUERY_KEYS.clients });
     },
   });
 }
@@ -560,7 +522,7 @@ export function useSetHttpRedirects() {
  */
 export function usePasswordRules() {
   return useQuery({
-    queryKey: KEYS.passwordRules,
+    queryKey: QUERY_KEYS.passwordRules,
     queryFn: async () => (await request(PasswordRulesDocument)).passwordRules,
   });
 }
@@ -576,8 +538,8 @@ export function useSetPasswordRules() {
     mutationFn: async (changes: { minScore?: number; checkBreaches?: boolean }) =>
       (await request(SetPasswordRulesDocument, changes)).setPasswordRules,
     onSuccess: (rules) => {
-      queryClient.setQueryData(KEYS.passwordRules, rules);
-      queryClient.setQueryData(KEYS.passwordStrength, { minScore: rules.minScore });
+      queryClient.setQueryData(QUERY_KEYS.passwordRules, rules);
+      queryClient.setQueryData(QUERY_KEYS.passwordStrength, { minScore: rules.minScore });
     },
   });
 }
@@ -591,7 +553,7 @@ const passwordStrengthSchema = z.object({ minScore: z.number() });
  */
 export function usePasswordStrengthRule() {
   return useQuery({
-    queryKey: KEYS.passwordStrength,
+    queryKey: QUERY_KEYS.passwordStrength,
     queryFn: async () => jsonReply(await fetch('/admin/password-rules'), passwordStrengthSchema),
   });
 }
@@ -603,7 +565,7 @@ export function usePasswordStrengthRule() {
  */
 export function useBranding() {
   return useQuery({
-    queryKey: KEYS.branding,
+    queryKey: QUERY_KEYS.branding,
     queryFn: async () => jsonReply(await fetch('/admin/branding'), brandingSchema),
     staleTime: Number.POSITIVE_INFINITY,
   });
@@ -618,7 +580,7 @@ export function useSetBrandingName() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (name: string) => (await request(SetBrandingNameDocument, { name })).setBrandingName,
-    onSuccess: (branding) => queryClient.setQueryData(KEYS.branding, branding),
+    onSuccess: (branding) => queryClient.setQueryData(QUERY_KEYS.branding, branding),
   });
 }
 
@@ -631,7 +593,7 @@ export function useSetBrandingLogo() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (dataUrl: string | null) => (await request(SetBrandingLogoDocument, { dataUrl })).setBrandingLogo,
-    onSuccess: (branding) => queryClient.setQueryData(KEYS.branding, branding),
+    onSuccess: (branding) => queryClient.setQueryData(QUERY_KEYS.branding, branding),
   });
 }
 
@@ -700,7 +662,7 @@ async function auditPage(filters: AuditFilters, after: string | null): Promise<A
  */
 export function useAuditLog(filters: AuditFilters) {
   return useInfiniteQuery({
-    queryKey: [...KEYS.audit, filters],
+    queryKey: [...QUERY_KEYS.audit, filters],
     queryFn: ({ pageParam }) => auditPage(filters, pageParam),
     initialPageParam: FIRST_PAGE,
     getNextPageParam: (page) => page.nextCursor,
@@ -739,7 +701,7 @@ export function useAuditFeed(filters: AuditFilters): boolean {
   const [isLive, setLive] = useState(false);
   const { type, userId } = filters;
   useEffect(() => {
-    const queryKey = [...KEYS.audit, { type, userId }];
+    const queryKey = [...QUERY_KEYS.audit, { type, userId }];
     let hasOpened = false;
     const close = subscribe(
       AuditEntryAddedDocument,
@@ -772,7 +734,10 @@ export function useAuditFeed(filters: AuditFilters): boolean {
  * @returns The query.
  */
 export function useUpstreams() {
-  return useQuery({ queryKey: KEYS.upstreams, queryFn: async () => (await request(UpstreamsDocument)).upstreams });
+  return useQuery({
+    queryKey: QUERY_KEYS.upstreams,
+    queryFn: async () => (await request(UpstreamsDocument)).upstreams,
+  });
 }
 
 /**
@@ -783,7 +748,7 @@ export function useUpstreams() {
  */
 export function useUpstreamRedirectUri(id: string) {
   return useQuery({
-    queryKey: [...KEYS.upstreams, 'redirectUri', id],
+    queryKey: [...QUERY_KEYS.upstreams, 'redirectUri', id],
     queryFn: async () => (await request(UpstreamRedirectUriDocument, { id })).upstreamRedirectUri,
     enabled: id !== '',
   });
@@ -801,7 +766,7 @@ export function useSaveUpstream() {
       isNew
         ? (await request(CreateUpstreamDocument, { id, input })).createUpstream
         : (await request(UpdateUpstreamDocument, { id, input })).updateUpstream,
-    onSuccess: refetching(queryClient, KEYS.upstreams),
+    onSuccess: refetching(queryClient, QUERY_KEYS.upstreams),
   });
 }
 
@@ -814,7 +779,7 @@ export function useDeleteUpstream() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => (await request(DeleteUpstreamDocument, { id })).deleteUpstream,
-    onSuccess: refetching(queryClient, KEYS.upstreams, KEYS.users),
+    onSuccess: refetching(queryClient, QUERY_KEYS.upstreams, QUERY_KEYS.users),
   });
 }
 
@@ -828,6 +793,6 @@ export function useUnlinkUserUpstream() {
   return useMutation({
     mutationFn: async (args: { id: string; providerId: string }) =>
       (await request(UnlinkUserUpstreamDocument, args)).unlinkUserUpstream,
-    onSuccess: refetching(queryClient, KEYS.users, KEYS.upstreams),
+    onSuccess: refetching(queryClient, QUERY_KEYS.users, QUERY_KEYS.upstreams),
   });
 }

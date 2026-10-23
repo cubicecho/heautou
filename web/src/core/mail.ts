@@ -13,9 +13,7 @@ import {
 } from '@/__generated__/graphql';
 import { request } from '@/core/gql';
 import { jsonReply, postJson } from '@/core/json-reply';
-
-/** The react-query key of the email settings. */
-const MAIL_KEY = ['mail'] as const;
+import { QUERY_KEYS } from '@/core/query-keys';
 
 /**
  * Reads the SMTP server and the email options.
@@ -23,7 +21,7 @@ const MAIL_KEY = ['mail'] as const;
  * @returns The query.
  */
 export function useMail() {
-  return useQuery({ queryKey: MAIL_KEY, queryFn: async () => (await request(MailDocument)).mail });
+  return useQuery({ queryKey: QUERY_KEYS.mail, queryFn: async () => (await request(MailDocument)).mail });
 }
 
 /**
@@ -34,7 +32,7 @@ export function useMail() {
  */
 function storing(queryClient: ReturnType<typeof useQueryClient>) {
   return (settings: MailSettingsFieldsFragment) => {
-    queryClient.setQueryData(MAIL_KEY, settings);
+    queryClient.setQueryData(QUERY_KEYS.mail, settings);
   };
 }
 
@@ -130,7 +128,7 @@ const okSchema = z.object({ ok: z.literal(true) });
  */
 export function useForgotPasswordAvailable(uid: string) {
   return useQuery({
-    queryKey: ['forgot-password', uid],
+    queryKey: [...QUERY_KEYS.forgotPassword, uid],
     queryFn: async () =>
       (await jsonReply(await fetch(`/interaction/${encodeURIComponent(uid)}/forgot-password`), availableSchema))
         .isAvailable,
