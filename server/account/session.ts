@@ -14,7 +14,7 @@ export const COOKIE = {
   /** The session: an opaque token, looked up in the session store. */
   session: 'heautou_session',
   /** A sign-in under way: its state, PKCE verifier and return path, signed. */
-  login: 'heautou_admin_login',
+  login: 'heautou_sign_in',
 } as const;
 
 /**
