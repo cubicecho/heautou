@@ -42,14 +42,28 @@ jobs:
         run: npx drizzle-kit generate && test -z "$(git status --porcelain drizzle)"
       - name: The migrations apply to Postgres
         run: npm run db:migrate
-      - name: The server boots on Postgres
+      # One server per database: while it runs, a second, the backup CLI and db:migrate refuse it, without writing.
+      - name: The server boots on Postgres, and a second process is refused
         run: |
-          PORT=3100 ISSUER_URL=http://localhost:3100/oidc node server/index.ts &
+          PORT=3100 ISSUER_URL=http://localhost:3100/oidc node server/index.ts > first.log 2>&1 &
+          first=$!
           for attempt in $(seq 1 30); do
-            curl -fsS http://127.0.0.1:3100/healthz && exit 0
+            curl -fsS http://127.0.0.1:3100/healthz && break
             sleep 1
           done
-          exit 1
+          curl -fsS http://127.0.0.1:3100/healthz || { cat first.log; exit 1; }
+          refused() {
+            if "$@" > refused.log 2>&1; then
+              echo "::error::$* ran while the server held the database"; cat refused.log; exit 1
+            fi
+            grep -q DATABASE_IN_USE refused.log || { cat refused.log; exit 1; }
+          }
+          PORT=3101 ISSUER_URL=http://localhost:3101/oidc refused node server/index.ts
+          refused node server/backup.ts export backup.gz
+          refused node server/db/migrate.ts
+          kill -TERM "$first"
+          wait "$first" || { cat first.log; exit 1; }
+          node server/backup.ts export backup.gz
 
   boot:
     runs-on: ubuntu-latest

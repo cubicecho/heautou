@@ -20,7 +20,7 @@ export const HTTP_DEFAULTS: Readonly<HttpSettings> = Object.freeze({
   trustProxy: false,
 });
 
-/** Reaching Postgres at boot, when `DATABASE_URL` names one. PGlite, the default, is up the moment it opens. */
+/** Reaching Postgres at boot, when `DATABASE_URL` names one, and waiting for the database lock on either engine. */
 export interface DatabaseSettings {
   /** How long boot waits for Postgres before giving up. `DB_CONNECT_TIMEOUT_MS` overrides it. */
   connectTimeoutMs: number;
@@ -30,6 +30,22 @@ export interface DatabaseSettings {
   maxRetryDelayMs: number;
   /** How much the wait grows after each failed attempt. */
   retryBackoffFactor: number;
+  /**
+   * How long a process waits for another to let the database go before refusing to start. Longer than Docker's 10 s
+   * stop grace, so a restarted container outlasts the old one's shutdown.
+   */
+  lockWaitMs: number;
+  /** The wait between two tries for the lock. */
+  lockRetryDelayMs: number;
+  /** How long the connection holding Postgres's lock may sit idle before TCP keepalive probes it. */
+  lockKeepAliveDelayMs: number;
+  /** How often a process holding PGlite's directory refreshes its lock file. */
+  lockHeartbeatMs: number;
+  /**
+   * How long a lock file may go unrefreshed before its holder counts as gone. Under `lockWaitMs`, so a crashed
+   * holder's lock is taken over within the wait.
+   */
+  lockStaleMs: number;
 }
 
 export const DATABASE_DEFAULTS: Readonly<DatabaseSettings> = Object.freeze({
@@ -37,6 +53,11 @@ export const DATABASE_DEFAULTS: Readonly<DatabaseSettings> = Object.freeze({
   firstRetryDelayMs: 500,
   maxRetryDelayMs: 5_000,
   retryBackoffFactor: 2,
+  lockWaitMs: 15_000,
+  lockRetryDelayMs: 1_000,
+  lockKeepAliveDelayMs: 10_000,
+  lockHeartbeatMs: 2_000,
+  lockStaleMs: 10_000,
 });
 
 /** Bounds on one GraphQL operation. */

@@ -20,11 +20,11 @@ import { errorMessage } from './core/errors.ts';
 import { createObjectStorage } from './core/object-storage.ts';
 import { SecretKeyError } from './core/secret-box.ts';
 import { openServices, type Services } from './core/services.ts';
-import { DatabaseKind, type OpenDatabase, openDatabase } from './db/client.ts';
+import { type OpenDatabase, openDatabase } from './db/client.ts';
 import { createDataSet } from './db/data-set.ts';
 import { createWriteQueue } from './db/document.ts';
 import { importDataDirectory, isUnstarted } from './db/import.ts';
-import { waitForDatabase } from './db/wait.ts';
+import { openFailure } from './db/lock.ts';
 import { createApp } from './http/app.ts';
 import { stopOnSignals } from './http/shutdown.ts';
 import { mailServerFromEnv } from './mail/env.ts';
@@ -37,21 +37,21 @@ const sealingKeys = secretKeys();
 const bucket = s3Config();
 
 /**
- * Opens the database, waits for Postgres when it is one, and brings its tables up to date. Stops with a sentence when
- * it can't.
+ * Opens the database, waits for Postgres when it is one, takes the database lock and brings the tables up to date.
+ * Stops with a sentence when it can't, before writing anything when another heautou has the database.
  *
  * @returns The database.
  */
 async function openDatabaseOrExit(): Promise<OpenDatabase> {
   try {
-    const database = await openDatabase({ url: databaseUrl(), dataDir: dataDir(), isProduction: isProduction() });
-    if (database.kind === DatabaseKind.Postgres) {
-      await waitForDatabase(database.db, { connectTimeoutMs: dbConnectTimeoutMs() });
-    }
+    const database = await openDatabase(
+      { url: databaseUrl(), dataDir: dataDir(), isProduction: isProduction() },
+      { connectTimeoutMs: dbConnectTimeoutMs() },
+    );
     await database.migrate();
     return database;
   } catch (error) {
-    console.error(`[db] ${errorMessage(error)}`);
+    console.error(`[db] ${openFailure(error)}`);
     process.exit(1);
   }
 }

@@ -146,7 +146,7 @@ Owner: `server/store/audit.ts`.
 | No generated GraphQL write: every change goes through a store | `features` in `server/graphql/build-schema.ts` |
 | A store's check-then-change is atomic | each store changes its document before its first `await` (`document.ts` applies it synchronously) |
 | Writes reach the tables in the order they were made, across stores | one `WriteQueue` per database (`createWriteQueue`, built once in `services.ts`) |
-| One server process per database | PGlite only: the pid lock in `server/db/client.ts`. Nothing enforces it on Postgres (see the ledger) |
+| One server process per database | the database lock `openDatabase` takes before anything is written (`server/db/lock.ts`): PGlite's lock file (its holder's token, refreshed while held, so two containers that are both pid 1 still refuse each other), or a Postgres session advisory lock held on its own connection. The server, the backup CLI and `db:migrate` all take it; a second is refused as `DATABASE_IN_USE`, and a server that loses Postgres's lock exits |
 | `/graphql`, admin POSTs and the login POST take only same-origin JSON | `sameOriginJson` / `sameOriginPost` in `server/http/guards.ts` |
 | A setup URL works once, for `PAIRING_DEFAULTS.linkSeconds` | `server/oidc/pairing.ts`, `server/store/pairings.ts` |
 | A user outside a client's `allowedGroups`, or disabled, gets no code | `findAccount` in `server/oidc/provider.ts`, the `account_refused` policy check |

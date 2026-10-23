@@ -1,14 +1,13 @@
 // The backup CLI: `node server/backup.ts export <file> [--sessions]` and `node server/backup.ts restore <file>`.
 // It reads DATA_DIR, DATABASE_URL and SECRET_KEY as the server does, and shares the archive code with Settings.
 import { readFileSync, writeFileSync } from 'node:fs';
-import { databaseUrl, dataDir, isProduction, secretKeys } from './core/config.ts';
-import { errorMessage } from './core/errors.ts';
+import { databaseUrl, dataDir, dbConnectTimeoutMs, isProduction, secretKeys } from './core/config.ts';
 import { createSecretBox } from './core/secret-box.ts';
 import { FILE_MODE } from './core/wire.ts';
-import { DatabaseKind, type OpenDatabase, openDatabase } from './db/client.ts';
+import { type OpenDatabase, openDatabase } from './db/client.ts';
 import { createDataSet } from './db/data-set.ts';
 import { createWriteQueue, type DocumentStore } from './db/document.ts';
-import { waitForDatabase } from './db/wait.ts';
+import { openFailure } from './db/lock.ts';
 import { AuditType, openAuditLog } from './store/audit.ts';
 import { exportArchive, RestoreVia, restoreArchive, restoredDetail } from './store/backup.ts';
 
@@ -17,19 +16,21 @@ const Command = { Export: 'export', Restore: 'restore' } as const;
 /** Takes the provider's sessions and tokens too. */
 const SESSIONS_FLAG = '--sessions';
 const USAGE = `Usage:
-  node server/backup.ts export <file> [${SESSIONS_FLAG}]   back the data up to <file>
+  node server/backup.ts export <file> [${SESSIONS_FLAG}]   back the data up to <file>; stop the server first
   node server/backup.ts restore <file>                 replace the data with <file>; stop the server first`;
 
 /**
- * Opens the database the server uses, migrated. PGlite refuses while the server has it open.
+ * Opens the database the server uses, migrated. It takes the database lock as the server does, so it refuses while
+ * one runs: an export would read what the server has not finished writing, and a restore would be overwritten from
+ * the server's memory.
  *
  * @returns The database.
  */
 async function openData(): Promise<OpenDatabase> {
-  const database = await openDatabase({ url: databaseUrl(), dataDir: dataDir(), isProduction: isProduction() });
-  if (database.kind === DatabaseKind.Postgres) {
-    await waitForDatabase(database.db);
-  }
+  const database = await openDatabase(
+    { url: databaseUrl(), dataDir: dataDir(), isProduction: isProduction() },
+    { connectTimeoutMs: dbConnectTimeoutMs() },
+  );
   await database.migrate();
   return database;
 }
@@ -94,7 +95,7 @@ if (file === undefined || (isExport || isRestore) === false) {
       await restoreFrom(store, file, database.label);
     }
   } catch (error) {
-    console.error(`[backup] ${errorMessage(error)}`);
+    console.error(`[backup] ${openFailure(error)}`);
     process.exitCode = 1;
   } finally {
     await database?.close();
