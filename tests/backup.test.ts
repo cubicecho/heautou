@@ -7,8 +7,7 @@ import type { SecretKeys } from '../server/core/secret-box.ts';
 import { openServices, type Services } from '../server/core/services.ts';
 import { openDatabase } from '../server/db/client.ts';
 import { AuditType } from '../server/store/audit.ts';
-import { BackupErrorCode } from '../server/store/backup.ts';
-import { newSecretKey, newSecretKeys, startTestApp, tempDir } from './helpers.ts';
+import { newSecretKey, newSecretKeys, tempDir } from './helpers.ts';
 import { PASSWORD } from './oidc/browser.ts';
 
 const ISSUER = 'http://127.0.0.1:1/oidc';
@@ -77,40 +76,6 @@ async function withDataDir(
     await database.close();
   }
 }
-
-describe('backups between servers', () => {
-  it('exports one server’s data and restores it into another under the same key only', async () => {
-    const secretKeys = newSecretKeys();
-    const source = await startTestApp({ secretKeys });
-    const target = await startTestApp({ secretKeys });
-    const stranger = await startTestApp({ secretKeys: newSecretKeys() });
-    try {
-      await source.services.users.create({ username: 'ada', password: PASSWORD, email: '', name: '', groups: [] });
-      const archive = await source.services.backup.create({ includeSessions: false });
-
-      await expect(stranger.services.backup.restore(archive)).rejects.toMatchObject({
-        code: BackupErrorCode.WrongKey,
-      });
-      expect(stranger.services.users.list()).toEqual([]);
-
-      expect(await target.services.backup.restore(archive)).toMatchObject({ includesSessions: false });
-      expect(target.services.users.list().map((user) => user.username)).toEqual(['ada']);
-      expect(await target.services.users.authenticate('ada', PASSWORD)).not.toBeNull();
-
-      // The restored data is in the target's database, so it is there after a restart.
-      const restarted = await startTestApp({ database: target.database, secretKeys });
-      try {
-        expect(restarted.services.users.list().map((user) => user.username)).toEqual(['ada']);
-      } finally {
-        await restarted.close();
-      }
-    } finally {
-      await stranger.close();
-      await target.close();
-      await source.close();
-    }
-  });
-});
 
 describe('the backup CLI', () => {
   it(

@@ -212,6 +212,7 @@ describe('backups', () => {
 
     expect(restored).toMatchObject({ includesSessions: true });
     expect(target.services.users.list().map((user) => user.username)).toEqual(['ada']);
+    expect(await target.services.users.authenticate('ada', PASSWORD)).not.toBeNull();
     const client = target.services.clients.find(source.client.clientId);
     expect(client?.clientSecret).toBe(source.client.clientSecret);
     expect(target.services.apis.find(apiIdentifier)?.allowedClientIds).toEqual([source.client.clientId]);

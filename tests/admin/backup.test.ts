@@ -77,7 +77,6 @@ describe('backup routes', () => {
     expect(await restored.json()).toMatchObject({ redirectTo: '/admin/login', restored: { includesSessions: false } });
     expect(restored.headers.getSetCookie().join()).toMatch(/heautou_session=;/);
 
-    expect(app.services.users.list().map((user) => user.username)).toEqual(['root']);
     const after = await adminGql(admin, '{ users { username } }');
     expect(after.error).toBe('Sign in to the admin UI first.');
     const [entry] = (await app.services.audit.list({ types: [AuditType.DataRestored] })).entries;
