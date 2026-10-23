@@ -29,14 +29,11 @@ const PROVIDER_SESSION = { model: 'Session', id: 'session-1', payload: { kind: '
 /** The databases and services a test opened, settled and handed back after it. */
 const opened: { databases: OpenDatabase[]; services: Services[] } = { databases: [], services: [] };
 
-/** How long booting the databases a test needs may take on a busy machine: each one applies every migration. */
-const BOOT_TIMEOUT_MS = 60_000;
-
 // Boot the two databases a restore test holds at once before the tests, so no test's own time goes on booting them.
 beforeAll(async () => {
   const databases = await Promise.all([createTestDatabase(), createTestDatabase()]);
   await Promise.all(databases.map((database) => database.close()));
-}, BOOT_TIMEOUT_MS);
+});
 
 afterEach(async () => {
   await Promise.all(opened.services.map((services) => services.settled()));

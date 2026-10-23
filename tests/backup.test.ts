@@ -12,8 +12,6 @@ import { PASSWORD } from './oidc/browser.ts';
 
 const ISSUER = 'http://127.0.0.1:1/oidc';
 const CLI = fileURLToPath(new URL('../server/backup.ts', import.meta.url));
-/** Three servers, each on its own database, which takes about a second to boot. */
-const SERVERS_TIMEOUT_MS = 30_000;
 /** Booting PGlite in a directory and migrating it, three times over, with the CLI's own boots between. */
 const CLI_TIMEOUT_MS = 120_000;
 
@@ -70,41 +68,37 @@ async function withDataDir(
 }
 
 describe('backups between servers', () => {
-  it(
-    'exports one server’s data and restores it into another under the same key only',
-    async () => {
-      const secretKeys = { current: randomBytes(SECRET_KEY_BYTES), previous: null };
-      const source = await startTestApp({ secretKeys });
-      const target = await startTestApp({ secretKeys });
-      const stranger = await startTestApp({ secretKeys: { current: randomBytes(SECRET_KEY_BYTES), previous: null } });
+  it('exports one server’s data and restores it into another under the same key only', async () => {
+    const secretKeys = { current: randomBytes(SECRET_KEY_BYTES), previous: null };
+    const source = await startTestApp({ secretKeys });
+    const target = await startTestApp({ secretKeys });
+    const stranger = await startTestApp({ secretKeys: { current: randomBytes(SECRET_KEY_BYTES), previous: null } });
+    try {
+      await source.services.users.create({ username: 'ada', password: PASSWORD, email: '', name: '', groups: [] });
+      const archive = await source.services.backup.create({ includeSessions: false });
+
+      await expect(stranger.services.backup.restore(archive)).rejects.toMatchObject({
+        code: BackupErrorCode.WrongKey,
+      });
+      expect(stranger.services.users.list()).toEqual([]);
+
+      expect(await target.services.backup.restore(archive)).toMatchObject({ includesSessions: false });
+      expect(target.services.users.list().map((user) => user.username)).toEqual(['ada']);
+      expect(await target.services.users.authenticate('ada', PASSWORD)).not.toBeNull();
+
+      // The restored data is in the target's database, so it is there after a restart.
+      const restarted = await startTestApp({ database: target.database, secretKeys });
       try {
-        await source.services.users.create({ username: 'ada', password: PASSWORD, email: '', name: '', groups: [] });
-        const archive = await source.services.backup.create({ includeSessions: false });
-
-        await expect(stranger.services.backup.restore(archive)).rejects.toMatchObject({
-          code: BackupErrorCode.WrongKey,
-        });
-        expect(stranger.services.users.list()).toEqual([]);
-
-        expect(await target.services.backup.restore(archive)).toMatchObject({ includesSessions: false });
-        expect(target.services.users.list().map((user) => user.username)).toEqual(['ada']);
-        expect(await target.services.users.authenticate('ada', PASSWORD)).not.toBeNull();
-
-        // The restored data is in the target's database, so it is there after a restart.
-        const restarted = await startTestApp({ database: target.database, secretKeys });
-        try {
-          expect(restarted.services.users.list().map((user) => user.username)).toEqual(['ada']);
-        } finally {
-          await restarted.close();
-        }
+        expect(restarted.services.users.list().map((user) => user.username)).toEqual(['ada']);
       } finally {
-        await stranger.close();
-        await target.close();
-        await source.close();
+        await restarted.close();
       }
-    },
-    SERVERS_TIMEOUT_MS,
-  );
+    } finally {
+      await stranger.close();
+      await target.close();
+      await source.close();
+    }
+  });
 });
 
 describe('the backup CLI', () => {
