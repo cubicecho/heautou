@@ -82,8 +82,9 @@ async function openPostgres(
   };
   const pool = new pg.Pool(connection);
   const db = drizzleNode({ client: pool, relations });
-  const { host, port, pathname } = new URL(url);
-  const label = `postgres://${host}${port === '' ? '' : `:${port}`}${pathname}`;
+  // `host` holds the port too, when the URL names one.
+  const { host, pathname } = new URL(url);
+  const label = `postgres://${host}${pathname}`;
   const { lockKeepAliveDelayMs } = { ...DATABASE_DEFAULTS, ...overrides };
   const session = new pg.Client({ ...connection, keepAlive: true, keepAliveInitialDelayMillis: lockKeepAliveDelayMs });
   let unlock: () => Promise<void>;
