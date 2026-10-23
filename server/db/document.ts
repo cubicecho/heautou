@@ -1,13 +1,5 @@
-// A store's data as one document in memory, written through to its tables.
-//
-// The stores were written over JSON files read once and rewritten whole on every change, and much of the server reads
-// them synchronously: the provider's account lookups, each forward auth verify, the sign-in checks. So each store keeps
-// its document in memory as before, and a change is applied there at once, while the same call is still running, so
-// "is this username taken" and "was this code used" are still decided without anything in between. The tables are
-// written after, in order, and the change's promise settles once they are: a caller that awaits it knows the data is
-// in the database, and one whose write failed gets the error and finds the document as the tables have it.
-//
-// One process owns the database: nothing else writes the tables while it runs.
+// A store's data as one document in memory, so reads stay synchronous: a change is made there at once and written
+// through to its tables after, in order. One process owns the database: nothing else writes the tables while it runs.
 import {
   and,
   eq,
