@@ -1,6 +1,6 @@
 import express, { type RequestHandler, Router } from 'express';
 import { z } from 'zod';
-import { COOKIE, sessionCookieOptions, viewerOf } from '../account/session.ts';
+import { clearSessionCookies, viewerOf } from '../account/session.ts';
 import { BACKUP_DEFAULTS, HTTP_DEFAULTS } from '../core/defaults.ts';
 import type { DataBackup } from '../core/services.ts';
 import { HttpStatus } from '../core/wire.ts';
@@ -146,7 +146,7 @@ export function createBackupRouter(deps: BackupDeps): Router {
         ip: req.ip ?? null,
         detail: restoredDetail(restored, RestoreVia.Web),
       });
-      res.clearCookie(COOKIE.session, sessionCookieOptions(issuer));
+      clearSessionCookies(res, issuer);
       res.json({ redirectTo: ADMIN_PATH.login, restored });
     } catch (error) {
       if (error instanceof BackupError) {

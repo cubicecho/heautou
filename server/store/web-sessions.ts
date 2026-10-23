@@ -15,7 +15,7 @@ export type WebSessionDocument = Record<string, WebSession>;
 
 /**
  * Web sessions: browsers signed in to heautou's web app, which is the admin UI for an admin and the account page for
- * anyone. The cookie and the document keep the admin name they had before there was an account page.
+ * anyone. The document keeps the admin name it had before there was an account page.
  */
 export interface WebSessionStore {
   /**

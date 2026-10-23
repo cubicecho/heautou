@@ -1,7 +1,15 @@
 import { randomBytes } from 'node:crypto';
 import express, { type CookieOptions, type RequestHandler, type Response, Router } from 'express';
 import { z } from 'zod';
-import { COOKIE, type SessionDeps, sessionCookieOptions, setViewer, signedInUser } from '../account/session.ts';
+import {
+  COOKIE,
+  clearSessionCookies,
+  type SessionDeps,
+  sessionTokenOf,
+  setSessionCookie,
+  setViewer,
+  signedInUser,
+} from '../account/session.ts';
 import { ADMIN_DEFAULTS, HTTP_DEFAULTS } from '../core/defaults.ts';
 import { errorMessage } from '../core/errors.ts';
 import type { PasswordPolicy } from '../core/password-policy.ts';
@@ -140,7 +148,6 @@ export function createAdminRouter(deps: AdminDeps): Router {
   const guard = sameOriginJson(urls.origin);
   const cookieBase: CookieOptions = { httpOnly: true, secure: urls.isHttps };
   const loginCookie: CookieOptions = { ...cookieBase, path: '/admin', sameSite: 'lax' };
-  const sessionCookie = sessionCookieOptions(issuer);
   const router = Router();
 
   router.get(ADMIN_PATH.login, (req, res) => {
@@ -213,10 +220,7 @@ export function createAdminRouter(deps: AdminDeps): Router {
         return;
       }
       audit.record({ type: AuditType.WebSignedIn, actor: actorOf(user), ip: req.ip ?? null });
-      res.cookie(COOKIE.session, await webSessions.create(user.id), {
-        ...sessionCookie,
-        maxAge: ADMIN_DEFAULTS.sessionSeconds * MS_PER_SECOND,
-      });
+      setSessionCookie(res, issuer, await webSessions.create(user.id));
       res.redirect(HttpStatus.SeeOther, landingFor(user, login.data.returnTo));
     } catch (caught) {
       showError(res, AdminError.signInFailed, errorMessage(caught));
@@ -224,7 +228,7 @@ export function createAdminRouter(deps: AdminDeps): Router {
   });
 
   router.post(ADMIN_PATH.logout, guard, async (req, res) => {
-    const cookie = readCookie(req, COOKIE.session);
+    const cookie = sessionTokenOf(req);
     if (cookie !== null) {
       const userId = webSessions.find(cookie);
       const user = userId === null ? null : users.find(userId);
@@ -233,7 +237,7 @@ export function createAdminRouter(deps: AdminDeps): Router {
       }
       await webSessions.remove(cookie);
     }
-    res.clearCookie(COOKIE.session, sessionCookie);
+    clearSessionCookies(res, issuer);
     const end = new URLSearchParams({ client_id: ADMIN_DEFAULTS.clientId });
     res.json({ redirectTo: `${issuer}/session/end?${end}` });
   });

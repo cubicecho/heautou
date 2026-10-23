@@ -15,7 +15,7 @@ import type { PasswordLinkStore } from '../store/password-links.ts';
 import type { SettingsStore } from '../store/settings.ts';
 import { isAdmin, type UserStore } from '../store/users.ts';
 import type { WebSessionStore } from '../store/web-sessions.ts';
-import { COOKIE, requireSignedIn, sessionCookieOptions, signedInUser, viewerOf } from './session.ts';
+import { clearSessionCookies, requireSignedIn, signedInUser, viewerOf } from './session.ts';
 
 /** What the account, password link and branding routes use. */
 export interface AccountDeps {
@@ -156,7 +156,7 @@ export function createAccountRouter(deps: AccountDeps): Router {
       await sessions.revokeAccount(user.id, req.ip ?? null);
       audit.record({ type: AuditType.AccountSignedOutEverywhere, actor: actorOf(user), ip: req.ip ?? null });
     }
-    res.clearCookie(COOKIE.session, sessionCookieOptions(issuer));
+    clearSessionCookies(res, issuer);
     res.json({ redirectTo: `${ADMIN_PATH.login}?return=${encodeURIComponent(WEB_APP_PAGE.account)}` });
   });
 

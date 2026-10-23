@@ -100,7 +100,7 @@ Waiting sign-ins and passkey challenges live in memory only. Owner:
 ### Web session
 
 ```
-web sign-in (PKCE, swapped in-process) --cookie heautou_admin--> live --expires | sign-out | restore--> gone
+web sign-in (PKCE, swapped in-process) --cookie heautou_session--> live --expires | sign-out | restore--> gone
 ```
 
 Owner: `server/store/web-sessions.ts` (`WebSessionStore`); it is held by every signed-in
@@ -221,8 +221,10 @@ Owner: `server/store/audit.ts`.
   after boot, then with the token the boot log prints. Owner: `server/admin/setup.ts`.
 - **Web session:** a browser signed in to heautou's own web app: the admin UI for an admin,
   the account page for anyone. Owner: `server/store/web-sessions.ts` (`services.webSessions`).
-  Its rows are in the `web_sessions` table. Its other stored and wire names keep "admin"
-  (A1): the `admin-sessions.json` document and archive path, the `heautou_admin` cookie.
+  Its rows are in the `web_sessions` table and its cookie is `heautou_session`; the former
+  `heautou_admin` cookie is still read and swapped until the release after the rename
+  (`FORMER_SESSION_COOKIE`). Its document name and archive path keep "admin" (A1):
+  `admin-sessions.json`.
 - **Account page:** where any user changes their own profile, password, second factors,
   picture, sessions and linked accounts. Owner: `server/account/` (`routes.ts`,
   `factors.ts`; the picture routes are in `server/admin/pictures.ts`),

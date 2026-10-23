@@ -2,7 +2,8 @@
 // that user for the handlers. Any enabled user has one; `requireAdmin` in `server/admin/routes.ts` adds the admin check.
 import type { CookieOptions, Request, RequestHandler, Response } from 'express';
 import { adminUrls } from '../admin/admin-client.ts';
-import { HttpStatus } from '../core/wire.ts';
+import { ADMIN_DEFAULTS } from '../core/defaults.ts';
+import { HttpStatus, MS_PER_SECOND } from '../core/wire.ts';
 import { readCookie } from '../http/cookies.ts';
 import { sendRefusal } from '../http/guards.ts';
 import type { PublicUser, UserStore } from '../store/users.ts';
@@ -11,15 +12,33 @@ import type { WebSessionStore } from '../store/web-sessions.ts';
 /** The web app's cookies. */
 export const COOKIE = {
   /** The session: an opaque token, looked up in the session store. */
-  session: 'heautou_admin',
+  session: 'heautou_session',
   /** A sign-in under way: its state, PKCE verifier and return path, signed. */
   login: 'heautou_admin_login',
 } as const;
+
+/**
+ * What the session cookie was called before it was `heautou_session`. A request that still sends it is signed in
+ * by it, and `moveFormerSessionCookie` swaps it for the new one on that response, so the upgrade signs nobody out.
+ * A session lasts `ADMIN_DEFAULTS.sessionSeconds` (12 hours), so none is left once a build with the new name has run
+ * that long: drop this and `moveFormerSessionCookie` in the release after the rename.
+ */
+export const FORMER_SESSION_COOKIE = 'heautou_admin';
 
 /** What finding a request's signed-in user reads. */
 export interface SessionDeps {
   users: UserStore;
   webSessions: WebSessionStore;
+}
+
+/**
+ * Reads a request's session token: the session cookie, else the cookie's former name.
+ *
+ * @param req - The request.
+ * @returns The token, or null when neither cookie was sent.
+ */
+export function sessionTokenOf(req: Request): string | null {
+  return readCookie(req, COOKIE.session) ?? readCookie(req, FORMER_SESSION_COOKIE);
 }
 
 /**
@@ -31,7 +50,7 @@ export interface SessionDeps {
  * @returns The user, or null when there is no session or they are disabled.
  */
 export function signedInUser(deps: SessionDeps, req: Request): PublicUser | null {
-  const cookie = readCookie(req, COOKIE.session);
+  const cookie = sessionTokenOf(req);
   const userId = cookie === null ? null : deps.webSessions.find(cookie);
   const user = userId === null ? null : deps.users.find(userId);
   return user !== null && user.disabled === false ? user : null;
@@ -89,4 +108,52 @@ export function requireSignedIn(deps: SessionDeps): RequestHandler {
  */
 export function sessionCookieOptions(issuer: string): CookieOptions {
   return { httpOnly: true, secure: adminUrls(issuer).isHttps, path: '/', sameSite: 'strict' };
+}
+
+/**
+ * Sets the session cookie for a new session, and clears the cookie's former name.
+ *
+ * @param res - The response.
+ * @param issuer - The issuer, for the cookie's options.
+ * @param token - The session's token.
+ */
+export function setSessionCookie(res: Response, issuer: string, token: string): void {
+  const options = sessionCookieOptions(issuer);
+  res.clearCookie(FORMER_SESSION_COOKIE, options);
+  res.cookie(COOKIE.session, token, { ...options, maxAge: ADMIN_DEFAULTS.sessionSeconds * MS_PER_SECOND });
+}
+
+/**
+ * Clears the session cookie under its name and its former name, at sign-out.
+ *
+ * @param res - The response.
+ * @param issuer - The issuer, for the cookie's options.
+ */
+export function clearSessionCookies(res: Response, issuer: string): void {
+  const options = sessionCookieOptions(issuer);
+  res.clearCookie(COOKIE.session, options);
+  res.clearCookie(FORMER_SESSION_COOKIE, options);
+}
+
+/**
+ * Swaps a session cookie still under its former name for the new one, on whatever response the browser gets next. A
+ * former cookie whose session ended is only cleared. Removed with `FORMER_SESSION_COOKIE`.
+ *
+ * @param deps - The session store.
+ * @param issuer - The issuer, for the cookie's options.
+ * @returns The middleware.
+ */
+export function moveFormerSessionCookie(deps: Pick<SessionDeps, 'webSessions'>, issuer: string): RequestHandler {
+  return (req, res, next) => {
+    const former = readCookie(req, FORMER_SESSION_COOKIE);
+    if (former !== null) {
+      const isMoved = readCookie(req, COOKIE.session) !== null;
+      if (isMoved === false && deps.webSessions.find(former) !== null) {
+        setSessionCookie(res, issuer, former);
+      } else {
+        res.clearCookie(FORMER_SESSION_COOKIE, sessionCookieOptions(issuer));
+      }
+    }
+    next();
+  };
 }
