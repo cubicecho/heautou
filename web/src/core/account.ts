@@ -37,6 +37,9 @@ const activitySchema = z.object({
   ),
 });
 
+/** One browser signed in as the signed-in user. */
+export type AccountSession = z.infer<typeof accountSchema>['sessions'][number];
+
 /** One of the signed-in user's recent sign-ins. */
 export type SignInEntry = z.infer<typeof activitySchema>['entries'][number];
 

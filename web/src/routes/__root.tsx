@@ -16,6 +16,7 @@ import {
 import { ThemePicker } from '@/components/ui/theme-picker';
 import { useThemePreference } from '@/components/ui/theme-preference';
 import { isThemePreference, type ThemePreference } from '@/components/ui/theme-preference-base';
+import { useAccount } from '@/core/account';
 import { signOut, useViewer } from '@/core/admin';
 import { Activity, AppWindow, LayoutDashboard, LogOut, Server, ShieldCheck, Tags, UsersRound } from '@/core/app-icons';
 import { BrandIcon, useBrandName } from '@/core/brand';
@@ -24,19 +25,13 @@ const SidebarLink = createLink(SidebarNavItem);
 const BarLink = createLink(BarNavItem);
 /**
  * The pages the provider sends a browser to: sign in, sign out, signed out, errors and the device flow, the first-admin setup, and
- * a user's own account and password link. They are for whoever is signing in to an app, not only admins, so they
- * are drawn without the admin shell.
+ * a password link. They are for whoever is signing in to an app, not only admins, so they are drawn without the admin
+ * shell.
  */
-const PROVIDER_PAGES = [
-  '/login/',
-  '/logout',
-  '/logged-out',
-  '/error',
-  '/device',
-  '/setup',
-  '/account',
-  '/set-password',
-];
+const PROVIDER_PAGES = ['/login/', '/logout', '/logged-out', '/error', '/device', '/setup', '/set-password'];
+
+/** A user's own account page, which an admin sees inside the admin shell and anyone else on its own. */
+const ACCOUNT_PAGE = '/account';
 
 /** The admin pages, in the order the sidebar lists them. */
 const PLACES = [
@@ -124,7 +119,31 @@ function RootRoute() {
   if (isProviderPage) {
     return <Outlet />;
   }
+  if (pathname.startsWith(ACCOUNT_PAGE)) {
+    return <AccountShell pathname={pathname} />;
+  }
   return <AdminShell pathname={pathname} />;
+}
+
+/**
+ * The account page: in the admin shell for an admin, so they keep their place, and on its own for anyone else.
+ *
+ * @param props - The current path, to mark the active page.
+ * @param props.pathname - The router's pathname.
+ */
+function AccountShell({ pathname }: { pathname: string }) {
+  const account = useAccount();
+  if (account.isPending) {
+    return null;
+  }
+  // A failed read falls through to the page itself, which says what went wrong.
+  return account.data?.isAdmin ? (
+    <AdminShell pathname={pathname} />
+  ) : (
+    <div className="h-svh">
+      <Outlet />
+    </div>
+  );
 }
 
 /**
@@ -166,7 +185,12 @@ function AdminShell({ pathname }: { pathname: string }) {
           }
           footerSlot={
             <>
-              <SidebarLink to="/account" label="My account" iconSlot={<UserRound />} active={false} />
+              <SidebarLink
+                to="/account"
+                label="My account"
+                iconSlot={<UserRound />}
+                active={pathname === ACCOUNT_PAGE}
+              />
               <SidebarNavItem label={signOutLabel} iconSlot={<LogOut />} onClick={signOut} />
               <ThemePicker variant="compact" />
             </>
