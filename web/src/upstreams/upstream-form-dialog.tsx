@@ -14,7 +14,7 @@ import { FormElement } from '@/components/ui/form-element';
 import { useBackupInfo } from '@/core/backup';
 import { messageOf } from '@/core/errors';
 import { useGroupOptions } from '@/core/groups';
-import { commaListOf, linesOf } from '@/core/lists';
+import { commaListOf, linesOf, pairsOf } from '@/core/lists';
 import { useCreateUpstream, useUpdateUpstream, useUpstreamRedirectUri } from '@/core/upstreams';
 import {
   OTHER_UPSTREAM,
@@ -55,10 +55,7 @@ function kindOf(value: string): UpstreamKind {
  * @returns The mappings.
  */
 function mappingsOf(text: string): { upstream: string; local: string }[] {
-  return linesOf(text).map((line) => {
-    const at = line.indexOf(MAPPING_SEPARATOR);
-    return { upstream: line.slice(0, at).trim(), local: line.slice(at + 1).trim() };
-  });
+  return pairsOf(text, MAPPING_SEPARATOR).map(({ name, value }) => ({ upstream: name, local: value }));
 }
 
 /**

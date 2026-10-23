@@ -1,10 +1,7 @@
-import { linesOf } from '@/core/lists';
+import { type LinePair, linesOf, pairsOf } from '@/core/lists';
 
-/** A claim of the operator's own, as the API takes it. */
-export interface ClaimEntry {
-  name: string;
-  value: string;
-}
+/** What separates a claim's name from its value on a line. */
+const CLAIM_SEPARATOR = '=';
 
 /**
  * Reads claims typed one per line as `name=value`.
@@ -12,11 +9,8 @@ export interface ClaimEntry {
  * @param text - The textarea's value.
  * @returns The claims, names and values trimmed; a line with no `=` has an empty value.
  */
-export function claimsOf(text: string): ClaimEntry[] {
-  return linesOf(text).map((line) => {
-    const at = line.indexOf('=');
-    return at === -1 ? { name: line, value: '' } : { name: line.slice(0, at).trim(), value: line.slice(at + 1).trim() };
-  });
+export function claimsOf(text: string): LinePair[] {
+  return pairsOf(text, CLAIM_SEPARATOR);
 }
 
 /**
@@ -27,17 +21,17 @@ export function claimsOf(text: string): ClaimEntry[] {
  */
 export function claimsText(claims: Readonly<Record<string, string>>): string {
   return Object.entries(claims)
-    .map(([name, value]) => `${name}=${value}`)
+    .map(([name, value]) => `${name}${CLAIM_SEPARATOR}${value}`)
     .join('\n');
 }
 
 /**
- * Says what is wrong with typed claims.
+ * Says what is wrong with typed claims: a line needs a name before its `=`.
  *
  * @param text - The textarea's value.
  * @returns The problem, or undefined when there is none.
  */
 export function claimsProblem(text: string): string | undefined {
-  const bad = linesOf(text).find((line) => line.indexOf('=') < 1);
+  const bad = linesOf(text).find((line) => line.indexOf(CLAIM_SEPARATOR) < 1);
   return bad === undefined ? undefined : `Write "${bad}" as name=value.`;
 }
