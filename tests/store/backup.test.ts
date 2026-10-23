@@ -1,9 +1,8 @@
-import { randomBytes } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { gunzipSync, gzipSync } from 'node:zlib';
 import { BACKUP_DEFAULTS } from '../../server/core/defaults.ts';
-import { createSecretBox, SECRET_KEY_BYTES, type SecretKeys } from '../../server/core/secret-box.ts';
+import { createSecretBox, type SecretKeys } from '../../server/core/secret-box.ts';
 import { openServices, type Services } from '../../server/core/services.ts';
 import type { OpenDatabase } from '../../server/db/client.ts';
 import { readDataDirectory } from '../../server/db/import.ts';
@@ -21,7 +20,7 @@ import {
 import { ClientAuthMethod } from '../../server/store/clients.ts';
 import { UpstreamKind } from '../../server/store/upstreams.ts';
 import { createTestDatabase } from '../db.ts';
-import { tempDir } from '../helpers.ts';
+import { newSecretKey, newSecretKeys, tempDir } from '../helpers.ts';
 import { PASSWORD, REDIRECT_URI } from '../oidc/browser.ts';
 
 const ISSUER = 'http://127.0.0.1:1/oidc';
@@ -43,13 +42,6 @@ afterEach(async () => {
   opened.services = [];
   opened.databases = [];
 });
-
-/**
- * Makes a random sealing key.
- *
- * @returns 32 random bytes.
- */
-const newKey = (): Buffer => randomBytes(SECRET_KEY_BYTES);
 
 /**
  * Opens the services on a database, as a boot does.
@@ -145,7 +137,7 @@ async function refusal(run: () => unknown): Promise<string> {
 
 describe('backups', () => {
   it('takes every store, secrets sealed, leaving out web sessions and, unless asked, provider sessions', async () => {
-    const key = newKey();
+    const key = newSecretKey();
     const { services, client } = await populated(key);
 
     const without = unzip(await services.backup.create({ includeSessions: false }));
@@ -195,7 +187,7 @@ describe('backups', () => {
   });
 
   it('round trips through a restore into a running server, signing everyone out', async () => {
-    const key = newKey();
+    const key = newSecretKey();
     const source = await populated(key);
     const apiIdentifier = 'https://photos-api.home.lan';
     await source.services.apis.create({
@@ -255,7 +247,7 @@ describe('backups', () => {
   });
 
   it('brings back every store’s data, not only what the target held before', async () => {
-    const key = newKey();
+    const key = newSecretKey();
     /**
      * Fills every store a restore reloads, each with values its server is told apart by.
      *
@@ -323,10 +315,10 @@ describe('backups', () => {
   });
 
   it('opens secrets sealed under the previous key, and re-seals them under the current one', async () => {
-    const oldKey = newKey();
+    const oldKey = newSecretKey();
     const source = await populated(oldKey);
     const archive = await source.services.backup.create({ includeSessions: false });
-    const newer = newKey();
+    const newer = newSecretKey();
     const target = await populated(newer);
     const targetServices = await boot(target.database, newer, oldKey);
     await targetServices.backup.restore(archive);
@@ -339,9 +331,9 @@ describe('backups', () => {
   });
 
   it('refuses an archive sealed under another key, or when no key is set, writing nothing', async () => {
-    const source = await populated(newKey());
+    const source = await populated(newSecretKey());
     const archive = await source.services.backup.create({ includeSessions: false });
-    const target = await populated(newKey());
+    const target = await populated(newSecretKey());
     const before = await target.database.db.select().from(users);
 
     expect(await refusal(() => target.services.backup.restore(archive))).toBe(BackupErrorCode.WrongKey);
@@ -351,7 +343,7 @@ describe('backups', () => {
   });
 
   it('refuses a file that is not an archive, another version, or damaged contents', async () => {
-    const box = createSecretBox({ current: newKey(), previous: null });
+    const box = createSecretBox(newSecretKeys());
     const read = (archive: Buffer) => () => readBackup(archive, BACKUP_LAYOUT, box);
     const fresh = await freshArchive();
     /**

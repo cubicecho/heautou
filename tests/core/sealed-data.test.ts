@@ -1,25 +1,17 @@
-import { randomBytes } from 'node:crypto';
 import { eq } from 'drizzle-orm';
-import { SECRET_KEY_BYTES, SecretKeyErrorCode, type SecretKeys } from '../../server/core/secret-box.ts';
+import { SecretKeyErrorCode, type SecretKeys } from '../../server/core/secret-box.ts';
 import { openServices, type Services } from '../../server/core/services.ts';
 import type { Database, OpenDatabase } from '../../server/db/client.ts';
 import { DOCUMENT_NAMES } from '../../server/db/documents.ts';
 import { clients, documents } from '../../server/db/schema.ts';
 import { ClientAuthMethod } from '../../server/store/clients.ts';
 import { createTestDatabase } from '../db.ts';
-import { startTestApp } from '../helpers.ts';
+import { newSecretKey, newSecretKeys, startTestApp } from '../helpers.ts';
 import { PASSWORD, payloadOf, REDIRECT_URI, signInForTokens } from '../oidc/browser.ts';
 
 const ISSUER = 'http://127.0.0.1:1/oidc';
 /** What every sealed value starts with. */
 const SEALED = 'enc:v1:';
-
-/**
- * Makes a random sealing key.
- *
- * @returns 32 random bytes.
- */
-const newKey = (): Buffer => randomBytes(SECRET_KEY_BYTES);
 
 /**
  * Opens the services on a database, as a boot does, and waits for what the boot writes.
@@ -83,7 +75,7 @@ describe('secrets at rest', () => {
     expect(await storedSecrets(db)).toContain(secret);
     expect(await storedSecrets(db)).not.toContain(SEALED);
 
-    const sealed = await boot(db, newKey());
+    const sealed = await boot(db, newSecretKey());
     const stored = await storedSecrets(db);
     for (const value of [secret, privateHalf, cookieKey]) {
       expect(stored).not.toContain(value);
@@ -98,25 +90,25 @@ describe('secrets at rest', () => {
 
   it('refuses a wrong key, or no key, without changing the stored data', async () => {
     const { db } = database;
-    await addClient(await boot(db, newKey()));
+    await addClient(await boot(db, newSecretKey()));
     const before = await storedSecrets(db);
-    await expect(boot(db, newKey())).rejects.toMatchObject({ code: SecretKeyErrorCode.Wrong });
+    await expect(boot(db, newSecretKey())).rejects.toMatchObject({ code: SecretKeyErrorCode.Wrong });
     await expect(boot(db)).rejects.toMatchObject({ code: SecretKeyErrorCode.Missing });
     expect(await storedSecrets(db)).toBe(before);
   });
 
   it('re-seals under a new key while the old one is the previous key', async () => {
     const { db } = database;
-    const old = newKey();
+    const old = newSecretKey();
     const { clientSecret } = await addClient(await boot(db, old));
-    const next = newKey();
+    const next = newSecretKey();
     await boot(db, next, old);
     expect((await boot(db, next)).clients.list()[0]?.clientSecret).toBe(clientSecret);
     await expect(boot(db, old)).rejects.toMatchObject({ code: SecretKeyErrorCode.Wrong });
   });
 
   it('signs a user in with sealed keys and secrets, and writes new secrets sealed', async () => {
-    const app = await startTestApp({ secretKeys: { current: newKey(), previous: null } });
+    const app = await startTestApp({ secretKeys: newSecretKeys() });
     try {
       await app.services.users.create({ username: 'ada', password: PASSWORD, email: '', name: '', groups: [] });
       const client = await app.services.clients.rotateSecret((await addClient(app.services)).clientId);

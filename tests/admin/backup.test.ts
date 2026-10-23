@@ -1,10 +1,8 @@
-import { randomBytes } from 'node:crypto';
 import { gunzipSync } from 'node:zlib';
 import { BACKUP_PATH } from '../../server/admin/backup.ts';
-import { SECRET_KEY_BYTES } from '../../server/core/secret-box.ts';
 import { HttpStatus } from '../../server/core/wire.ts';
 import { AuditType } from '../../server/store/audit.ts';
-import { startTestApp, type TestApp } from '../helpers.ts';
+import { newSecretKeys, startTestApp, type TestApp } from '../helpers.ts';
 import { adminGql, type Browser, createBrowser, PASSWORD, signIn, signInAsAdmin } from '../oidc/browser.ts';
 
 const ARCHIVE_TYPE = 'application/gzip';
@@ -48,7 +46,7 @@ describe('backup routes', () => {
   let app: TestApp;
 
   beforeEach(async () => {
-    app = await startTestApp({ secretKeys: { current: randomBytes(SECRET_KEY_BYTES), previous: null } });
+    app = await startTestApp({ secretKeys: newSecretKeys() });
   });
 
   afterEach(async () => {

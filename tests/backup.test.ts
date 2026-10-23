@@ -1,15 +1,14 @@
 import { execFileSync } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gunzipSync } from 'node:zlib';
-import { SECRET_KEY_BYTES, type SecretKeys } from '../server/core/secret-box.ts';
+import type { SecretKeys } from '../server/core/secret-box.ts';
 import { openServices, type Services } from '../server/core/services.ts';
 import { openDatabase } from '../server/db/client.ts';
 import { AuditType } from '../server/store/audit.ts';
 import { BackupErrorCode } from '../server/store/backup.ts';
-import { startTestApp, tempDir } from './helpers.ts';
+import { newSecretKey, newSecretKeys, startTestApp, tempDir } from './helpers.ts';
 import { PASSWORD } from './oidc/browser.ts';
 
 const ISSUER = 'http://127.0.0.1:1/oidc';
@@ -81,10 +80,10 @@ async function withDataDir(
 
 describe('backups between servers', () => {
   it('exports one server’s data and restores it into another under the same key only', async () => {
-    const secretKeys = { current: randomBytes(SECRET_KEY_BYTES), previous: null };
+    const secretKeys = newSecretKeys();
     const source = await startTestApp({ secretKeys });
     const target = await startTestApp({ secretKeys });
-    const stranger = await startTestApp({ secretKeys: { current: randomBytes(SECRET_KEY_BYTES), previous: null } });
+    const stranger = await startTestApp({ secretKeys: newSecretKeys() });
     try {
       await source.services.users.create({ username: 'ada', password: PASSWORD, email: '', name: '', groups: [] });
       const archive = await source.services.backup.create({ includeSessions: false });
@@ -117,7 +116,7 @@ describe('the backup CLI', () => {
   it(
     'exports one data directory and restores it into another',
     async () => {
-      const key = randomBytes(SECRET_KEY_BYTES);
+      const key = newSecretKey();
       const secretKeys = { current: key, previous: null };
       const source = tempDir();
       await withDataDir(source, secretKeys, async (services) => {
@@ -130,7 +129,7 @@ describe('the backup CLI', () => {
 
       const target = tempDir();
       await withDataDir(target, secretKeys, async () => {});
-      const wrongKey = randomBytes(SECRET_KEY_BYTES).toString('base64');
+      const wrongKey = newSecretKey().toString('base64');
       const refused = run(['restore', file], { DATA_DIR: target, SECRET_KEY: wrongKey });
       expect(refused.status).toBe(1);
       expect(refused.output).toMatch(/do not open/);
@@ -150,7 +149,7 @@ describe('the backup CLI', () => {
   it(
     'takes the provider sessions with --sessions, and refuses a flag or a missing file with its usage',
     async () => {
-      const secretKeys = { current: randomBytes(SECRET_KEY_BYTES), previous: null };
+      const secretKeys = newSecretKeys();
       const dataDir = tempDir();
       await withDataDir(dataDir, secretKeys, async () => {});
       const SECRET_KEY = secretKeys.current.toString('base64');
