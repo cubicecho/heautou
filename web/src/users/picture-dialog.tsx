@@ -1,8 +1,8 @@
 import type { UserFieldsFragment } from '@/__generated__/graphql';
 import { DialogLayout } from '@/components/dialog-layout';
 import { Button } from '@/components/ui/button';
-import { useUsers } from '@/core/admin';
 import { useRemoveUserPicture, useSetUserPicture } from '@/core/pictures';
+import { useUsers } from '@/core/users';
 import { PictureSetting } from '@/pictures/picture-setting';
 
 interface PictureDialogProps {

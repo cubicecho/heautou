@@ -6,8 +6,9 @@ import { ListItem } from '@/components/list-item';
 import { EmptyState } from '@/components/page';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { useUnlinkUserUpstream, useUsers } from '@/core/admin';
 import { messageOf } from '@/core/lists';
+import { useUnlinkUserUpstream } from '@/core/upstreams';
+import { useUsers } from '@/core/users';
 import { formatAgo, joinStats } from '@/lib/format';
 
 interface LinkedAccountsDialogProps {

@@ -6,10 +6,10 @@ import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { CopyButton } from '@/components/ui/copy-button';
 import { Spinner } from '@/components/ui/spinner';
-import { useCreatePasswordLink } from '@/core/admin';
 import { Mail } from '@/core/app-icons';
 import { messageOf } from '@/core/lists';
 import { useEmailPasswordLink, useMail } from '@/core/mail';
+import { useCreatePasswordLink } from '@/core/users';
 import { formatDateTime } from '@/lib/format';
 
 interface PasswordLinkDialogProps {

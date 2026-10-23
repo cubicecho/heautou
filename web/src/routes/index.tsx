@@ -5,8 +5,8 @@ import { QueryError } from '@/components/query-state';
 import { Section } from '@/components/section';
 import { Alert } from '@/components/ui/alert';
 import { CopyButton } from '@/components/ui/copy-button';
-import { useProviderInfo } from '@/core/admin';
 import { useBackupInfo } from '@/core/backup';
+import { useProviderInfo } from '@/core/provider';
 
 export const Route = createFileRoute('/')({ component: OverviewPage });
 

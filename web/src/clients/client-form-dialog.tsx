@@ -12,7 +12,8 @@ import { Section } from '@/components/section';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { FormElement } from '@/components/ui/form-element';
-import { useCreateClient, useGroupOptions, useTokenLifetimeDefaults, useUpdateClient } from '@/core/admin';
+import { useCreateClient, useTokenLifetimeDefaults, useUpdateClient } from '@/core/clients';
+import { useGroupOptions } from '@/core/groups';
 import { linesOf, messageOf } from '@/core/lists';
 
 const URI_ROWS = 3;

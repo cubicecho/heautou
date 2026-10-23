@@ -17,9 +17,9 @@ import { ThemePicker } from '@/components/ui/theme-picker';
 import { useThemePreference } from '@/components/ui/theme-preference';
 import { isThemePreference, type ThemePreference } from '@/components/ui/theme-preference-base';
 import { useAccount } from '@/core/account';
-import { signOut, useViewer } from '@/core/admin';
 import { Activity, AppWindow, LayoutDashboard, LogOut, Server, ShieldCheck, Tags, UsersRound } from '@/core/app-icons';
 import { BrandIcon, useBrandName } from '@/core/brand';
+import { signOut, useViewer } from '@/core/session';
 
 const SidebarLink = createLink(SidebarNavItem);
 const BarLink = createLink(BarNavItem);

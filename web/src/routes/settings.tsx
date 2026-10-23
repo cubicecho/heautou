@@ -20,19 +20,11 @@ import { FormElement } from '@/components/ui/form-element';
 import { RefreshCw, Trash2 } from '@/components/ui/icons';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  useBranding,
-  useHttpRedirects,
-  useKeys,
-  usePasswordRules,
-  useRotateKeys,
-  useSetBrandingLogo,
-  useSetBrandingName,
-  useSetHttpRedirects,
-  useSetPasswordRules,
-} from '@/core/admin';
 import { ImageUp } from '@/core/app-icons';
+import { useBranding, useSetBrandingLogo, useSetBrandingName } from '@/core/branding';
+import { useKeys, useRotateKeys } from '@/core/keys';
 import { messageOf } from '@/core/lists';
+import { useHttpRedirects, usePasswordRules, useSetHttpRedirects, useSetPasswordRules } from '@/core/settings';
 import { formatAgo, formatBytes, formatDateTime } from '@/lib/format';
 import type { SlotNode } from '@/lib/utils';
 import { MailSection } from '@/mail/mail-section';

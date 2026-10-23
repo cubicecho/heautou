@@ -1,5 +1,5 @@
 import type { AuditEntryFieldsFragment } from '../../web/src/__generated__/graphql.ts';
-import { type AuditPages, auditWhere, withNewEntry } from '../../web/src/core/admin.ts';
+import { type AuditPages, auditWhere, withNewEntry } from '../../web/src/core/audit.ts';
 
 /**
  * Builds an audit entry as the activity page reads it.

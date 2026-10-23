@@ -5,8 +5,8 @@ import { DialogLayout } from '@/components/dialog-layout';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { FormElement } from '@/components/ui/form-element';
-import { useClients } from '@/core/admin';
 import { useApiLifetimeBounds, useCreateApi, useUpdateApi } from '@/core/apis';
+import { useClients } from '@/core/clients';
 import { messageOf } from '@/core/lists';
 
 /** What each token format is called, and what it means for the API. */

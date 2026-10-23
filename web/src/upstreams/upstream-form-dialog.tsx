@@ -11,9 +11,10 @@ import { Button } from '@/components/ui/button';
 import { CodeBlock } from '@/components/ui/code';
 import { CopyButton } from '@/components/ui/copy-button';
 import { FormElement } from '@/components/ui/form-element';
-import { useGroupOptions, useSaveUpstream, useUpstreamRedirectUri } from '@/core/admin';
 import { useBackupInfo } from '@/core/backup';
+import { useGroupOptions } from '@/core/groups';
 import { commaListOf, linesOf, messageOf } from '@/core/lists';
+import { useSaveUpstream, useUpstreamRedirectUri } from '@/core/upstreams';
 import {
   OTHER_UPSTREAM,
   UPSTREAM_PRESET_OPTIONS,

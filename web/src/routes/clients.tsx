@@ -21,9 +21,10 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { CopyButton } from '@/components/ui/copy-button';
 import { Pencil, Plug, Plus, RefreshCw, Trash2 } from '@/components/ui/icons';
-import { useClients, useDeleteClient, useProviderInfo, useRotateClientSecret } from '@/core/admin';
 import { AppWindow } from '@/core/app-icons';
+import { useClients, useDeleteClient, useRotateClientSecret } from '@/core/clients';
 import { messageOf } from '@/core/lists';
+import { useProviderInfo } from '@/core/provider';
 import type { SlotNode } from '@/lib/utils';
 
 export const Route = createFileRoute('/clients')({ component: ClientsPage });

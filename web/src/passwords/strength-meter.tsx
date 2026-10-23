@@ -1,5 +1,5 @@
 import { Progress } from '@/components/ui/progress';
-import { usePasswordStrengthRule } from '@/core/admin';
+import { usePasswordStrengthRule } from '@/core/settings';
 import { usePasswordStrength } from '@/passwords/strength';
 
 /** What each zxcvbn score is called, from 0 to 4. */
