@@ -399,7 +399,7 @@ export function documentFromRows<T, TTables extends readonly PgTable[]>(
  *
  * @param tx - The transaction the whole restore runs in.
  * @param mapping - How the document is laid out.
- * @param document - The document, as its file holds it.
+ * @param document - The document, as its archive file holds it.
  */
 export async function replaceDocument(tx: Transaction, mapping: LooseMapping, document: unknown): Promise<void> {
   const rows = mapping.toRows(document);

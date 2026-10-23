@@ -14,7 +14,7 @@ export interface ProviderKeys {
   rotatedAt?: string;
 }
 
-/** The provider's keys, kept in one file. */
+/** The provider's keys, kept in one document. */
 export interface KeyStore {
   /** The keys as they are now. */
   current: () => ProviderKeys;
@@ -74,7 +74,7 @@ function mapPrivateMembers(jwk: JWK, change: (secret: string) => string): JWK {
 }
 
 /**
- * Finds the secrets in the key file: the private halves of the signing keys, and the cookie keys.
+ * Finds the secrets in the key document: the private halves of the signing keys, and the cookie keys.
  *
  * @param keys - The keys as stored, or null before the first boot.
  * @param change - Seals or opens one secret.

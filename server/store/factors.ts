@@ -41,7 +41,7 @@ export interface UserFactors {
   passkeys: Passkey[];
 }
 
-/** The factors file: each user's factors by user ID. A user with none has no entry. */
+/** The factors document: each user's factors by user ID. A user with none has no entry. */
 export type FactorsDocument = Record<string, UserFactors>;
 
 /** A passkey without its key material: what leaves the server. */
@@ -55,7 +55,7 @@ export interface FactorSummary {
   passkeys: PasskeyInfo[];
 }
 
-/** The second factors, kept in one JSON file. */
+/** The second factors, kept in one document. */
 export interface FactorStore {
   summary: (userId: string) => FactorSummary;
   /** Whether the user has to give a second factor after their password. */
@@ -119,11 +119,11 @@ export interface FactorStore {
 }
 
 /**
- * Finds the secrets in the factors file: each authenticator app's secret.
+ * Finds the secrets in the factors document: each authenticator app's secret.
  *
- * @param document - The file as stored.
+ * @param document - The document as stored.
  * @param change - Seals or opens one secret.
- * @returns The file with its secrets changed.
+ * @returns The document with its secrets changed.
  */
 export const factorSecretsIn: SecretMapper<FactorsDocument> = (document, change) =>
   Object.fromEntries(
@@ -178,7 +178,7 @@ function infoOf({ id, name, createdAt, lastUsedAt }: Passkey): PasskeyInfo {
 }
 
 /**
- * Builds the factor store over a JSON file.
+ * Builds the factor store over its document.
  *
  * @param document - The document holding every user's factors.
  * @param [now] - The clock, in epoch milliseconds.

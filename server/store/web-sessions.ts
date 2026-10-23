@@ -10,7 +10,7 @@ interface WebSession {
   expiresAt: number;
 }
 
-/** Sessions by the SHA-256 of their token, so the file alone cannot be replayed as a cookie. */
+/** Sessions by the SHA-256 of their token, so the tables alone cannot be replayed as a cookie. */
 export type WebSessionDocument = Record<string, WebSession>;
 
 /**

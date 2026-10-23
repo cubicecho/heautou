@@ -94,7 +94,7 @@ export type ApiFields = Partial<z.input<ReturnType<typeof apiFieldsSchemaFor>>>;
 /** What the operator writes when adding an API. */
 export type NewApi = z.input<ReturnType<typeof apiFieldsSchemaFor>> & { identifier: string };
 
-/** The APIs, kept in one JSON file. */
+/** The APIs, kept in one document. */
 export interface ApiStore {
   list: () => Api[];
   find: (identifier: string) => Api | null;
@@ -109,7 +109,7 @@ export interface ApiStore {
   removeClient: (clientId: string) => Promise<void>;
 }
 
-/** What the API store is built with besides its file. */
+/** What the API store is built with besides its document. */
 export interface ApiStoreOptions {
   /** Says whether a client exists, so an API names only real ones. */
   clientExists: (clientId: string) => boolean;
@@ -120,7 +120,7 @@ export interface ApiStoreOptions {
 }
 
 /**
- * Builds the API store over a JSON file.
+ * Builds the API store over its document.
  *
  * @param document - The document holding every API.
  * @param options - Which clients exist, the provider's own scopes and the clock.

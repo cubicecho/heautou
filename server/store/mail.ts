@@ -101,7 +101,7 @@ const optionsSchema = z.object({
   notifyFactorRemoved: z.boolean().optional(),
 });
 
-/** The SMTP server saved under Settings and the email options, kept in one file. */
+/** The SMTP server saved under Settings and the email options, kept in one document. */
 export interface MailStore {
   /**
    * Reads the server saved under Settings.
@@ -137,7 +137,7 @@ export interface MailStore {
 }
 
 /**
- * Opens the mail store on its file.
+ * Opens the mail store on its document.
  *
  * @param document - The document, sealed so the password is plain in memory only. Missing, there is no server and every
  * option is off.

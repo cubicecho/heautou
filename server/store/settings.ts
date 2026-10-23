@@ -6,7 +6,7 @@ import type { DataDocument } from '../db/document.ts';
 /** The highest score zxcvbn gives a password. */
 export const MAX_PASSWORD_SCORE = 4;
 
-/** The provider's settings as the file holds them. A setting left out follows its default. */
+/** The provider's settings as the document holds them. A setting left out follows its default. */
 export interface SettingsDocument {
   /** Whether redirect URIs may be plain `http://` on any host. */
   allowHttpRedirectUris?: boolean;
@@ -43,7 +43,7 @@ export interface HttpRedirectSetting {
   isIssuerHttp: boolean;
 }
 
-/** The operator's settings, kept in one file. */
+/** The operator's settings, kept in one document. */
 export interface SettingsStore {
   /**
    * Reads whether plain http redirect URIs are allowed.
@@ -75,7 +75,7 @@ export interface SettingsStore {
 }
 
 /**
- * Opens the settings store on its file.
+ * Opens the settings store on its document.
  *
  * @param document - The document. Missing, every setting follows its default.
  * @param issuer - The provider's issuer, which the http redirect default follows.

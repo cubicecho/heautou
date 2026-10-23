@@ -10,7 +10,7 @@ interface PasswordLink {
   expiresAt: number;
 }
 
-/** Links by the SHA-256 of their token, so the file alone does not hold usable links. */
+/** Links by the SHA-256 of their token, so the tables alone do not hold usable links. */
 export type PasswordLinkDocument = Record<string, PasswordLink>;
 
 /** A link just made, to hand to the user. */
@@ -63,7 +63,7 @@ function digest(token: string): string {
 }
 
 /**
- * Opens the password link store on its file.
+ * Opens the password link store on its document.
  *
  * @param document - The document holding the links.
  * @param [now] - The clock, in epoch milliseconds.

@@ -31,7 +31,7 @@ const GRAPHQL_ENDPOINT = '/graphql';
 const HEALTH_ENDPOINT = '/healthz';
 /** Every path but the server's own, so the web app's routes load index.html. */
 const WEB_ROUTES = /^(?!\/(graphql|healthz)$|\/(oidc|interaction|admin|upstream|auth)(\/|$)).*/;
-/** The routes that start sign-ins or write files, limited per address. */
+/** The routes that start sign-ins or write data, limited per address. */
 const LIMITED_ROUTES = [
   `${OIDC_MOUNT_PATH}/auth`,
   `${OIDC_MOUNT_PATH}/reg`,

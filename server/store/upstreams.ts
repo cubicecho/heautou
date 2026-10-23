@@ -85,13 +85,13 @@ export interface UpstreamLink {
   lastUsedAt: string | null;
 }
 
-/** The upstreams file. */
+/** The upstreams document. */
 export interface UpstreamsDocument {
   providers: UpstreamProvider[];
   links: UpstreamLink[];
 }
 
-/** The file before anything is added. */
+/** The document before anything is added. */
 export const EMPTY_UPSTREAMS: Readonly<UpstreamsDocument> = Object.freeze({ providers: [], links: [] });
 
 /** Who an identity is, as the sign-in learned it, without what it says about the person. */
@@ -191,7 +191,7 @@ const idSchema = z
   .max(UPSTREAM_DEFAULTS.maxIdLength)
   .regex(ID_PATTERN, 'use lower-case letters, digits and "-", starting with a letter or digit');
 
-/** The upstream providers and the identities linked to users, kept in one JSON file. */
+/** The upstream providers and the identities linked to users, kept in one document. */
 export interface UpstreamStore {
   list: () => UpstreamProvider[];
   find: (id: string) => UpstreamProvider | null;
@@ -256,7 +256,7 @@ export interface UpstreamStore {
   replaceGroup: (from: string, to: string | null) => Promise<void>;
 }
 
-/** What the upstream store is built with besides its file. */
+/** What the upstream store is built with besides its document. */
 export interface UpstreamStoreOptions {
   /** The clock, for `createdAt` and the link times. */
   now?: () => Date;
@@ -265,11 +265,11 @@ export interface UpstreamStoreOptions {
 }
 
 /**
- * Finds the secrets in the upstreams file: each provider's client secret.
+ * Finds the secrets in the upstreams document: each provider's client secret.
  *
- * @param document - The file as stored.
+ * @param document - The document as stored.
  * @param change - Seals or opens one secret.
- * @returns The file with its secrets changed.
+ * @returns The document with its secrets changed.
  */
 export const upstreamSecretsIn: SecretMapper<UpstreamsDocument> = (document, change) => ({
   ...document,
@@ -290,7 +290,7 @@ function isSameIdentity(link: IdentityKey, key: IdentityKey): boolean {
 }
 
 /**
- * Builds the upstream store over a JSON file. An issuer is held to the https rule redirect URIs are
+ * Builds the upstream store over its document. An issuer is held to the https rule redirect URIs are
  * (`redirect-uris.ts`) when a provider is saved.
  *
  * @param document - The document holding the providers and the links.

@@ -59,10 +59,10 @@ average 13); every failing file passes alone. See T5 and T6.
 | T3 | Test [pin] | Pins the backup CLI's `--sessions` flag and its refusals | Protects R8 | — | done |
 | R7 | Refactor [pattern] | Moves the older-data-directory reader from the backup module to the import module | M4 | M4 | done |
 | R8 | Refactor [reuse] | One export and one restore (check, pick files, replace, audit entry) used by both the CLI and the running server | M4; services.ts changes most of any file | M4, T1, T3 | done |
-| M5 | Model change | Retires "file" as the code's word for a store's document; "file" then means only an archive file | One concept, one name (P25), and the JSON-era word stops misleading | — | approved |
+| M5 | Model change | Retires "file" as the code's word for a store's document; "file" then means only an archive file | One concept, one name (P25), and the JSON-era word stops misleading | — | done |
 | R12 | Refactor [sweep] | Renames every store's `file` parameter to `document` (84 hits, 18 files) | M5 | M5 | done |
 | R13 | Refactor [readability] | Renames the document mapping's `file` field and `DOCUMENT_FILES` to say they are the document's name; the stored values stay | M5 | M5, A2 | done |
-| D6 | Doc [sweep] | Rewrites comments that say "the file" or "model files" where they mean the document or its tables | M5 | M5 | approved |
+| D6 | Doc [sweep] | Rewrites comments that say "the file" or "model files" where they mean the document or its tables | M5 | M5 | done |
 | A2 | API change | Asks whether the stored document names and archive paths (`keys.json`, …) keep their JSON-era values | Decides R13's scope | — | done |
 | M6 | Model change | Gives each rule or limit both sides check one owner on the server, imported by the web or held to it by a test | Ends silent drift between form checks and server checks | — | approved |
 | B4 | Bug (question) | Asks whether the web's host check should match the server's, which also limits label and total length | Settles a copy that already drifted | — | done |
@@ -197,7 +197,7 @@ name in `documents` and the archive path. To-be: a store's data is its **documen
 means only an archive file (or an older data directory's file). The mapping's field is its
 `name`, which the archive path equals; the stored values stay (A2). Why it is simpler: P25,
 and a newcomer stops looking for files that no longer exist. Implemented by: R12, R13, D6.
-Status: open.
+Status: done.
 
 ### M6 — Rules both sides check have one owner, on the server
 
@@ -621,6 +621,12 @@ file", "whenever the file is written"), `server/oidc/host.ts:6` ("model files"),
 `server/store/proxy-sessions.ts:6,21`, `admin-sessions.ts:13`, `password-links.ts:13`,
 `settings.ts:9`, `clients.ts:257,314`, `users.ts:138`, `tests/store/clients.test.ts:36`.
 Count per file to be taken when approved (an automatic count mixes in archive files).
+Done: 51 comments in 22 files (upstreams 8, factors 6; proxy-sessions, clients, apis, adapter,
+protected-sites, settings 3 each; secret-box, password-links, keys, mail, branding 2 each; config,
+defaults, web-sessions, pairings, rate-limit, http/app, host, schema, document 1 each). Left as
+they are: comments about an older version's files, archive files, the audit log's file and
+`_FILE` variables, which are files; and the error message "The key file was emptied while the
+server ran." in `server/store/keys.ts`, which is behaviour (new finding B9).
 
 ### D7 — `server/db/document.ts`'s header comment is history
 

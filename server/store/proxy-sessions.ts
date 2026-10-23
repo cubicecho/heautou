@@ -3,7 +3,7 @@ import { FORWARD_AUTH_DEFAULTS } from '../core/defaults.ts';
 import { MS_PER_SECOND } from '../core/wire.ts';
 import type { DataDocument } from '../db/document.ts';
 
-/** One browser signed in to the protected sites, as the file holds it. */
+/** One browser signed in to the protected sites, as the document holds it. */
 export interface ProxySession {
   userId: string;
   /** The provider grant the sign-in was made under. Signing out at the provider revokes it, which ends this too. */
@@ -18,7 +18,7 @@ export interface ProxySession {
   lastSeenAt: number;
 }
 
-/** Sessions by the SHA-256 of their token, so the file alone cannot be replayed as a cookie. */
+/** Sessions by the SHA-256 of their token, so the tables alone cannot be replayed as a cookie. */
 export type ProxySessionDocument = Record<string, ProxySession>;
 
 /** What a sign-in starts a session with. */
@@ -63,7 +63,7 @@ function digest(token: string): string {
 }
 
 /**
- * Opens the proxy session store on its file.
+ * Opens the proxy session store on its document.
  *
  * @param document - The document holding the sessions.
  * @param [now] - The clock, in epoch milliseconds.

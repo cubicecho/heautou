@@ -3,7 +3,7 @@ import type Provider from 'oidc-provider';
 
 /**
  * Holds the provider and builds it again when what it was built from changes. oidc-provider fixes its keys and
- * claims when it is made; its sessions, codes and tokens live in the model files, so a new build carries on where
+ * claims when it is made; its sessions, codes and tokens live in the model documents, so a new build carries on where
  * the old one stopped.
  */
 export interface ProviderHost {

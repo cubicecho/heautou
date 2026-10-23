@@ -142,7 +142,7 @@ function toPairing(id: string, record: PairingRecord): Pairing {
 }
 
 /**
- * Opens the pairing store on its file.
+ * Opens the pairing store on its document.
  *
  * @param document - The document holding the pairings.
  * @param [now] - The clock, in epoch milliseconds.

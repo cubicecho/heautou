@@ -519,7 +519,7 @@ export interface ForwardAuthSettings {
   sessionSeconds: number;
   /** How long a proxy session lasts without a request, in seconds. */
   idleSeconds: number;
-  /** How often a session's last request is written down at most, in seconds, so not every request writes the file. */
+  /** How often a session's last request is written down at most, in seconds, so not every request writes its row. */
   touchSeconds: number;
   /** How long a started proxy sign-in may take to come back, in seconds. */
   loginSeconds: number;

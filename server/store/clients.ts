@@ -241,7 +241,7 @@ export interface ClientStore {
   replaceGroup: (from: string, to: string | null) => Promise<void>;
 }
 
-/** What the client store is built with besides its file. */
+/** What the client store is built with besides its document. */
 export interface ClientStoreOptions {
   /** The clock, for `createdAt`. */
   now?: () => Date;
@@ -298,7 +298,7 @@ function withSecretFor(client: OidcClient): OidcClient {
 }
 
 /**
- * Finds the secrets in the client file: each confidential client's secret.
+ * Finds the secrets in the client document: each confidential client's secret.
  *
  * @param clients - The clients as stored.
  * @param change - Seals or opens one secret.
@@ -311,7 +311,7 @@ export const clientSecretsIn: SecretMapper<OidcClient[]> = (clients, change) =>
 
 /**
  * Builds the client store over its document. Redirect and back-channel logout URIs are checked against the https
- * rule (`redirect-uris.ts`) when a client is saved; clients already in the file are read as they are.
+ * rule (`redirect-uris.ts`) when a client is saved; clients already saved are read as they are.
  *
  * @param document - The document holding every client.
  * @param [options] - The clock, whether plain http redirect URIs are allowed, and who is told of a removal.

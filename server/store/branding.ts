@@ -28,7 +28,7 @@ const DATA_URL_PATTERN = /^data:([a-z+/.-]+);base64,([A-Za-z0-9+/=]+)$/;
 
 const nameSchema = z.string().trim().min(1, 'give it a name').max(BRANDING_DEFAULTS.maxNameLength);
 
-/** The provider's name and logo, kept in one file. */
+/** The provider's name and logo, kept in one document. */
 export interface BrandingStore {
   read: () => Branding;
   setName: (name: string) => Promise<Branding>;
@@ -43,7 +43,7 @@ export interface BrandingStore {
 }
 
 /**
- * Opens the branding store on its file.
+ * Opens the branding store on its document.
  *
  * @param document - The document. Missing, the defaults apply.
  * @param [now] - The clock.

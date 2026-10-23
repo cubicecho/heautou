@@ -30,14 +30,14 @@ export interface ProtectedSite {
   createdAt: string;
 }
 
-/** The forward auth settings and sites, as the file holds them. */
+/** The forward auth settings and sites, as the document holds them. */
 export interface ProtectedSitesDocument {
   /** The parent domain the proxy session cookie is set on, without a leading dot. Left out for Heautou's own host. */
   cookieDomain?: string;
   sites: ProtectedSite[];
 }
 
-/** A new site's empty file. */
+/** The document before anything is added. */
 export const EMPTY_PROTECTED_SITES: ProtectedSitesDocument = Object.freeze({ sites: [] });
 
 const hostSchema = z
@@ -163,7 +163,7 @@ export interface ProtectedSiteStore {
 }
 
 /**
- * Opens the protected site store on its file.
+ * Opens the protected site store on its document.
  *
  * @param document - The document.
  * @param options - Where Heautou is, to check the cookie domain against, and the clock.
