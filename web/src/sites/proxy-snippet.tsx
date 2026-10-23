@@ -164,7 +164,7 @@ export function ProxySnippet({
                     />
                   }
                 />
-                {chosen === undefined ? null : (
+                {chosen !== undefined && (
                   <FormField
                     label="App backend"
                     description={`Where the proxy reaches ${chosen.name}, as host:port.`}

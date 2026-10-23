@@ -75,7 +75,7 @@ export function PictureSetting({
         description={`PNG, JPEG or WebP, up to ${formatBytes(maxBytes)}. It is cropped to a square, and apps that show an avatar get it.`}
         actionSlot={
           <div className="flex items-center gap-2">
-            {url === null ? null : (
+            {url !== null && (
               <>
                 <img src={url} alt={`${owner} avatar`} className="size-10 rounded-full object-cover" />
                 <Button
@@ -101,10 +101,8 @@ export function PictureSetting({
           </div>
         }
       />
-      {tooBig === null ? null : <Alert variant="destructive" title="Picture not used" description={tooBig} />}
-      {error === null ? null : (
-        <Alert variant="destructive" title="Picture not changed" description={messageOf(error)} />
-      )}
+      {tooBig !== null && <Alert variant="destructive" title="Picture not used" description={tooBig} />}
+      {error !== null && <Alert variant="destructive" title="Picture not changed" description={messageOf(error)} />}
     </div>
   );
 }

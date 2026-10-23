@@ -46,7 +46,7 @@ function LogoutPage() {
       footerActionsSlot={
         <>
           <Button variant="outline" content="Cancel" onClick={goBack} />
-          {xsrf === undefined ? null : (
+          {xsrf !== undefined && (
             <Button
               variant="destructive"
               type="submit"

@@ -87,7 +87,7 @@ function SetupPage() {
       <form.Subscribe selector={(state) => state.values}>
         {({ password, username }) => <PasswordStrengthMeter password={password} owner={[username]} />}
       </form.Subscribe>
-      {asksForToken ? (
+      {asksForToken && (
         <>
           <InputField
             form={form}
@@ -100,8 +100,8 @@ function SetupPage() {
           />
           <LogCommand />
         </>
-      ) : null}
-      {failure === null ? null : <Alert variant="destructive" title="No admin made" description={failure} />}
+      )}
+      {failure !== null && <Alert variant="destructive" title="No admin made" description={failure} />}
     </FormElement>
   );
   const done = (
@@ -131,7 +131,7 @@ function SetupPage() {
   ) : (
     <div className="grid gap-6">
       {setupForm}
-      {isFresh ? existingUser : null}
+      {isFresh && existingUser}
     </div>
   );
   const description = isFresh

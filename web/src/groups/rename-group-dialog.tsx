@@ -46,7 +46,7 @@ export function RenameGroupDialog({ name, open, onOpenChange }: RenameGroupDialo
             description="Naming it after a group that exists merges the two."
             validators={{ onChange: ({ value }) => (value.trim() ? undefined : 'Give the group a name.') }}
           />
-          {rename.error === null ? null : (
+          {rename.error !== null && (
             <Alert variant="destructive" title="Not renamed" description={messageOf(rename.error)} />
           )}
         </FormElement>

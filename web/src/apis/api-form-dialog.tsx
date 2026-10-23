@@ -83,6 +83,7 @@ interface ApiFormDialogProps {
 /** Adds an API or changes one. */
 export function ApiFormDialog({ api, open, onOpenChange, onSaved }: ApiFormDialogProps) {
   const isEdit = api !== null;
+  const isNew = isEdit === false;
   const create = useCreateApi();
   const update = useUpdateApi();
   const failure = isEdit ? update.error : create.error;
@@ -125,7 +126,7 @@ export function ApiFormDialog({ api, open, onOpenChange, onSaved }: ApiFormDialo
       hasUnsavedChanges={() => form.state.isDefaultValue === false}
       contentSlot={
         <FormElement onSubmit={() => form.handleSubmit()} className="grid gap-4">
-          {isEdit ? null : (
+          {isNew && (
             <InputField
               form={form}
               name="identifier"

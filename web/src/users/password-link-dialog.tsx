@@ -50,8 +50,8 @@ export function PasswordLinkDialog({ user, open, onOpenChange }: PasswordLinkDia
       }
       contentSlot={
         <div className="grid gap-4">
-          {isPending ? <Spinner /> : null}
-          {link === undefined ? null : (
+          {isPending && <Spinner />}
+          {link !== undefined && (
             <DescriptionList
               contentSlot={[
                 <PropertyRow
@@ -62,7 +62,7 @@ export function PasswordLinkDialog({ user, open, onOpenChange }: PasswordLinkDia
                   actionSlot={
                     <>
                       <CopyButton value={link.url} label="Copy link" />
-                      {canEmail ? (
+                      {canEmail && (
                         <Button
                           aria-label={`Send by email to ${user.email}`}
                           hint={`Send by email to ${user.email}`}
@@ -72,7 +72,7 @@ export function PasswordLinkDialog({ user, open, onOpenChange }: PasswordLinkDia
                           loading={email.isPending}
                           onClick={() => email.mutate(user.id)}
                         />
-                      ) : null}
+                      )}
                     </>
                   }
                 />,
@@ -80,22 +80,22 @@ export function PasswordLinkDialog({ user, open, onOpenChange }: PasswordLinkDia
               ]}
             />
           )}
-          {error === null ? null : <Alert variant="destructive" title="No link made" description={messageOf(error)} />}
-          {email.data === undefined || sendFailure !== null ? null : (
+          {error !== null && <Alert variant="destructive" title="No link made" description={messageOf(error)} />}
+          {email.data !== undefined && sendFailure === null && (
             <Alert
               variant="info"
               title="Sent"
               description={`The link above went to ${email.data.sentTo}. The one shown before stopped working.`}
             />
           )}
-          {sendFailure === null ? null : (
+          {sendFailure !== null && (
             <Alert
               variant="destructive"
               title="Email not sent"
               description={`${sendFailure} The link above still works: copy it instead.`}
             />
           )}
-          {email.error === null ? null : (
+          {email.error !== null && (
             <Alert variant="destructive" title="Email not sent" description={messageOf(email.error)} />
           )}
           <Alert

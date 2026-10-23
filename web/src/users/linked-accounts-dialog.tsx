@@ -27,6 +27,7 @@ export function LinkedAccountsDialog({ user, open, onOpenChange }: LinkedAccount
   // The list is read again after an unlink, so the dialog follows it rather than the row it opened from.
   const current = useUsers().data?.find((each) => each.id === user.id) ?? user;
   const links = current.upstreamLinks;
+  const hasNoLinks = links.length === 0;
 
   return (
     <DialogLayout
@@ -36,7 +37,7 @@ export function LinkedAccountsDialog({ user, open, onOpenChange }: LinkedAccount
       description="Accounts at sign-in providers that sign in as this user."
       contentSlot={
         <div className="grid gap-4">
-          {links.length === 0 ? <EmptyState compact title="Nothing is linked." /> : null}
+          {hasNoLinks && <EmptyState compact title="Nothing is linked." />}
           <List
             label="Linked accounts"
             contentSlot={links.map((link) => (
@@ -66,7 +67,7 @@ export function LinkedAccountsDialog({ user, open, onOpenChange }: LinkedAccount
               />
             ))}
           />
-          {unlink.error === null ? null : (
+          {unlink.error !== null && (
             <Alert variant="destructive" title="Not unlinked" description={messageOf(unlink.error)} />
           )}
         </div>

@@ -32,7 +32,7 @@ export function PasswordRulesSection() {
       surface="card"
       contentSlot={
         <div className="grid gap-4">
-          {rules.isError ? <QueryError error={rules.error} onRetry={rules.refetch} what="the password rules" /> : null}
+          {rules.isError && <QueryError error={rules.error} onRetry={rules.refetch} what="the password rules" />}
           <SettingRow
             title="Minimum strength"
             description="How hard to guess a new password must be, as zxcvbn rates it. The forms show a meter as it is typed."
@@ -59,7 +59,7 @@ export function PasswordRulesSection() {
               />
             )}
           />
-          {save.error === null ? null : (
+          {save.error !== null && (
             <Alert variant="destructive" title="Setting not saved" description={messageOf(save.error)} />
           )}
         </div>

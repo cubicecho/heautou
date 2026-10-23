@@ -25,7 +25,7 @@ export function KeysSection() {
       surface="card"
       contentSlot={
         <div className="grid gap-4">
-          {keys.isError ? <QueryError error={keys.error} onRetry={keys.refetch} what="the keys" /> : null}
+          {keys.isError && <QueryError error={keys.error} onRetry={keys.refetch} what="the keys" />}
           <SettingRow
             title="Rotate keys"
             description={
@@ -58,7 +58,7 @@ export function KeysSection() {
               />
             ))}
           />
-          {rotate.error === null ? null : (
+          {rotate.error !== null && (
             <Alert variant="destructive" title="Keys not rotated" description={messageOf(rotate.error)} />
           )}
         </div>

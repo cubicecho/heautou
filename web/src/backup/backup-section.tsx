@@ -86,8 +86,8 @@ export function BackupSection() {
       surface="card"
       contentSlot={
         <div className="grid gap-4">
-          {info.isError ? <QueryError error={info.error} onRetry={info.refetch} what="the backup settings" /> : null}
-          {info.data === undefined ? null : <SealingNote isSealed={info.data.isSealed} />}
+          {info.isError && <QueryError error={info.error} onRetry={info.refetch} what="the backup settings" />}
+          {info.data !== undefined && <SealingNote isSealed={info.data.isSealed} />}
           <SettingRow
             title="Include sessions and tokens"
             description="The provider’s sign-in sessions, codes and refresh tokens. They are short-lived; left out, restoring the archive signs everyone out of their apps."
@@ -124,7 +124,7 @@ export function BackupSection() {
               />
             }
           />
-          {picked === null ? null : (
+          {picked !== null && (
             <SettingRow
               title={`Restore ${picked.name}`}
               description={`${formatBytes(picked.size)}. Every client, user, key and setting is replaced by the archive’s.`}
@@ -151,11 +151,11 @@ export function BackupSection() {
               }
             />
           )}
-          {tooBig === null ? null : <Alert variant="destructive" title="Archive not used" description={tooBig} />}
-          {download.error === null ? null : (
+          {tooBig !== null && <Alert variant="destructive" title="Archive not used" description={tooBig} />}
+          {download.error !== null && (
             <Alert variant="destructive" title="Backup not made" description={messageOf(download.error)} />
           )}
-          {restore.error === null ? null : (
+          {restore.error !== null && (
             <Alert variant="destructive" title="Nothing restored" description={messageOf(restore.error)} />
           )}
         </div>

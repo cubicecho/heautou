@@ -160,6 +160,7 @@ interface ClientFormDialogProps {
  */
 export function ClientFormDialog({ client, open, onOpenChange, onSaved }: ClientFormDialogProps) {
   const isEdit = client !== null;
+  const isNew = isEdit === false;
   const groupOptions = useGroupOptions();
   const create = useCreateClient();
   const update = useUpdateClient();
@@ -225,7 +226,7 @@ export function ClientFormDialog({ client, open, onOpenChange, onSaved }: Client
   /** What Advanced opens onto: what most apps leave as it is. */
   const advancedFields = (
     <>
-      {isEdit ? null : (
+      {isNew && (
         <InputField
           form={form}
           name="clientId"
@@ -261,14 +262,14 @@ export function ClientFormDialog({ client, open, onOpenChange, onSaved }: Client
       />
       <form.Subscribe selector={(state) => state.values.backchannelLogoutUri.trim() !== ''}>
         {(hasBackchannelUri) =>
-          hasBackchannelUri ? (
+          hasBackchannelUri && (
             <SwitchField
               form={form}
               name="backchannelLogoutSessionRequired"
               label="Send the session ID"
               description="Puts the session ID (sid) in the logout token and the ID tokens, for an application that ends sessions by it."
             />
-          ) : null
+          )
         }
       </form.Subscribe>
       <InputField
@@ -346,7 +347,7 @@ export function ClientFormDialog({ client, open, onOpenChange, onSaved }: Client
       hasUnsavedChanges={() => form.state.isDefaultValue === false}
       contentSlot={
         <FormElement onSubmit={() => form.handleSubmit()} className="grid gap-4">
-          {isEdit ? null : (
+          {isNew && (
             <SelectField
               form={form}
               name="preset"
@@ -387,7 +388,7 @@ export function ClientFormDialog({ client, open, onOpenChange, onSaved }: Client
           </form.Subscribe>
           <form.Subscribe selector={(state) => sitePresetById(state.values.preset) === undefined}>
             {(isClient) =>
-              isClient ? (
+              isClient && (
                 <>
                   <InputField
                     form={form}
@@ -446,7 +447,7 @@ export function ClientFormDialog({ client, open, onOpenChange, onSaved }: Client
                     )}
                   </form.Subscribe>
                 </>
-              ) : null
+              )
             }
           </form.Subscribe>
           <SaveFailure error={failure} />

@@ -64,7 +64,7 @@ function GroupsPage() {
       contentClassName="gap-4"
       contentSlot={
         <>
-          {remove.error === null ? null : (
+          {remove.error !== null && (
             <Alert variant="destructive" title="Group not deleted" description={messageOf(remove.error)} />
           )}
           <QueryState
@@ -113,7 +113,7 @@ function GroupsPage() {
               );
             })}
           />
-          {renaming === null ? null : (
+          {renaming !== null && (
             <RenameGroupDialog
               key={renaming}
               name={renaming}

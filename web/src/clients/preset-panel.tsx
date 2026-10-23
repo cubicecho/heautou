@@ -247,7 +247,7 @@ export function PresetPanel({
       }
       contentSlot={
         <div className="flex flex-col gap-3">
-          {preset.notes === undefined ? null : <Alert variant="info" description={<NoteList notes={preset.notes} />} />}
+          {preset.notes !== undefined && <Alert variant="info" description={<NoteList notes={preset.notes} />} />}
           <ConfigView
             config={config}
             secret={{ value: client.clientSecret ?? null, isShown: isSecretShown, onShownChange: onSecretShownChange }}
@@ -296,7 +296,7 @@ export function SitePresetGuide({ preset }: { preset: SitePreset }) {
         />
       </div>
       <p className="text-foreground/70 text-sm">{preset.where}</p>
-      {config === null ? null : <ConfigView config={config} />}
+      {config !== null && <ConfigView config={config} />}
     </div>
   );
 }

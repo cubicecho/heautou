@@ -70,9 +70,7 @@ export function SessionsDialog({ user, open, onOpenChange }: SessionsDialogProps
               />
             ))}
           />
-          {failure === null ? null : (
-            <Alert variant="destructive" title="Not signed out" description={messageOf(failure)} />
-          )}
+          {failure !== null && <Alert variant="destructive" title="Not signed out" description={messageOf(failure)} />}
         </div>
       }
       footerActionsSlot={(close) => (

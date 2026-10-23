@@ -25,15 +25,15 @@ export function RedirectUrisSection() {
       surface="card"
       contentSlot={
         <div className="grid gap-4">
-          {setting.isError ? (
+          {setting.isError && (
             <QueryError error={setting.error} onRetry={setting.refetch} what="the redirect URI setting" />
-          ) : null}
+          )}
           <SettingRow
             title="Allow plain http"
             description={`Lets a client be saved with an http:// redirect URI on any host. Clients saved before it was turned off keep working, and are marked in the list. ${issuerNote}`}
             actionSlot={({ titleId }) => (
               <div className="flex items-center gap-2">
-                {current?.isSet ? (
+                {current?.isSet && (
                   <Button
                     variant="ghost"
                     size="sm"
@@ -41,7 +41,7 @@ export function RedirectUrisSection() {
                     disabled={save.isPending}
                     onClick={() => save.mutate(null)}
                   />
-                ) : null}
+                )}
                 <Switch
                   aria-labelledby={titleId}
                   checked={current?.isAllowed ?? false}
@@ -51,7 +51,7 @@ export function RedirectUrisSection() {
               </div>
             )}
           />
-          {save.error === null ? null : (
+          {save.error !== null && (
             <Alert variant="destructive" title="Setting not saved" description={messageOf(save.error)} />
           )}
         </div>

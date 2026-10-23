@@ -75,9 +75,7 @@ export function BrandingSection() {
       surface="card"
       contentSlot={
         <div className="grid gap-4">
-          {branding.isError ? (
-            <QueryError error={branding.error} onRetry={branding.refetch} what="the branding" />
-          ) : null}
+          {branding.isError && <QueryError error={branding.error} onRetry={branding.refetch} what="the branding" />}
           <FormElement onSubmit={() => form.handleSubmit()} className="flex flex-wrap items-end gap-2">
             <InputField
               form={form}
@@ -96,7 +94,7 @@ export function BrandingSection() {
             description="PNG, JPEG, WebP or SVG, up to 256 KB. Shown beside the name; square looks best."
             actionSlot={
               <div className="flex items-center gap-2">
-                {logoUrl === null ? null : (
+                {logoUrl !== null && (
                   <>
                     <img src={logoUrl} alt="The current logo" className="size-8 rounded object-contain" />
                     <Button
@@ -122,8 +120,8 @@ export function BrandingSection() {
               </div>
             }
           />
-          {tooBig === null ? null : <Alert variant="destructive" title="Logo not used" description={tooBig} />}
-          {failure === null ? null : (
+          {tooBig !== null && <Alert variant="destructive" title="Logo not used" description={tooBig} />}
+          {failure !== null && (
             <Alert variant="destructive" title="Branding not saved" description={messageOf(failure)} />
           )}
         </div>

@@ -74,12 +74,12 @@ function ChangePassword() {
           <form.Subscribe selector={(state) => state.values.newPassword}>
             {(password) => <PasswordStrengthMeter password={password} owner={[username, name, email]} />}
           </form.Subscribe>
-          {change.error === null ? null : (
+          {change.error !== null && (
             <Alert variant="destructive" title="Password not changed" description={messageOf(change.error)} />
           )}
-          {change.isSuccess ? (
+          {change.isSuccess && (
             <Alert variant="info" description="Your password is changed. Signed-in browsers stay signed in." />
-          ) : null}
+          )}
           <div className="flex justify-end">
             <form.AppForm>
               <form.SubmitButton variant="outline" content="Change password" />
@@ -97,6 +97,7 @@ function ChangePassword() {
 function RecentSignIns() {
   const activity = useAccountActivity();
   const entries = activity.data ?? [];
+  const hasNoEntries = entries.length === 0;
 
   return (
     <Section
@@ -109,7 +110,7 @@ function RecentSignIns() {
           <Spinner />
         ) : (
           <div className="grid gap-2">
-            {entries.length === 0 ? <EmptyState compact title="No sign-ins recorded yet." /> : null}
+            {hasNoEntries && <EmptyState compact title="No sign-ins recorded yet." />}
             <List
               label="Recent sign-ins"
               contentSlot={entries.map((entry) => (
@@ -135,6 +136,7 @@ function RecentSignIns() {
  * @param props.sessions - Each browser signed in as the user.
  */
 function SessionsSection({ sessions }: { sessions: AccountSession[] }) {
+  const hasNoSessions = sessions.length === 0;
   const signOutEverywhere = useSignOutEverywhere();
   return (
     <Section
@@ -153,7 +155,7 @@ function SessionsSection({ sessions }: { sessions: AccountSession[] }) {
       }
       contentSlot={
         <div className="grid gap-2">
-          {sessions.length === 0 ? <EmptyState compact title="Not signed in anywhere else." /> : null}
+          {hasNoSessions && <EmptyState compact title="Not signed in anywhere else." />}
           <List
             label="Sessions"
             contentSlot={sessions.map((session) => (
@@ -167,7 +169,7 @@ function SessionsSection({ sessions }: { sessions: AccountSession[] }) {
               />
             ))}
           />
-          {signOutEverywhere.error === null ? null : (
+          {signOutEverywhere.error !== null && (
             <Alert variant="destructive" title="Not signed out" description={messageOf(signOutEverywhere.error)} />
           )}
         </div>
@@ -200,9 +202,7 @@ function AccountPage() {
       contentClassName="gap-8"
       contentSlot={
         me === undefined ? (
-          account.isError ? (
-            <QueryError error={account.error} onRetry={account.refetch} what="your account" />
-          ) : null
+          account.isError && <QueryError error={account.error} onRetry={account.refetch} what="your account" />
         ) : (
           <>
             <DescriptionList

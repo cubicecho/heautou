@@ -73,6 +73,7 @@ interface UpstreamFormDialogProps {
  */
 export function UpstreamFormDialog({ upstream, open, onOpenChange }: UpstreamFormDialogProps) {
   const isEdit = upstream !== null;
+  const isNew = isEdit === false;
   const create = useCreateUpstream();
   const update = useUpdateUpstream();
   const failure = isEdit ? update.error : create.error;
@@ -174,7 +175,7 @@ export function UpstreamFormDialog({ upstream, open, onOpenChange }: UpstreamFor
             listeners={{ onChange: ({ value }) => followName(value) }}
             validators={{ onChange: ({ value }) => (value.trim() ? undefined : 'Give the provider a name.') }}
           />
-          {isEdit ? null : (
+          {isNew && (
             <InputField
               form={form}
               name="id"
@@ -211,12 +212,12 @@ export function UpstreamFormDialog({ upstream, open, onOpenChange }: UpstreamFor
               <div className="grid gap-4">
                 <form.Subscribe
                   selector={(state) => ({
-                    kind: upstreamKindOf(state.values.kind),
+                    hasIssuer: UPSTREAM_KINDS[upstreamKindOf(state.values.kind)].hasIssuer,
                     issuerExample: upstreamPresetById(state.values.preset).issuerExample,
                   })}
                 >
-                  {({ kind, issuerExample }) =>
-                    UPSTREAM_KINDS[kind].hasIssuer ? (
+                  {({ hasIssuer, issuerExample }) =>
+                    hasIssuer && (
                       <InputField
                         form={form}
                         name="issuer"
@@ -232,7 +233,7 @@ export function UpstreamFormDialog({ upstream, open, onOpenChange }: UpstreamFor
                               : 'Give the issuer’s https URL.',
                         }}
                       />
-                    ) : null
+                    )
                   }
                 </form.Subscribe>
                 <InputField
@@ -295,7 +296,7 @@ export function UpstreamFormDialog({ upstream, open, onOpenChange }: UpstreamFor
                           />
                           <form.Subscribe selector={(state) => state.values.unknownIdentity === 'CREATE'}>
                             {(isCreating) =>
-                              isCreating ? (
+                              isCreating && (
                                 <>
                                   <InputField
                                     form={form}
@@ -314,7 +315,7 @@ export function UpstreamFormDialog({ upstream, open, onOpenChange }: UpstreamFor
                                     placeholder="None"
                                   />
                                 </>
-                              ) : null
+                              )
                             }
                           </form.Subscribe>
                         </div>

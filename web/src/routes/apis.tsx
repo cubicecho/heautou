@@ -115,7 +115,7 @@ function ApisPage() {
       contentClassName="gap-4"
       contentSlot={
         <>
-          {remove.error === null ? null : (
+          {remove.error !== null && (
             <Alert variant="destructive" title="API not deleted" description={messageOf(remove.error)} />
           )}
           <QueryState
@@ -142,7 +142,7 @@ function ApisPage() {
                 badgesSlot={
                   <>
                     <Badge variant="outline">{TOKEN_FORMATS[api.tokenFormat].label}</Badge>
-                    {api.allowedClients.length === 0 ? <Badge variant="warning">No clients</Badge> : null}
+                    {api.allowedClients.length === 0 && <Badge variant="warning">No clients</Badge>}
                   </>
                 }
                 meta={<span className="font-mono text-foreground/60 text-xs">{api.identifier}</span>}
@@ -170,7 +170,7 @@ function ApisPage() {
               />
             ))}
           />
-          {isFormOpen ? (
+          {isFormOpen && (
             <ApiFormDialog
               key={editing.kind === 'edit' ? editing.api.identifier : 'new'}
               api={editing.kind === 'edit' ? editing.api : null}
@@ -178,7 +178,7 @@ function ApisPage() {
               onOpenChange={close}
               onSaved={(saved) => setOpenId(saved.identifier)}
             />
-          ) : null}
+          )}
         </>
       }
     />

@@ -203,8 +203,10 @@ function LoginPage() {
 
   const brandName = useBrandName();
   const upstreams = details.data?.upstreams ?? [];
+  const hasUpstreams = upstreams.length > 0;
   const canUsePasskeys = details.data?.passkeysAvailable === true && browserSupportsWebAuthn();
   const isAskingCode = secondFactor !== null && (secondFactor.totp || secondFactor.recoveryCode);
+  const canUseOwnPasskey = secondFactor !== null && secondFactor.passkey && canUsePasskeys;
   const description =
     secondFactor !== null
       ? cameBackFrom === null
@@ -239,7 +241,7 @@ function LoginPage() {
         validators={{ onChange: ({ value }) => (value.trim() ? undefined : 'Enter your username.') }}
       />
       <PasswordField form={passwordForm} name="password" label="Password" required autoComplete="current-password" />
-      {canReset ? (
+      {canReset && (
         <Button
           variant="link"
           size="sm"
@@ -247,10 +249,10 @@ function LoginPage() {
           content="Forgot password?"
           onClick={() => setForgotten(true)}
         />
-      ) : null}
+      )}
       {failureAlert}
-      {upstreams.length === 0 ? null : <FieldSeparator />}
-      {upstreams.length === 0 ? null : (
+      {hasUpstreams && <FieldSeparator />}
+      {hasUpstreams && (
         <div className="grid gap-2">
           {upstreams.map((upstream) => (
             <Button
@@ -267,7 +269,7 @@ function LoginPage() {
 
   const secondFactorStep = (
     <FormElement id={CODE_FORM_ID} onSubmit={() => codeForm.handleSubmit()} className="grid gap-4">
-      {isAskingCode ? (
+      {isAskingCode && (
         <InputField
           form={codeForm}
           name="code"
@@ -282,7 +284,7 @@ function LoginPage() {
           autoFocus
           validators={{ onChange: ({ value }) => (value.trim() ? undefined : 'Type the code.') }}
         />
-      ) : null}
+      )}
       {failureAlert}
     </FormElement>
   );
@@ -315,19 +317,19 @@ function LoginPage() {
       footerActionsSlot={
         details.error !== null ? undefined : secondFactor === null ? (
           <>
-            {canUsePasskeys ? passkeyButton : null}
+            {canUsePasskeys && passkeyButton}
             <passwordForm.AppForm>
               <passwordForm.SubmitButton content="Sign in" />
             </passwordForm.AppForm>
           </>
         ) : (
           <>
-            {secondFactor.passkey && canUsePasskeys ? passkeyButton : null}
-            {isAskingCode ? (
+            {canUseOwnPasskey && passkeyButton}
+            {isAskingCode && (
               <codeForm.AppForm>
                 <codeForm.SubmitButton content="Continue" />
               </codeForm.AppForm>
-            ) : null}
+            )}
           </>
         )
       }

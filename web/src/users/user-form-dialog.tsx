@@ -41,6 +41,7 @@ export function passwordProblem(value: string): string | undefined {
  */
 export function UserFormDialog({ user, open, onOpenChange, onInvited }: UserFormDialogProps) {
   const isEdit = user !== null;
+  const isNew = isEdit === false;
   const groupOptions = useGroupOptions();
   const create = useCreateUser();
   const update = useUpdateUser();
@@ -93,7 +94,7 @@ export function UserFormDialog({ user, open, onOpenChange, onInvited }: UserForm
             autoComplete="off"
             validators={{ onChange: ({ value }) => (value.trim() ? undefined : 'Give the user a username.') }}
           />
-          {isEdit ? null : (
+          {isNew && (
             <PasswordField
               form={form}
               name="password"
@@ -103,7 +104,7 @@ export function UserFormDialog({ user, open, onOpenChange, onInvited }: UserForm
               validators={{ onChange: ({ value }) => (value === '' ? undefined : passwordProblem(value)) }}
             />
           )}
-          {isEdit ? null : (
+          {isNew && (
             <form.Subscribe selector={(state) => state.values}>
               {({ password, username, name, email }) => (
                 <PasswordStrengthMeter password={password} owner={[username, name, email]} />

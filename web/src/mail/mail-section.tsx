@@ -56,6 +56,7 @@ function ServerForm({ mail }: { mail: MailSettingsFieldsFragment }) {
   const save = useSetMailServer();
   const remove = useRemoveMailServer();
   const server = mail.server;
+  const isSavedInSettings = mail.source === 'SETTINGS';
   const form = useAppForm({
     defaultValues: {
       host: server?.host ?? '',
@@ -136,14 +137,14 @@ function ServerForm({ mail }: { mail: MailSettingsFieldsFragment }) {
         description="The sender every email shows. Your SMTP server may only accept its own addresses."
         validators={{ onChange: ({ value }) => (value.includes('@') ? undefined : 'Give an address to send from.') }}
       />
-      {save.error === null ? null : (
+      {save.error !== null && (
         <Alert variant="destructive" title="Server not saved" description={messageOf(save.error)} />
       )}
-      {remove.error === null ? null : (
+      {remove.error !== null && (
         <Alert variant="destructive" title="Server not removed" description={messageOf(remove.error)} />
       )}
       <div className="flex flex-wrap justify-end gap-2">
-        {mail.source === 'SETTINGS' ? (
+        {isSavedInSettings && (
           <ConfirmButton
             variant="outline"
             iconSlot={<Trash2 />}
@@ -154,7 +155,7 @@ function ServerForm({ mail }: { mail: MailSettingsFieldsFragment }) {
             disabled={remove.isPending}
             onConfirm={() => remove.mutate()}
           />
-        ) : null}
+        )}
         <form.AppForm>
           <form.SubmitButton requireChanges={server !== null} content="Save server" />
         </form.AppForm>
@@ -191,10 +192,10 @@ function TestEmail() {
           <form.SubmitButton variant="outline" iconSlot={<Send />} content="Send test email" />
         </form.AppForm>
       </FormElement>
-      {send.data === undefined ? null : (
+      {send.data !== undefined && (
         <Alert variant="info" title="Test email sent" description={`It went to ${send.data}. Check that inbox.`} />
       )}
-      {send.error === null ? null : (
+      {send.error !== null && (
         <Alert variant="destructive" title="Test email not sent" description={messageOf(send.error)} />
       )}
     </div>
@@ -219,30 +220,31 @@ export function MailSection() {
       surface="card"
       contentSlot={
         <div className="grid gap-4">
-          {mail.isError ? <QueryError error={mail.error} onRetry={mail.refetch} what="the email settings" /> : null}
-          {current === undefined ? null : isLocked ? (
-            <>
-              <Alert
-                variant="info"
-                title="Set by the environment"
-                description="SMTP_URL or SMTP_HOST sets the server, so it cannot be changed here. Change it there and restart."
-              />
-              <DescriptionList
-                contentSlot={[
-                  <PropertyRow
-                    key="host"
-                    label="SMTP server"
-                    value={`${current.server?.host}:${current.server?.port}${current.server?.secure ? ' (TLS)' : ''}`}
-                  />,
-                  <PropertyRow key="user" label="User" value={current.server?.user || 'None'} />,
-                  <PropertyRow key="from" label="Send as" value={current.server?.from ?? ''} />,
-                ]}
-              />
-            </>
-          ) : (
-            <ServerForm mail={current} />
-          )}
-          {current?.isConfigured ? <TestEmail /> : null}
+          {mail.isError && <QueryError error={mail.error} onRetry={mail.refetch} what="the email settings" />}
+          {current !== undefined &&
+            (isLocked ? (
+              <>
+                <Alert
+                  variant="info"
+                  title="Set by the environment"
+                  description="SMTP_URL or SMTP_HOST sets the server, so it cannot be changed here. Change it there and restart."
+                />
+                <DescriptionList
+                  contentSlot={[
+                    <PropertyRow
+                      key="host"
+                      label="SMTP server"
+                      value={`${current.server?.host}:${current.server?.port}${current.server?.secure ? ' (TLS)' : ''}`}
+                    />,
+                    <PropertyRow key="user" label="User" value={current.server?.user || 'None'} />,
+                    <PropertyRow key="from" label="Send as" value={current.server?.from ?? ''} />,
+                  ]}
+                />
+              </>
+            ) : (
+              <ServerForm mail={current} />
+            ))}
+          {current?.isConfigured && <TestEmail />}
           <Section
             level={3}
             title="Emails to send"
@@ -272,7 +274,7 @@ export function MailSection() {
               />
             ))}
           />
-          {setOptions.error === null ? null : (
+          {setOptions.error !== null && (
             <Alert variant="destructive" title="Setting not saved" description={messageOf(setOptions.error)} />
           )}
         </div>

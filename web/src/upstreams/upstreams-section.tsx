@@ -26,6 +26,8 @@ export function UpstreamsSection() {
   const remove = useDeleteUpstream();
   const [dialog, setDialog] = useState<UpstreamDialog>({ kind: 'closed' });
   const list = upstreams.data ?? [];
+  const hasNoProviders = upstreams.isSuccess && list.length === 0;
+  const isFormOpen = dialog.kind === 'open';
 
   return (
     <Section
@@ -43,12 +45,10 @@ export function UpstreamsSection() {
       }
       contentSlot={
         <div className="grid gap-2">
-          {upstreams.isError ? (
+          {upstreams.isError && (
             <QueryError error={upstreams.error} onRetry={upstreams.refetch} what="the sign-in providers" />
-          ) : null}
-          {upstreams.isSuccess && list.length === 0 ? (
-            <EmptyState compact title="Users sign in with a password or a passkey only." />
-          ) : null}
+          )}
+          {hasNoProviders && <EmptyState compact title="Users sign in with a password or a passkey only." />}
           <List
             label="Sign-in providers"
             contentSlot={list.map((upstream) => (
@@ -85,16 +85,16 @@ export function UpstreamsSection() {
               />
             ))}
           />
-          {remove.error === null ? null : (
+          {remove.error !== null && (
             <Alert variant="destructive" title="Provider not removed" description={messageOf(remove.error)} />
           )}
-          {dialog.kind === 'open' ? (
+          {isFormOpen && (
             <UpstreamFormDialog
               upstream={dialog.upstream}
               open
               onOpenChange={(open) => (open ? undefined : setDialog({ kind: 'closed' }))}
             />
-          ) : null}
+          )}
         </div>
       }
     />

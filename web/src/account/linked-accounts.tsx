@@ -66,12 +66,12 @@ export function LinkedAccountsSection() {
           <Spinner />
         ) : (
           <div className="grid gap-2">
-            {finished.isSuccess ? (
+            {finished.isSuccess && (
               <Alert
                 variant="info"
                 description={`Linked ${finished.data.label} at ${finished.data.provider}. You can sign in with it now.`}
               />
-            ) : null}
+            )}
             <List
               label="Linked accounts"
               contentSlot={providers.map((provider) => (
@@ -115,9 +115,7 @@ export function LinkedAccountsSection() {
                 />
               ))}
             />
-            {failure === null ? null : (
-              <Alert variant="destructive" title="Not linked" description={messageOf(failure)} />
-            )}
+            {failure !== null && <Alert variant="destructive" title="Not linked" description={messageOf(failure)} />}
           </div>
         )
       }

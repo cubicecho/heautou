@@ -51,7 +51,7 @@ export function PasswordDialog({ user, open, onOpenChange }: PasswordDialogProps
           <form.Subscribe selector={(state) => state.values.password}>
             {(password) => <PasswordStrengthMeter password={password} owner={[user.username, user.name, user.email]} />}
           </form.Subscribe>
-          {setPassword.error === null ? null : (
+          {setPassword.error !== null && (
             <Alert variant="destructive" title="Password not set" description={messageOf(setPassword.error)} />
           )}
         </FormElement>

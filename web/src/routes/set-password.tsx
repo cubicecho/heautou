@@ -96,7 +96,7 @@ function SetPasswordPage() {
                   value === fieldApi.form.getFieldValue('password') ? undefined : 'The two passwords differ.',
               }}
             />
-            {setPassword.error === null ? null : (
+            {setPassword.error !== null && (
               <Alert variant="destructive" title="Password not set" description={messageOf(setPassword.error)} />
             )}
           </FormElement>
