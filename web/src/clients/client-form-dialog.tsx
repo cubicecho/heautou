@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import type { ClientFieldsFragment, TokenLifetimeDefaultsQuery } from '@/__generated__/graphql';
 import { AUTH_METHOD_OPTIONS, AUTH_METHODS, authMethodOf } from '@/clients/auth-methods';
-import { durationText, secondsIn } from '@/clients/durations';
 import { BLANK_PRESET, PRESET_OPTIONS, PresetLinks, SitePresetGuide } from '@/clients/preset-panel';
 import { baseUrlFrom, presetById, presetFields, sitePresetById } from '@/clients/presets';
 import { ComboboxField, InputField, SelectField, SwitchField, TextareaField, useAppForm } from '@/components/app-form';
@@ -15,6 +14,7 @@ import { useCreateClient, useTokenLifetimeDefaults, useUpdateClient } from '@/co
 import { useGroupOptions } from '@/core/groups';
 import { linesOf } from '@/core/lists';
 import { SaveFailure } from '@/core/save-failure';
+import { durationText, secondsIn } from '@/token-lifetimes/durations';
 
 const URI_ROWS = 3;
 /** The claim groups are released in unless the application reads another. */
