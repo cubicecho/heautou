@@ -5,7 +5,7 @@ import { jsonReply, okReplySchema, postJson, redirectReplySchema } from '@/core/
 import { QUERY_KEYS } from '@/core/query-keys';
 
 /** Where a browser with no session signs in, coming back to the account page. */
-export const ACCOUNT_LOGIN = '/admin/login?return=%2Faccount';
+const ACCOUNT_LOGIN = '/admin/login?return=%2Faccount';
 
 const accountSchema = z.object({
   id: z.string(),

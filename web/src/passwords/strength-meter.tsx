@@ -3,7 +3,7 @@ import { usePasswordStrengthRule } from '@/core/settings';
 import { usePasswordStrength } from '@/passwords/strength';
 
 /** What each zxcvbn score is called, from 0 to 4. */
-export const SCORE_LABELS = ['Very weak', 'Weak', 'Fair', 'Strong', 'Very strong'] as const;
+const SCORE_LABELS = ['Very weak', 'Weak', 'Fair', 'Strong', 'Very strong'] as const;
 
 interface PasswordStrengthMeterProps {
   /** The password typed so far. Empty, the meter draws nothing. */
