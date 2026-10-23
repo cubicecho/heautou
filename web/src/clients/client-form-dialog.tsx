@@ -9,13 +9,12 @@ import { DialogLayout } from '@/components/dialog-layout';
 import { Disclosure } from '@/components/disclosure';
 import { FieldRow } from '@/components/field-row';
 import { Section } from '@/components/section';
-import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { FormElement } from '@/components/ui/form-element';
 import { useCreateClient, useTokenLifetimeDefaults, useUpdateClient } from '@/core/clients';
-import { messageOf } from '@/core/errors';
 import { useGroupOptions } from '@/core/groups';
 import { linesOf } from '@/core/lists';
+import { SaveFailure } from '@/core/save-failure';
 
 const URI_ROWS = 3;
 /** The claim groups are released in unless the application reads another. */
@@ -450,7 +449,7 @@ export function ClientFormDialog({ client, open, onOpenChange, onSaved }: Client
               ) : null
             }
           </form.Subscribe>
-          {failure === null ? null : <Alert variant="destructive" title="Not saved" description={messageOf(failure)} />}
+          <SaveFailure error={failure} />
         </FormElement>
       }
       footerActionsSlot={(close) => (

@@ -6,15 +6,14 @@ import { DialogLayout } from '@/components/dialog-layout';
 import { Disclosure } from '@/components/disclosure';
 import { PasswordField } from '@/components/password-field';
 import { Section } from '@/components/section';
-import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { CodeBlock } from '@/components/ui/code';
 import { CopyButton } from '@/components/ui/copy-button';
 import { FormElement } from '@/components/ui/form-element';
 import { useBackupInfo } from '@/core/backup';
-import { messageOf } from '@/core/errors';
 import { useGroupOptions } from '@/core/groups';
 import { commaListOf, linesOf, pairsOf } from '@/core/lists';
+import { SaveFailure } from '@/core/save-failure';
 import { useCreateUpstream, useUpdateUpstream, useUpstreamRedirectUri } from '@/core/upstreams';
 import {
   OTHER_UPSTREAM,
@@ -369,7 +368,7 @@ export function UpstreamFormDialog({ upstream, open, onOpenChange }: UpstreamFor
               />
             )}
           </form.Subscribe>
-          {failure === null ? null : <Alert variant="destructive" title="Not saved" description={messageOf(failure)} />}
+          <SaveFailure error={failure} />
         </FormElement>
       }
       footerActionsSlot={(close) => (
