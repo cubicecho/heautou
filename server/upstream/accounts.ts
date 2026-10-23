@@ -1,4 +1,4 @@
-import { type AuditLog, type AuditTarget, AuditTargetKind, AuditType, actorOf, userTarget } from '../store/audit.ts';
+import { type AuditLog, AuditType, actorOf, upstreamTarget, userTarget } from '../store/audit.ts';
 import { UnknownIdentity, type UpstreamProvider, type UpstreamStore } from '../store/upstreams.ts';
 import type { PublicUser, UserStore } from '../store/users.ts';
 import type { UpstreamIdentity } from './client.ts';
@@ -28,16 +28,6 @@ export interface UpstreamAccountDeps {
 const USERNAME_UNSAFE = /[^A-Za-z0-9._@-]+/g;
 /** How many numbered usernames are tried before the identity's own id is used. */
 const MAX_USERNAME_TRIES = 50;
-
-/**
- * Names a provider as an entry's target.
- *
- * @param provider - The provider.
- * @returns The target.
- */
-export function upstreamTarget(provider: Pick<UpstreamProvider, 'id' | 'name'>): AuditTarget {
-  return { kind: AuditTargetKind.Upstream, id: provider.id, name: provider.name };
-}
 
 /**
  * Picks a free username for a user made from an identity: its username there, the part of its address before

@@ -2,18 +2,8 @@ import type { GraphQLResolveInfo } from 'graphql';
 import type { Context } from '../core/context.ts';
 import { API_DEFAULTS } from '../core/defaults.ts';
 import type { Api, ApiFields, NewApi } from '../store/apis.ts';
-import { type AuditTarget, AuditTargetKind, AuditType, recordAdminChange } from '../store/audit.ts';
+import { AuditType, apiTarget, recordAdminChange } from '../store/audit.ts';
 import { GeneratedTable, requiredRow, rowWhere } from './rows.ts';
-
-/**
- * Names an API as an entry's target.
- *
- * @param api - The API.
- * @returns The target.
- */
-function apiTarget(api: Api): AuditTarget {
-  return { kind: AuditTargetKind.Api, id: api.identifier, name: api.name };
-}
 
 /**
  * Records what the signed-in admin did to an API, and passes it on.

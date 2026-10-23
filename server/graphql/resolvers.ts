@@ -14,12 +14,17 @@ import type { SessionInfo } from '../oidc/sessions.ts';
 import { TOKEN_FORMAT_JWT } from '../store/apis.ts';
 import {
   type AuditEntry,
-  type AuditTarget,
-  AuditTargetKind,
   AuditType,
+  apiTarget,
+  BRANDING_TARGET,
+  clientTarget,
+  groupTarget,
   KEYS_TARGET,
   matchesQuery,
+  pairingTarget,
   recordAdminChange,
+  SETTINGS_TARGET,
+  upstreamTarget,
   userTarget,
 } from '../store/audit.ts';
 import { withoutBlanks } from '../store/claims.ts';
@@ -37,7 +42,6 @@ import { refusedRedirectUris } from '../store/redirect-uris.ts';
 import type { HttpRedirectSetting, PasswordRules } from '../store/settings.ts';
 import type { GroupMapping, UnknownIdentity, UpstreamFields, UpstreamKind } from '../store/upstreams.ts';
 import type { NewUser, PublicUser, UserFields } from '../store/users.ts';
-import { upstreamTarget } from '../upstream/accounts.ts';
 import { type GeneratedRow, GeneratedTable, requiredRow, rowsWhere, rowWhere } from './rows.ts';
 
 /** Where discovery lives under the issuer. */
@@ -67,9 +71,6 @@ interface KeysView {
 /** Where a pairing is, as `PairingStatus` names it. */
 const PAIRING_WAITING = 'WAITING' as const;
 const PAIRING_PAIRED = 'PAIRED' as const;
-
-/** How much of a pairing's id names it in the audit log. */
-const PAIRING_NAME_LENGTH = 8;
 
 /** What `Pairing` resolves from. */
 interface PairingView {
@@ -248,58 +249,11 @@ async function setUpOffers(ctx: Context, pairing: Pairing, input: FinishPairingI
         ? await ctx.apis.create({ ...offered, tokenFormat: TOKEN_FORMAT_JWT, allowedClientIds })
         : await ctx.apis.update(offered.identifier, { allowedClientIds });
     const type = existing === null ? AuditType.ApiCreated : AuditType.ApiUpdated;
-    recordAdminChange(ctx, type, { kind: AuditTargetKind.Api, id: api.identifier, name: api.name });
+    recordAdminChange(ctx, type, apiTarget(api));
     done.api = api.identifier;
   }
   return done;
 }
-
-/**
- * Names a client as an entry's target.
- *
- * @param client - The client.
- * @returns The target.
- */
-function clientTarget(client: OidcClient): AuditTarget {
-  return { kind: AuditTargetKind.Client, id: client.clientId, name: client.name };
-}
-
-/**
- * Names a group as an entry's target. A group's name is its id.
- *
- * @param name - The group.
- * @returns The target.
- */
-function groupTarget(name: string): AuditTarget {
-  return { kind: AuditTargetKind.Group, id: name, name };
-}
-
-/**
- * Names a pairing as an entry's target.
- *
- * @param pairing - The pairing.
- * @returns The target.
- */
-function pairingTarget(pairing: Pairing): AuditTarget {
-  return {
-    kind: AuditTargetKind.Pairing,
-    id: pairing.id,
-    name: `Setup URL ${pairing.id.slice(0, PAIRING_NAME_LENGTH)}`,
-  };
-}
-
-/** The target of settings changes. */
-const SETTINGS_TARGET: AuditTarget = Object.freeze({
-  kind: AuditTargetKind.Settings,
-  id: 'settings',
-  name: 'Settings',
-});
-/** The target of branding changes. */
-const BRANDING_TARGET: AuditTarget = Object.freeze({
-  kind: AuditTargetKind.Branding,
-  id: 'branding',
-  name: 'Branding',
-});
 
 /** The entries after which a pairing may read differently. */
 const PAIRING_CHANGES: readonly AuditType[] = [

@@ -3,8 +3,14 @@ import { adminUrls } from '../admin/admin-client.ts';
 import type { Context } from '../core/context.ts';
 import { FORWARD_AUTH_DEFAULTS } from '../core/defaults.ts';
 import { badInput } from '../core/errors.ts';
-import { FLAG_ON, FORWARD_AUTH_PARAM, FORWARD_AUTH_PATH, siteTarget } from '../forward-auth/client.ts';
-import { type AuditEvent, AuditTargetKind, AuditType, recordAdminChange } from '../store/audit.ts';
+import { FLAG_ON, FORWARD_AUTH_PARAM, FORWARD_AUTH_PATH } from '../forward-auth/client.ts';
+import {
+  type AuditEvent,
+  AuditType,
+  PROXY_COOKIE_DOMAIN_TARGET,
+  recordAdminChange,
+  siteTarget,
+} from '../store/audit.ts';
 import type { ProtectedSite, SiteFields } from '../store/protected-sites.ts';
 import { GeneratedTable, requiredRow, rowWhere } from './rows.ts';
 
@@ -223,12 +229,9 @@ export const forwardAuthResolvers = {
         throw badInput('FORWARD_AUTH_COOKIE_DOMAIN sets the cookie domain. Change it there, or unset it.');
       }
       const domain = await ctx.protectedSites.setCookieDomain(args.domain ?? null);
-      recordAdminChange(
-        ctx,
-        AuditType.ProxyCookieDomainSet,
-        { kind: AuditTargetKind.Settings, id: 'proxy-cookie-domain', name: 'Proxy cookie domain' },
-        { domain: domain ?? '(Heautou’s host)' },
-      );
+      recordAdminChange(ctx, AuditType.ProxyCookieDomainSet, PROXY_COOKIE_DOMAIN_TARGET, {
+        domain: domain ?? '(Heautou’s host)',
+      });
       return forwardAuthView(ctx);
     },
   },

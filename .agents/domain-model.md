@@ -295,9 +295,12 @@ Owner: `server/store/audit.ts`.
   `server/graphql/build-schema.ts`; hand-written fields that return one read it through
   `server/graphql/rows.ts`.
 - **Audit target / actor:** who did it and what it was done to, named as they were then.
-  Owner: `actorOf`, `userTarget`, `KEYS_TARGET` in `server/store/audit.ts`; the other
-  targets are built where they are recorded (`resolvers.ts`, `apis.ts`, `forward-auth.ts`,
-  `mail.ts`, `audit-events.ts`, `interactions.ts`, `services.ts`).
+  Owner: `server/store/audit.ts`: `actorOf`, a builder per target kind (`userTarget`,
+  `clientTarget`, `apiTarget`, `groupTarget`, `pairingTarget`, `siteTarget`,
+  `upstreamTarget`) and the fixed ones (`KEYS_TARGET`, `SETTINGS_TARGET`, …);
+  `clientTargetIn` in `server/oidc/audit-events.ts` names a client by its display name.
+- **Admin change:** an entry for what the signed-in admin did through `/graphql`. Owner:
+  `recordAdminChange` in `server/store/audit.ts`.
 - **Client display name:** a client's name as people see it: the built-in client's own name,
   else the stored name, else the name a request gave, else its ID. Owner: `clientDisplayName`
   in `server/admin/admin-client.ts`; `sessionClientName` there names the web app by the brand.

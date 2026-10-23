@@ -8,10 +8,9 @@ import { HttpStatus } from '../core/wire.ts';
 import { sameOriginJson, sendRefusal } from '../http/guards.ts';
 import { INTERACTION_PATH } from '../oidc/provider.ts';
 import type { AdminSessionStore } from '../store/admin-sessions.ts';
-import { type AuditLog, AuditType, actorOf } from '../store/audit.ts';
+import { type AuditLog, AuditType, actorOf, upstreamTarget } from '../store/audit.ts';
 import type { UpstreamStore } from '../store/upstreams.ts';
 import type { UserStore } from '../store/users.ts';
-import { upstreamTarget } from './accounts.ts';
 import { FlowPurpose, UPSTREAM_PATH, type UpstreamFlows } from './flows.ts';
 
 /** The account routes of upstream identities. */

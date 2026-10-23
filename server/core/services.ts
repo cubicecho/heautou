@@ -1,6 +1,6 @@
 import type Provider from 'oidc-provider';
 import type { Client, KoaContextWithOIDC } from 'oidc-provider';
-import { adminClientMetadata, adminUrls, clientDisplayName } from '../admin/admin-client.ts';
+import { adminClientMetadata, adminUrls } from '../admin/admin-client.ts';
 import { createSetupGate, type SetupGate } from '../admin/setup.ts';
 import type { Database } from '../db/client.ts';
 import { createDataSet, type DataSet } from '../db/data-set.ts';
@@ -27,7 +27,7 @@ import type { ForwardAuthConfig } from '../forward-auth/routes.ts';
 import { createMailer, type Mailer, type MailTransportFactory, smtpTransport } from '../mail/mailer.ts';
 import { sendNotifications } from '../mail/notifications.ts';
 import { createAdapterFactory, openModelDocuments } from '../oidc/adapter.ts';
-import { recordProviderEvents } from '../oidc/audit-events.ts';
+import { clientTargetIn, recordProviderEvents } from '../oidc/audit-events.ts';
 import { createLogoutNotifier } from '../oidc/backchannel.ts';
 import { createProviderHost, type ProviderHost } from '../oidc/host.ts';
 import { createPairingOffers, type PairingOffers } from '../oidc/pairing-offers.ts';
@@ -35,7 +35,7 @@ import { claimNamesIn, createProvider, SCOPES } from '../oidc/provider.ts';
 import { createSessionTools, type SessionTools } from '../oidc/sessions.ts';
 import { type AdminSessionStore, createAdminSessionStore } from '../store/admin-sessions.ts';
 import { type ApiStore, createApiStore } from '../store/apis.ts';
-import { type AuditLog, AuditTargetKind, AuditType, KEYS_TARGET, openAuditLog } from '../store/audit.ts';
+import { type AuditLog, AuditType, KEYS_TARGET, openAuditLog } from '../store/audit.ts';
 import {
   type BackupLayout,
   type BackupOptions,
@@ -327,12 +327,8 @@ export async function openServices(settings: ServiceSettings): Promise<Services>
           type,
           actor: null,
           ip: ctx.ip,
-          target: {
-            kind: AuditTargetKind.Client,
-            id: client.clientId,
-            // The provider passes an update the client as it was before, so its own name is only the fallback.
-            name: clientDisplayName(clients, client.clientId, client.clientName),
-          },
+          // The provider passes an update the client as it was before, so its own name is only the fallback.
+          target: clientTargetIn(clients, client.clientId, client.clientName),
         });
         refreshSoon();
       };

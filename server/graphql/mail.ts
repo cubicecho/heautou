@@ -2,15 +2,7 @@ import type { Context } from '../core/context.ts';
 import { badInput, errorMessage, notFound } from '../core/errors.ts';
 import { type MailServerView, MailSource, passwordLinkUrl } from '../mail/mailer.ts';
 import { MailKind, passwordLinkContent, testContent } from '../mail/messages.ts';
-import {
-  type AuditEvent,
-  type AuditTarget,
-  AuditTargetKind,
-  AuditType,
-  actorOf,
-  recordAdminChange,
-  userTarget,
-} from '../store/audit.ts';
+import { type AuditEvent, AuditType, actorOf, MAIL_TARGET, recordAdminChange, userTarget } from '../store/audit.ts';
 import type { MailOptions, MailServerInput } from '../store/mail.ts';
 import type { PublicUser } from '../store/users.ts';
 
@@ -116,9 +108,6 @@ const SOURCE_NAME: Record<MailSource, string> = {
   [MailSource.Settings]: 'SETTINGS',
   [MailSource.None]: 'NONE',
 };
-
-/** What the email settings are recorded against. */
-const MAIL_TARGET: AuditTarget = Object.freeze({ kind: AuditTargetKind.Settings, id: 'mail', name: 'Email' });
 
 /** A loose check that an address can be mailed; the SMTP server has the last word. */
 const ADDRESS_PATTERN = /^[^\s@<>]+@[^\s@<>]+$/;

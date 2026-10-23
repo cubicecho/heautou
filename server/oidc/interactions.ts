@@ -10,13 +10,14 @@ import { authenticationOptions, relyingPartyOf, verifyAuthentication } from '../
 import { HttpStatus } from '../core/wire.ts';
 import { sameOriginJson } from '../http/guards.ts';
 import { type LoginThrottle, sendTooMany } from '../http/rate-limit.ts';
-import { type AuditEvent, type AuditLog, AuditTargetKind, AuditType, actorOf } from '../store/audit.ts';
+import { type AuditEvent, type AuditLog, AuditType, actorOf } from '../store/audit.ts';
 import type { ClientStore } from '../store/clients.ts';
 import type { FactorStore } from '../store/factors.ts';
 import type { UpstreamProvider, UpstreamStore } from '../store/upstreams.ts';
 import type { PublicUser, UserStore } from '../store/users.ts';
 import { resolveUpstreamUser } from '../upstream/accounts.ts';
 import { FlowPurpose, type UpstreamFlows } from '../upstream/flows.ts';
+import { clientTargetIn } from './audit-events.ts';
 import type { ProviderHost } from './host.ts';
 import { PAGE_PARAM, pageUrl, WEB_PAGE } from './pages.ts';
 import { AuthLevel, AuthMethod, INTERACTION_PATH, maySignIn } from './provider.ts';
@@ -238,7 +239,7 @@ export function createInteractionRouter(deps: InteractionDeps): Router {
         type,
         actor: actorOf(user),
         ip: req.ip ?? null,
-        target: { kind: AuditTargetKind.Client, id: clientId, name: clientDisplayName(clients, clientId) },
+        target: clientTargetIn(clients, clientId),
         detail,
       });
     };
@@ -462,7 +463,7 @@ export function createInteractionRouter(deps: InteractionDeps): Router {
       type,
       actor: null,
       ip: req.ip ?? null,
-      target: { kind: AuditTargetKind.Client, id: clientId, name: clientDisplayName(clients, clientId) },
+      target: clientTargetIn(clients, clientId),
       detail: { method: SignInMethod.Upstream, provider: provider.name, ...detail },
     });
   };
@@ -525,10 +526,7 @@ export function createInteractionRouter(deps: InteractionDeps): Router {
         type,
         actor: named === null ? null : actorOf(named),
         ip: req.ip ?? null,
-        target:
-          clientId === null
-            ? undefined
-            : { kind: AuditTargetKind.Client, id: clientId, name: clientDisplayName(clients, clientId) },
+        target: clientId === null ? undefined : clientTargetIn(clients, clientId),
         detail: named === null ? { username, ...detail } : detail,
       });
     };

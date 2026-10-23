@@ -7,9 +7,9 @@ import {
   type AuditEvent,
   type AuditLog,
   type AuditTarget,
-  AuditTargetKind,
   AuditType,
   actorOf,
+  clientTarget,
 } from '../store/audit.ts';
 import type { ClientStore } from '../store/clients.ts';
 import type { UserStore } from '../store/users.ts';
@@ -105,12 +105,8 @@ function viaOf(login: { amr?: string[] } | undefined): AppSignInVia {
  * @param [fallback] - The name the request gave, for a client the store doesn't have.
  * @returns The target.
  */
-function clientTargetIn(clients: ClientStore, clientId: string, fallback?: string): AuditTarget {
-  return {
-    kind: AuditTargetKind.Client,
-    id: clientId,
-    name: clientDisplayName(clients, clientId, fallback),
-  };
+export function clientTargetIn(clients: ClientStore, clientId: string, fallback?: string): AuditTarget {
+  return clientTarget({ clientId, name: clientDisplayName(clients, clientId, fallback) });
 }
 
 /** A logout token an application did not take. */
@@ -164,7 +160,7 @@ export function recordProviderEvents(provider: Provider, { audit, users, clients
    * @param [fallback] - The name the request gave, for a client the store doesn't have.
    * @returns The target.
    */
-  const clientTarget = (clientId: string, fallback?: string): AuditTarget =>
+  const clientTargetFor = (clientId: string, fallback?: string): AuditTarget =>
     clientTargetIn(clients, clientId, fallback);
   /**
    * Names the request's client: the one the provider found, else the `client_id` it was sent.
@@ -175,10 +171,10 @@ export function recordProviderEvents(provider: Provider, { audit, users, clients
   const targetOf = (ctx: KoaContextWithOIDC): AuditTarget | undefined => {
     const { client } = ctx.oidc;
     if (client !== undefined) {
-      return clientTarget(client.clientId, client.clientName);
+      return clientTargetFor(client.clientId, client.clientName);
     }
     const clientId = paramOf(ctx, 'client_id');
-    return clientId === undefined ? undefined : clientTarget(clientId);
+    return clientId === undefined ? undefined : clientTargetFor(clientId);
   };
   /**
    * Names the user the provider session is for.
@@ -302,7 +298,7 @@ export function recordProviderEvents(provider: Provider, { audit, users, clients
       type: AuditType.DeviceRefused,
       actor: actorIn(ctx),
       ip: ctx.ip,
-      target: code.clientId === undefined ? undefined : clientTarget(code.clientId),
+      target: code.clientId === undefined ? undefined : clientTargetFor(code.clientId),
       detail: definedDetail({ error: code.error, description: code.errorDescription }),
     });
   });

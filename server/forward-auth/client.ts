@@ -1,8 +1,6 @@
 import type { AdapterPayload } from 'oidc-provider';
 import { adminUrls, PROXY_CLIENT_NAME } from '../admin/admin-client.ts';
 import { FORWARD_AUTH_DEFAULTS } from '../core/defaults.ts';
-import { type AuditTarget, AuditTargetKind } from '../store/audit.ts';
-import type { ProtectedSite } from '../store/protected-sites.ts';
 
 /** The forward auth routes. Every one is outside the web app's catch-all. */
 export const FORWARD_AUTH_PATH = {
@@ -78,14 +76,4 @@ export function proxyClientMetadata(issuer: string): AdapterPayload {
     grant_types: ['authorization_code'],
     response_types: ['code'],
   };
-}
-
-/**
- * Names a site as an audit entry's target.
- *
- * @param site - The site.
- * @returns The target.
- */
-export function siteTarget(site: Pick<ProtectedSite, 'id' | 'name'>): AuditTarget {
-  return { kind: AuditTargetKind.ProtectedSite, id: site.id, name: site.name };
 }
