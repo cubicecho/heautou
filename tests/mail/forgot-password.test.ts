@@ -41,14 +41,18 @@ async function forgot(browser: Browser, uid: string, identifier: string) {
 }
 
 /**
- * Counts the forgot-password requests the audit log holds.
+ * Asks for one more link, for someone who gets one, and waits for its email. Requests are handled in the order they
+ * came, so once it is sent every earlier request has sent whatever it was going to.
  *
- * @param app - The running app.
- * @returns How many.
+ * @param browser - The browser, holding the interaction's cookie.
+ * @param uid - The interaction.
+ * @param fake - The transport the emails go to.
+ * @param identifier - Someone the server sends a link to.
  */
-async function requests(app: TestApp): Promise<number> {
-  const { entries } = await app.services.audit.list({ types: [AuditType.PasswordResetRequested] });
-  return entries.length;
+async function settleWith(browser: Browser, uid: string, fake: FakeTransport, identifier: string): Promise<void> {
+  const before = fake.sent.length;
+  expect((await forgot(browser, uid, identifier)).status).toBe(HttpStatus.Ok);
+  await waitFor(() => fake.sent.length > before);
 }
 
 describe('forgot password', () => {
@@ -84,9 +88,8 @@ describe('forgot password', () => {
     const unknown = await forgot(browser, uid, 'nobody@example.home');
     expect(unknown).toEqual(known);
     expect(known).toEqual({ status: HttpStatus.Ok, body: { ok: true } });
-    await waitFor(async () => (await requests(app)) === 2 && fake.sent.length === 1);
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(fake.sent.map((mail) => mail.to)).toEqual(['Ada@Example.home']);
+    await settleWith(browser, uid, fake, 'ada');
+    expect(fake.sent.map((mail) => mail.to)).toEqual(['Ada@Example.home', 'Ada@Example.home']);
     expect(fake.sent[0]?.subject).toBe('Reset your Heautou password');
   });
 
@@ -108,12 +111,12 @@ describe('forgot password', () => {
   it('sends nothing to a disabled user', async () => {
     const ada = app.services.users.list().find((user) => user.username === 'ada');
     await app.services.users.setDisabled(ada?.id ?? '', true);
+    await app.services.users.create({ username: 'bob', email: 'bob@example.home', name: '', groups: [] });
     expect(await forgot(browser, uid, 'ada')).toEqual({ status: HttpStatus.Ok, body: { ok: true } });
-    await waitFor(async () => (await requests(app)) === 1);
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(fake.sent).toEqual([]);
-    const [entry] = (await app.services.audit.list({ types: [AuditType.PasswordResetRequested] })).entries;
-    expect(entry?.detail).toEqual({ refused: 'disabled' });
+    await settleWith(browser, uid, fake, 'bob');
+    expect(fake.sent.map((mail) => mail.to)).toEqual(['bob@example.home']);
+    const { entries } = await app.services.audit.list({ types: [AuditType.PasswordResetRequested] });
+    expect(entries.find((entry) => entry.actor?.username === 'ada')?.detail).toEqual({ refused: 'disabled' });
   });
 
   it('is rate-limited per username or address, whether or not it exists', async () => {

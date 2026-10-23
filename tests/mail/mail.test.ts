@@ -174,9 +174,8 @@ describe('email', () => {
   it('sends the notifications that are turned on, and only those', async () => {
     await adminGql(admin, SET_SERVER, { input: TEST_SERVER });
     const setPassword = 'mutation ($id: ID!, $p: String!) { setUserPassword(id: $id, password: $p) { id } }';
+    // Sends nothing: notices are sent in the order of their entries, so the one waited for below would follow it.
     await adminGql(admin, setPassword, { id: adaId, p: NEW_PASSWORD });
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(fake.sent).toEqual([]);
 
     const on = await adminGql(admin, SET_OPTIONS, { on: true });
     expect(on.data.setMailOptions).toEqual({
@@ -185,22 +184,20 @@ describe('email', () => {
       forgotPassword: false,
     });
     await adminGql(admin, setPassword, { id: adaId, p: PASSWORD });
-    await waitFor(() => fake.sent.length === 1);
+    await waitFor(() => fake.sent.length >= 1);
+    expect(fake.sent).toHaveLength(1);
     expect(fake.sent[0]).toMatchObject({ to: 'ada@example.home', subject: 'Your Heautou password was changed' });
 
     await adminGql(admin, 'mutation ($id: ID!) { resetSecondFactors(id: $id) { id } }', { id: adaId });
     await waitFor(() => fake.sent.length === 2);
     expect(fake.sent[1]?.subject).toMatch(/^Every second factor .* was removed from your Heautou account$/);
 
-    // A factor added sends nothing: that option is still off.
-    app.services.audit.record({
-      type: AuditType.PasskeyAdded,
-      actor: { userId: adaId, username: 'ada' },
-      ip: null,
-      detail: { name: 'Laptop' },
-    });
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(fake.sent).toHaveLength(2);
+    // A factor added sends nothing: that option is still off. The removal after it does, and is the only one.
+    const actor = { userId: adaId, username: 'ada' };
+    app.services.audit.record({ type: AuditType.PasskeyAdded, actor, ip: null, detail: { name: 'Laptop' } });
+    app.services.audit.record({ type: AuditType.PasskeyRemoved, actor, ip: null, detail: { name: 'Laptop' } });
+    await waitFor(() => fake.sent.length >= 3);
+    expect(fake.sent.slice(2).map((mail) => mail.subject)).toEqual([expect.stringMatching(/Laptop.* was removed/)]);
   });
 
   it('lets the environment set the server, and locks it under Settings', async () => {
