@@ -115,7 +115,7 @@ export function UserFormDialog({ user, open, onOpenChange, onInvited }: UserForm
             form={form}
             name="groups"
             label="Groups"
-            description="Released under the groups scope, for apps that map groups to roles. Type to add a new one."
+            description="Released under the groups scope, for apps that map groups to roles. Type to add a new one. heautou-admin makes them an admin here."
             multiple
             freeText
             options={groupOptions}

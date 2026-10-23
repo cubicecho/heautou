@@ -241,7 +241,7 @@ export interface ClientStore {
   replaceGroup: (from: string, to: string | null) => Promise<void>;
 }
 
-/** What the client store is built with besides its file. */
+/** What the client store is built with besides its document. */
 export interface ClientStoreOptions {
   /** The clock, for `createdAt`. */
   now?: () => Date;
@@ -298,7 +298,7 @@ function withSecretFor(client: OidcClient): OidcClient {
 }
 
 /**
- * Finds the secrets in the client file: each confidential client's secret.
+ * Finds the secrets in the client document: each confidential client's secret.
  *
  * @param clients - The clients as stored.
  * @param change - Seals or opens one secret.
@@ -311,13 +311,13 @@ export const clientSecretsIn: SecretMapper<OidcClient[]> = (clients, change) =>
 
 /**
  * Builds the client store over its document. Redirect and back-channel logout URIs are checked against the https
- * rule (`redirect-uris.ts`) when a client is saved; clients already in the file are read as they are.
+ * rule (`redirect-uris.ts`) when a client is saved; clients already saved are read as they are.
  *
- * @param file - The document holding every client.
+ * @param document - The document holding every client.
  * @param [options] - The clock, whether plain http redirect URIs are allowed, and who is told of a removal.
  * @returns The store.
  */
-export function createClientStore(file: DataDocument<OidcClient[]>, options: ClientStoreOptions = {}): ClientStore {
+export function createClientStore(document: DataDocument<OidcClient[]>, options: ClientStoreOptions = {}): ClientStore {
   const { now = () => new Date(), allowsHttpRedirects = () => false, onRemove = async () => {} } = options;
   type CheckedUris = Pick<
     OidcClient,
@@ -337,7 +337,7 @@ export function createClientStore(file: DataDocument<OidcClient[]>, options: Cli
       throw badInput(`backchannelLogoutUri: ${backchannelProblem}.`);
     }
   };
-  const stored = (): OidcClient[] => file.read().map(withDefaults);
+  const stored = (): OidcClient[] => document.read().map(withDefaults);
   const find = (clientId: string): OidcClient | null => stored().find((client) => client.clientId === clientId) ?? null;
 
   const load = (clientId: string): OidcClient => {
@@ -349,7 +349,7 @@ export function createClientStore(file: DataDocument<OidcClient[]>, options: Cli
   };
 
   const replace = async (next: OidcClient): Promise<OidcClient> => {
-    await file.update(() => stored().map((client) => (client.clientId === next.clientId ? next : client)));
+    await document.update(() => stored().map((client) => (client.clientId === next.clientId ? next : client)));
     return next;
   };
 
@@ -365,7 +365,7 @@ export function createClientStore(file: DataDocument<OidcClient[]>, options: Cli
       }
       checkRedirects(fields);
       const client = withSecretFor({ ...fields, clientId, clientSecret: null, createdAt: now().toISOString() });
-      await file.update(() => [...stored(), client]);
+      await document.update(() => [...stored(), client]);
       return client;
     },
     update: async (clientId, input) => {
@@ -401,7 +401,7 @@ export function createClientStore(file: DataDocument<OidcClient[]>, options: Cli
     },
     remove: async (clientId) => {
       const client = load(clientId);
-      const removed = file.update(() => stored().filter((other) => other.clientId !== clientId));
+      const removed = document.update(() => stored().filter((other) => other.clientId !== clientId));
       const released = onRemove(clientId);
       await Promise.all([removed, released]);
       return client;
@@ -409,7 +409,7 @@ export function createClientStore(file: DataDocument<OidcClient[]>, options: Cli
     replaceGroup: async (from, to) => {
       const isUsed = stored().some((client) => client.allowedGroups.includes(from));
       if (isUsed) {
-        await file.update(() =>
+        await document.update(() =>
           stored().map((client) => ({ ...client, allowedGroups: replaceGroupIn(client.allowedGroups, from, to) })),
         );
       }

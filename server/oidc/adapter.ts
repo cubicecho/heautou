@@ -173,15 +173,15 @@ function createClientAdapter(clients: ClientStore, builtIns: AdapterPayload[]): 
 }
 
 /**
- * Keeps one model's artefacts in its file.
+ * Keeps one model's artefacts in its document.
  *
- * @param document - The model's file.
+ * @param document - The model's document.
  * @param now - The clock, in epoch milliseconds.
  * @param [keptSeconds] - How long an entry is kept past its expiry, for a model whose expired entries still answer.
  * @returns The adapter.
  *
  * @remarks
- * Expired entries are dropped whenever the file is written, so it only grows with live sessions and tokens.
+ * Expired entries are dropped whenever the document is written, so it only grows with live sessions and tokens.
  */
 function createDocumentAdapter(document: DataDocument<ModelDocument>, now: () => number, keptSeconds = 0): Adapter {
   const live = (): [string, StoredEntry][] =>

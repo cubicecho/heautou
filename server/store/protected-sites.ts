@@ -5,9 +5,8 @@ import { badInput, notFound } from '../core/errors.ts';
 import { parseInput } from '../core/validation.ts';
 import type { DataDocument } from '../db/document.ts';
 import { replaceGroupIn } from './claims.ts';
+import { HOST_PATTERN } from './site-host.ts';
 
-/** A DNS name in lowercase: labels of letters, digits and inner dashes, joined by dots. */
-const HOST_PATTERN = /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/;
 /** A path prefix: one or more `/segment`s of URL path characters, no dot segments. */
 const PATH_PREFIX_PATTERN = /^(?:\/(?!\.\.?(?:\/|$))[A-Za-z0-9._~!$&'()*+,;=:@%-]+)+$/;
 const PATH_SEPARATOR = '/';
@@ -30,14 +29,14 @@ export interface ProtectedSite {
   createdAt: string;
 }
 
-/** The forward auth settings and sites, as the file holds them. */
+/** The forward auth settings and sites, as the document holds them. */
 export interface ProtectedSitesDocument {
   /** The parent domain the proxy session cookie is set on, without a leading dot. Left out for Heautou's own host. */
   cookieDomain?: string;
   sites: ProtectedSite[];
 }
 
-/** A new site's empty file. */
+/** The document before anything is added. */
 export const EMPTY_PROTECTED_SITES: ProtectedSitesDocument = Object.freeze({ sites: [] });
 
 const hostSchema = z
@@ -163,19 +162,19 @@ export interface ProtectedSiteStore {
 }
 
 /**
- * Opens the protected site store on its file.
+ * Opens the protected site store on its document.
  *
- * @param file - The file.
+ * @param document - The document.
  * @param options - Where Heautou is, to check the cookie domain against, and the clock.
  * @param options.issuerHost - The issuer's host.
  * @param [options.now] - The clock, in epoch milliseconds.
  * @returns The store.
  */
 export function createProtectedSiteStore(
-  file: DataDocument<ProtectedSitesDocument>,
+  document: DataDocument<ProtectedSitesDocument>,
   { issuerHost, now = Date.now }: { issuerHost: string; now?: () => number },
 ): ProtectedSiteStore {
-  const sites = (): ProtectedSite[] => file.read().sites ?? [];
+  const sites = (): ProtectedSite[] => document.read().sites ?? [];
   const find = (id: string): ProtectedSite | null => sites().find((site) => site.id === id) ?? null;
   const load = (id: string): ProtectedSite => {
     const site = find(id);
@@ -195,7 +194,7 @@ export function createProtectedSiteStore(
     return fields;
   };
   const write = async (next: ProtectedSite[]): Promise<void> => {
-    await file.update((current) => ({ ...current, sites: next }));
+    await document.update((current) => ({ ...current, sites: next }));
   };
 
   return {
@@ -235,18 +234,18 @@ export function createProtectedSiteStore(
         await write(sites().map((site) => ({ ...site, allowedGroups: replaceGroupIn(site.allowedGroups, from, to) })));
       }
     },
-    cookieDomain: () => file.read().cookieDomain ?? null,
+    cookieDomain: () => document.read().cookieDomain ?? null,
     setCookieDomain: async (input) => {
       const domain = input === null ? '' : input.trim().toLowerCase().replace(/^\.+/, '');
       if (domain === '') {
-        await file.update(({ cookieDomain: _previous, ...rest }) => rest);
+        await document.update(({ cookieDomain: _previous, ...rest }) => rest);
         return null;
       }
       const problem = cookieDomainProblem(domain, issuerHost);
       if (problem !== null) {
         throw badInput(`cookieDomain: ${problem}.`);
       }
-      await file.update((current) => ({ ...current, cookieDomain: domain }));
+      await document.update((current) => ({ ...current, cookieDomain: domain }));
       return domain;
     },
   };

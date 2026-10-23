@@ -1,8 +1,9 @@
 import { drizzleExtension } from '@vantreeseba/drizzle-graphql';
-import { type GraphQLSchema, isInputObjectType, isObjectType } from 'graphql';
+import { type GraphQLSchema, graphql, isInputObjectType, isObjectType } from 'graphql';
 import { OPERATION_LIMIT_DEFAULTS } from '../../server/core/defaults.ts';
 import { createSchema } from '../../server/graphql/build-schema.ts';
-import { createTestDatabase } from '../db.ts';
+import { AuditType, openAuditLog } from '../../server/store/audit.ts';
+import { createTestDatabase, createTestStore } from '../db.ts';
 import { startTestApp, type TestApp } from '../helpers.ts';
 import { adminGql, signInAsAdmin } from '../oidc/browser.ts';
 
@@ -39,7 +40,7 @@ describe('the generated schema', () => {
 
   it('reads none of the tables only the server reads', () => {
     const queries = fieldsOf(schema, 'Query');
-    const serverOnly = ['pairings', 'passkeys', 'totpFactors', 'recoveryCodes', 'adminSessions', 'proxySessions'];
+    const serverOnly = ['pairings', 'passkeys', 'totpFactors', 'recoveryCodes', 'webSessions', 'proxySessions'];
     const more = ['passwordLinks', 'oidcModels', 'documents', 'apiClients'];
     expect(queries.filter((field) => [...serverOnly, ...more].includes(field))).toEqual([]);
   });
@@ -88,5 +89,35 @@ describe('the admin API', () => {
       hasPassword: false,
       upstreamLinks: [],
     });
+  });
+});
+
+describe('the activity list', () => {
+  it('waits for the entries still queued, as the subscription does', async () => {
+    const store = await createTestStore();
+    try {
+      const schema = createSchema(store.db);
+      const audit = openAuditLog(store);
+      // Hold the write queue, as a slow write ahead of the entry would.
+      let release = (): void => {};
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      void store.queue.run(() => held);
+      audit.record({ type: AuditType.KeysRotated, actor: null, ip: null });
+
+      const reading = graphql({
+        schema,
+        source: '{ auditEntries { type } auditEntriesAggregate { count } }',
+        contextValue: { audit },
+      });
+      release();
+      const { data, errors } = await reading;
+
+      expect(errors).toBeUndefined();
+      expect(data).toEqual({ auditEntries: [{ type: 'KEYS_ROTATED' }], auditEntriesAggregate: { count: 1 } });
+    } finally {
+      await store.close();
+    }
   });
 });

@@ -7,14 +7,13 @@ import type { PasswordRules } from '../store/settings.ts';
 import { passwordSchema } from '../store/users.ts';
 import { PASSWORD_RULE_DEFAULTS, type PasswordRuleSettings } from './defaults.ts';
 import { badInput, errorMessage } from './errors.ts';
+import { guessableWords } from './password-words.ts';
 import { parseInput } from './validation.ts';
 
 /** How many hex characters of the SHA-1 leave the server: the range API's k-anonymity prefix. */
 const HASH_PREFIX_LENGTH = 5;
 /** What splits a range line's hash suffix from its count. */
 const RANGE_SEPARATOR = ':';
-/** What splits a person's name or an email into the words zxcvbn should know. */
-const WORD_BREAK = /[^\p{L}\p{N}]+/u;
 
 /** Said when zxcvbn has no suggestion of its own. */
 const FALLBACK_SUGGESTION = 'Make it longer, or use a few words that do not belong together.';
@@ -52,9 +51,7 @@ export interface PasswordPolicy {
  * @returns Their username, name and email, whole and word by word.
  */
 function userInputsOf(owner: PasswordOwner): string[] {
-  const whole = [owner.username, owner.name ?? '', owner.email ?? ''];
-  const words = whole.flatMap((value) => value.split(WORD_BREAK));
-  return [...new Set([...whole, ...words])].filter((word) => word !== '');
+  return guessableWords([owner.username, owner.name ?? '', owner.email ?? '']);
 }
 
 /**

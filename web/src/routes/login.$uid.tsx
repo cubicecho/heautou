@@ -12,6 +12,7 @@ import { CenteredLayout } from '@/components/centered-layout';
 import { PasswordField } from '@/components/password-field';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { FieldSeparator } from '@/components/ui/field';
 import { FormElement } from '@/components/ui/form-element';
 import { KeyRound } from '@/components/ui/icons';
 import { BrandIcon, useBrandName } from '@/core/brand';
@@ -247,8 +248,9 @@ function LoginPage() {
         />
       ) : null}
       {failureAlert}
+      {upstreams.length === 0 ? null : <FieldSeparator />}
       {upstreams.length === 0 ? null : (
-        <div className="grid gap-2 border-t pt-4">
+        <div className="grid gap-2">
           {upstreams.map((upstream) => (
             <Button
               key={upstream.id}

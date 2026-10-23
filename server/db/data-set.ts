@@ -5,7 +5,7 @@ import { asc } from 'drizzle-orm';
 import { AUDIT_FILE, auditEntryOf, auditRowOf, entriesOfLines, linesOfEntries } from '../store/audit.ts';
 import type { Transaction } from './client.ts';
 import { type DocumentStore, loosen, type Row, readDocument, replaceDocument } from './document.ts';
-import { DOCUMENT_MAPPINGS, modelOfFile, oidcModelDocument } from './documents.ts';
+import { archivePathOf, DOCUMENT_MAPPINGS, modelOfFile, oidcModelDocument } from './documents.ts';
 import { auditEntries, oidcModels } from './schema.ts';
 
 /** Two-space indents, as the data files had, so a person can read a backup's files. */
@@ -17,7 +17,7 @@ const ROTATED_AUDIT_FILE = /^audit\.(\d+)\.jsonl$/;
 export interface ExportOptions {
   /** Whether to take the provider's sessions and tokens. */
   includeSessions: boolean;
-  /** Files never taken, such as the web app's sessions. */
+  /** Files never taken, by their path in the archive, such as the web app's sessions. */
   skipped: readonly string[];
 }
 
@@ -108,10 +108,11 @@ export function createDataSet(store: DocumentStore): DataSet {
         const files: Record<string, string> = {};
         const isTaken = (file: string): boolean => options.skipped.includes(file) === false;
         for (const mapping of DOCUMENT_MAPPINGS) {
+          const file = archivePathOf(mapping.name);
           const document: unknown = await readDocument(db, mapping);
           const isUntouched = JSON.stringify(document) === JSON.stringify(mapping.fallback);
-          if (isTaken(mapping.file) && isUntouched === false) {
-            files[mapping.file] = `${JSON.stringify(document, null, JSON_INDENT)}\n`;
+          if (isTaken(file) && isUntouched === false) {
+            files[file] = `${JSON.stringify(document, null, JSON_INDENT)}\n`;
           }
         }
         const audit = await db.select().from(auditEntries).orderBy(asc(auditEntries.seq));
@@ -126,7 +127,7 @@ export function createDataSet(store: DocumentStore): DataSet {
           for (const [model, rows] of byModel) {
             const mapping = loosen(oidcModelDocument(model));
             const document = mapping.fromRows([rows]);
-            files[mapping.file] = `${JSON.stringify(document, null, JSON_INDENT)}\n`;
+            files[archivePathOf(mapping.name)] = `${JSON.stringify(document, null, JSON_INDENT)}\n`;
           }
         }
         return files;
@@ -135,8 +136,9 @@ export function createDataSet(store: DocumentStore): DataSet {
       queue.run(() =>
         db.transaction(async (tx) => {
           for (const mapping of DOCUMENT_MAPPINGS) {
-            const text = files[mapping.file];
-            const document = text === undefined ? mapping.fallback : parseFile(mapping.file, text);
+            const file = archivePathOf(mapping.name);
+            const text = files[file];
+            const document = text === undefined ? mapping.fallback : parseFile(file, text);
             await replaceDocument(tx, mapping, document);
           }
           await replaceAudit(tx, files);

@@ -14,6 +14,7 @@ import {
   sitePresetById,
   UNSUPPORTED_APPS,
 } from '@/clients/presets';
+import { maskSecret, SecretToggle } from '@/clients/secret';
 import type { SelectEntry } from '@/components/app-form';
 import { DescriptionList, PropertyRow } from '@/components/description-list';
 import { Section } from '@/components/section';
@@ -99,18 +100,54 @@ export function PresetLinks({ preset }: { preset: ClientPreset }) {
 }
 
 /**
+ * A preset's steps or caveats, as a list inside an alert.
+ *
+ * @param props - The notes.
+ * @param props.notes - One sentence each.
+ */
+function NoteList({ notes }: { notes: readonly string[] }) {
+  return (
+    <ul className="flex list-disc flex-col gap-1 pl-4">
+      {notes.map((note) => (
+        <li key={note}>{note}</li>
+      ))}
+    </ul>
+  );
+}
+
+/** A client secret in the settings, and whether it is shown. */
+interface SecretView {
+  /** The secret, or null for a public client. */
+  value: string | null;
+  isShown: boolean;
+  onShownChange: (isShown: boolean) => void;
+}
+
+/**
  * The settings to copy into the app: an env block, a file, or a row per field.
  *
- * @param props - What to set.
+ * @param props - What to set, and the client secret in it, masked until shown. A copy copies the real value.
  */
-function ConfigView({ config }: { config: PresetConfig }) {
+function ConfigView({ config, secret }: { config: PresetConfig; secret?: SecretView | undefined }) {
+  const shown = (text: string): string =>
+    secret === undefined ? text : maskSecret(text, secret.value, secret.isShown);
+  const toggleFor = (text: string) =>
+    secret === undefined || secret.value === null || text.includes(secret.value) === false ? null : (
+      <SecretToggle isShown={secret.isShown} onShownChange={secret.onShownChange} />
+    );
   if (config.format === 'file') {
     return (
       <CodeBlock
         title={config.fileName}
         language={config.language}
-        content={config.text}
-        actionSlot={<CopyButton value={config.text} />}
+        content={shown(config.text)}
+        actionSlot={
+          // The block's action column stacks what it is given, so the two buttons share a row.
+          <div className="flex gap-1">
+            {toggleFor(config.text)}
+            <CopyButton value={config.text} />
+          </div>
+        }
       />
     );
   }
@@ -118,13 +155,28 @@ function ConfigView({ config }: { config: PresetConfig }) {
     const text = envText(config.settings);
     return (
       <div className="flex flex-col gap-2">
-        <CodeBlock title=".env" content={text} actionSlot={<CopyButton value={text} />} />
+        <CodeBlock
+          title=".env"
+          content={shown(text)}
+          actionSlot={
+            <div className="flex gap-1">
+              {toggleFor(text)}
+              <CopyButton value={text} />
+            </div>
+          }
+        />
         <DescriptionList
           layout="stacked"
           contentSlot={config.settings
             .filter((setting) => setting.note !== undefined)
             .map((setting) => (
-              <PropertyRow key={setting.name} label={setting.name} value={setting.note} valueClassName="text-xs" />
+              <PropertyRow
+                key={setting.name}
+                label={setting.name}
+                labelClassName="font-mono font-normal"
+                value={setting.note}
+                valueClassName="text-foreground/70 text-sm"
+              />
             ))}
         />
       </div>
@@ -136,10 +188,15 @@ function ConfigView({ config }: { config: PresetConfig }) {
         <PropertyRow
           key={setting.name}
           label={setting.name}
-          value={setting.value}
+          value={shown(setting.value)}
           hint={setting.note}
           valueClassName="font-mono break-all whitespace-pre-line"
-          actionSlot={<CopyButton value={setting.value} label={`Copy ${setting.name}`} />}
+          actionSlot={
+            <>
+              {toggleFor(setting.value)}
+              <CopyButton value={setting.value} label={`Copy ${setting.name}`} />
+            </>
+          }
         />
       ))}
     />
@@ -149,9 +206,19 @@ function ConfigView({ config }: { config: PresetConfig }) {
 /**
  * How to configure the app a client was started from, filled in with the client's values.
  *
- * @param props - The client and its preset.
+ * @param props - The client and its preset, and whether the client secret in the settings is shown.
  */
-export function PresetPanel({ client, preset }: { client: ClientFieldsFragment; preset: ClientPreset }) {
+export function PresetPanel({
+  client,
+  preset,
+  isSecretShown,
+  onSecretShownChange,
+}: {
+  client: ClientFieldsFragment;
+  preset: ClientPreset;
+  isSecretShown: boolean;
+  onSecretShownChange: (isShown: boolean) => void;
+}) {
   const provider = useProviderInfo().data;
   if (provider === undefined) {
     return null;
@@ -180,14 +247,11 @@ export function PresetPanel({ client, preset }: { client: ClientFieldsFragment; 
       }
       contentSlot={
         <div className="flex flex-col gap-3">
-          {preset.notes === undefined ? null : (
-            <ul className="flex list-disc flex-col gap-1 pl-5 text-foreground/70 text-sm">
-              {preset.notes.map((note) => (
-                <li key={note}>{note}</li>
-              ))}
-            </ul>
-          )}
-          <ConfigView config={config} />
+          {preset.notes === undefined ? null : <Alert variant="info" description={<NoteList notes={preset.notes} />} />}
+          <ConfigView
+            config={config}
+            secret={{ value: client.clientSecret ?? null, isShown: isSecretShown, onShownChange: onSecretShownChange }}
+          />
         </div>
       }
     />
@@ -208,13 +272,13 @@ export function SitePresetGuide({ preset }: { preset: SitePreset }) {
       <Alert
         variant="info"
         title={`${preset.name} needs no client`}
-        description={`It signs in through forward auth. Add it as a protected site, then set it up as below.`}
+        description={
+          <>
+            <p>It signs in through forward auth. Add it as a protected site, then set it up as below.</p>
+            <NoteList notes={preset.notes} />
+          </>
+        }
       />
-      <ul className="flex list-disc flex-col gap-1 pl-5 text-foreground/70 text-sm">
-        {preset.notes.map((note) => (
-          <li key={note}>{note}</li>
-        ))}
-      </ul>
       <div className="flex flex-wrap gap-2">
         <Button
           variant="info"

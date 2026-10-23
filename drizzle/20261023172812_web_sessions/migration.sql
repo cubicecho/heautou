@@ -1,0 +1,1 @@
+ALTER TABLE "admin_sessions" RENAME TO "web_sessions";

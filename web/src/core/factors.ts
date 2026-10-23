@@ -39,7 +39,7 @@ export type PasskeyInfo = z.infer<typeof passkeySchema>;
 export function useFactors() {
   return useQuery({
     queryKey: KEY,
-    queryFn: async () => jsonReply(await fetch('/admin/account/factors'), factorsSchema),
+    queryFn: async () => jsonReply(await fetch('/api/account/factors'), factorsSchema),
     retry: false,
   });
 }
@@ -61,7 +61,7 @@ function useRefetchFactors() {
  */
 export function useStartTotp() {
   return useMutation({
-    mutationFn: async () => jsonReply(await postJson('/admin/account/totp/start', {}), totpSetupSchema),
+    mutationFn: async () => jsonReply(await postJson('/api/account/totp/start', {}), totpSetupSchema),
   });
 }
 
@@ -74,7 +74,7 @@ export function useConfirmTotp() {
   const onSuccess = useRefetchFactors();
   return useMutation({
     mutationFn: async (code: string) =>
-      (await jsonReply(await postJson('/admin/account/totp/confirm', { code }), maybeCodesSchema)).recoveryCodes,
+      (await jsonReply(await postJson('/api/account/totp/confirm', { code }), maybeCodesSchema)).recoveryCodes,
     onSuccess,
   });
 }
@@ -88,7 +88,7 @@ export function useRemoveTotp() {
   const onSuccess = useRefetchFactors();
   return useMutation({
     mutationFn: async (password: string) =>
-      jsonReply(await postJson('/admin/account/totp/remove', { password }), summarySchema),
+      jsonReply(await postJson('/api/account/totp/remove', { password }), summarySchema),
     onSuccess,
   });
 }
@@ -102,8 +102,7 @@ export function useNewRecoveryCodes() {
   const onSuccess = useRefetchFactors();
   return useMutation({
     mutationFn: async (password: string) =>
-      (await jsonReply(await postJson('/admin/account/recovery-codes', { password }), recoveryCodesSchema))
-        .recoveryCodes,
+      (await jsonReply(await postJson('/api/account/recovery-codes', { password }), recoveryCodesSchema)).recoveryCodes,
     onSuccess,
   });
 }
@@ -117,9 +116,9 @@ export function useAddPasskey() {
   const onSuccess = useRefetchFactors();
   return useMutation({
     mutationFn: async (name: string) => {
-      const { options } = await jsonReply(await postJson('/admin/account/passkeys/options', {}), passkeyOptionsSchema);
+      const { options } = await jsonReply(await postJson('/api/account/passkeys/options', {}), passkeyOptionsSchema);
       const response = await startRegistration({ optionsJSON: options });
-      return (await jsonReply(await postJson('/admin/account/passkeys', { name, response }), maybeCodesSchema))
+      return (await jsonReply(await postJson('/api/account/passkeys', { name, response }), maybeCodesSchema))
         .recoveryCodes;
     },
     onSuccess,
@@ -135,7 +134,7 @@ export function useRemovePasskey() {
   const onSuccess = useRefetchFactors();
   return useMutation({
     mutationFn: async (body: { id: string; password: string }) =>
-      jsonReply(await postJson('/admin/account/passkeys/remove', body), summarySchema),
+      jsonReply(await postJson('/api/account/passkeys/remove', body), summarySchema),
     onSuccess,
   });
 }

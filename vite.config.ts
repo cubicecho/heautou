@@ -19,7 +19,11 @@ export default defineConfig({
     tailwindcss(),
   ],
   resolve: {
-    alias: { '@': fileURLToPath(new URL('./web/src', import.meta.url)) },
+    alias: {
+      '@': fileURLToPath(new URL('./web/src', import.meta.url)),
+      // The server modules the web app shares rules and limits with. Each imports nothing (tests/web/server-imports).
+      '@server': fileURLToPath(new URL('./server', import.meta.url)),
+    },
   },
   build: { outDir: '../dist', emptyOutDir: true },
   server: {
@@ -32,6 +36,7 @@ export default defineConfig({
       '/oidc': API_ORIGIN,
       '/interaction': API_ORIGIN,
       '/admin': API_ORIGIN,
+      '/api': API_ORIGIN,
       '/upstream': API_ORIGIN,
       // A user's profile picture; `/users` itself is the web app's page.
       '^/users/[^/]+/picture': API_ORIGIN,

@@ -4,14 +4,13 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { databaseUrl, dataDir, isProduction, secretKeys } from './core/config.ts';
 import { errorMessage } from './core/errors.ts';
 import { createSecretBox } from './core/secret-box.ts';
-import { BACKUP_LAYOUT } from './core/services.ts';
 import { FILE_MODE } from './core/wire.ts';
 import { DatabaseKind, type OpenDatabase, openDatabase } from './db/client.ts';
 import { createDataSet } from './db/data-set.ts';
 import { createWriteQueue, type DocumentStore } from './db/document.ts';
 import { waitForDatabase } from './db/wait.ts';
 import { AuditType, openAuditLog } from './store/audit.ts';
-import { createBackup, filesToRestore, readBackup } from './store/backup.ts';
+import { exportArchive, RestoreVia, restoreArchive, restoredDetail } from './store/backup.ts';
 
 /** The commands. */
 const Command = { Export: 'export', Restore: 'restore' } as const;
@@ -43,8 +42,7 @@ async function openData(): Promise<OpenDatabase> {
  * @param includeSessions - Whether to take the provider's sessions and tokens.
  */
 async function exportTo(store: DocumentStore, file: string, includeSessions: boolean): Promise<void> {
-  const files = await createDataSet(store).exportFiles({ includeSessions, skipped: BACKUP_LAYOUT.skipped });
-  const archive = createBackup(files, BACKUP_LAYOUT, { includeSessions });
+  const archive = await exportArchive(createDataSet(store), { includeSessions });
   writeFileSync(file, archive, { mode: FILE_MODE });
   const sealing =
     secretKeys() === null
@@ -63,20 +61,13 @@ async function exportTo(store: DocumentStore, file: string, includeSessions: boo
 async function restoreFrom(store: DocumentStore, file: string, label: string): Promise<void> {
   const keys = secretKeys();
   const box = keys === null ? null : createSecretBox(keys);
-  const checked = readBackup(readFileSync(file), BACKUP_LAYOUT, box);
-  const { files, summary } = filesToRestore(BACKUP_LAYOUT, checked);
-  await createDataSet(store).replaceAll(files);
+  const summary = await restoreArchive(createDataSet(store), readFileSync(file), box);
   const audit = openAuditLog(store);
   audit.record({
     type: AuditType.DataRestored,
     actor: null,
     ip: null,
-    detail: {
-      madeAt: summary.createdAt,
-      files: String(summary.files),
-      sessions: summary.includesSessions ? 'included' : 'left out',
-      via: 'cli',
-    },
+    detail: restoredDetail(summary, RestoreVia.Cli),
   });
   await audit.settled();
   console.log(

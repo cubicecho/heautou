@@ -1,4 +1,4 @@
-import type { AuditType } from '@/__generated__/graphql';
+import type { AuditTargetKind, AuditType } from '@/__generated__/graphql';
 
 /** What each audit entry type is called on the page. Every type has one, so a new type fails the typecheck here. */
 const LABELS: Record<AuditType, string> = {
@@ -135,4 +135,69 @@ const WARNINGS = new Set([
  */
 export function isWarning(type: string): boolean {
   return WARNINGS.has(type.toUpperCase());
+}
+
+/** What each kind of thing an entry is about is called in its line. */
+const TARGET_KIND_LABELS: Record<AuditTargetKind, string> = {
+  CLIENT: 'client',
+  USER: 'user',
+  GROUP: 'group',
+  PAIRING: 'setup URL',
+  KEYS: 'signing keys',
+  BRANDING: 'branding',
+  SETTINGS: 'settings',
+  UPSTREAM: 'sign-in provider',
+  API: 'API',
+  PROTECTED_SITE: 'protected site',
+};
+
+/**
+ * Names the kind of thing an entry is about.
+ *
+ * @param kind - The target's kind.
+ * @returns The words for it.
+ */
+export function targetKindLabel(kind: AuditTargetKind): string {
+  return TARGET_KIND_LABELS[kind];
+}
+
+/** What a detail is called in an entry's line, by its key. A key not listed is shown with its underscores as spaces. */
+const DETAIL_LABELS: Readonly<Record<string, string>> = {
+  how: 'setup',
+  user: 'account',
+  acr: 'strength',
+  kid: 'key',
+  identity: 'account',
+  identifier: 'asked for',
+  method: 'with',
+  via: 'with',
+  provider: 'through',
+  redirect_uri: 'redirect URI',
+  resource: 'API',
+  scope: 'scopes',
+  sent: 'sent by',
+};
+
+/** Detail values that read better in other words, by key then value. Any other value has its underscores as spaces. */
+const DETAIL_VALUES: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  how: { token: 'with the setup token', window: 'in the first minutes after boot' },
+  user: { new: 'made new', existing: 'an existing user' },
+  acr: { pwd: 'password', mfa: 'two factors' },
+  refused: { no_email: 'no email address' },
+};
+
+/** Underscores in a key or value, which a reader sees as spaces. */
+const UNDERSCORES = /_/g;
+
+/**
+ * Writes one detail of an entry for a person.
+ *
+ * @param key - The detail's name, such as `how`.
+ * @param value - Its value, such as `window`.
+ * @returns The words, such as `setup: in the first minutes after boot`.
+ */
+export function detailText(key: string, value: string): string {
+  const label = DETAIL_LABELS[key] ?? key.replace(UNDERSCORES, ' ');
+  const text = DETAIL_VALUES[key]?.[value] ?? value.replace(UNDERSCORES, ' ');
+  return `${label}: ${text}`;
 }

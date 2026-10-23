@@ -2,7 +2,7 @@ import type { AuthenticationResponseJSON } from '@simplewebauthn/server';
 import express, { type Request, type Response, Router } from 'express';
 import type Provider from 'oidc-provider';
 import { z } from 'zod';
-import { builtInClientName } from '../admin/admin-client.ts';
+import { clientDisplayName } from '../admin/admin-client.ts';
 import { HTTP_DEFAULTS, TWO_FACTOR_DEFAULTS } from '../core/defaults.ts';
 import { errorMessage } from '../core/errors.ts';
 import { createExpiringMap } from '../core/expiring-map.ts';
@@ -10,13 +10,14 @@ import { authenticationOptions, relyingPartyOf, verifyAuthentication } from '../
 import { HttpStatus } from '../core/wire.ts';
 import { sameOriginJson } from '../http/guards.ts';
 import { type LoginThrottle, sendTooMany } from '../http/rate-limit.ts';
-import { type AuditEvent, type AuditLog, AuditTargetKind, AuditType, actorOf } from '../store/audit.ts';
+import { type AuditEvent, type AuditLog, AuditType, actorOf } from '../store/audit.ts';
 import type { ClientStore } from '../store/clients.ts';
 import type { FactorStore } from '../store/factors.ts';
 import type { UpstreamProvider, UpstreamStore } from '../store/upstreams.ts';
 import type { PublicUser, UserStore } from '../store/users.ts';
 import { resolveUpstreamUser } from '../upstream/accounts.ts';
 import { FlowPurpose, type UpstreamFlows } from '../upstream/flows.ts';
+import { clientTargetIn } from './audit-events.ts';
 import type { ProviderHost } from './host.ts';
 import { PAGE_PARAM, pageUrl, WEB_PAGE } from './pages.ts';
 import { AuthLevel, AuthMethod, INTERACTION_PATH, maySignIn } from './provider.ts';
@@ -218,7 +219,6 @@ async function clientIdOf(provider: Provider, req: Request, res: Response): Prom
  */
 export function createInteractionRouter(deps: InteractionDeps): Router {
   const { host, clients, users, throttle, audit, factors, upstreams, upstreamFlows, now = Date.now } = deps;
-  const nameOf = (clientId: string): string => builtInClientName(clientId) ?? clients.find(clientId)?.name ?? clientId;
   const rp = relyingPartyOf(deps.issuer);
   const pending = createExpiringMap<PendingSignIn>(TWO_FACTOR_DEFAULTS.pendingSeconds, now);
   const challenges = createExpiringMap<string>(TWO_FACTOR_DEFAULTS.passkeyTimeoutSeconds, now);
@@ -239,7 +239,7 @@ export function createInteractionRouter(deps: InteractionDeps): Router {
         type,
         actor: actorOf(user),
         ip: req.ip ?? null,
-        target: { kind: AuditTargetKind.Client, id: clientId, name: nameOf(clientId) },
+        target: clientTargetIn(clients, clientId),
         detail,
       });
     };
@@ -282,7 +282,7 @@ export function createInteractionRouter(deps: InteractionDeps): Router {
     const client = clients.find(signInClientId);
     if (maySignIn(user, client) === false) {
       record(AuditType.SignInRefused, { reason: 'not_in_allowed_groups' });
-      return `"${user.username}" may not sign in to ${nameOf(signInClientId)}. It is only for ${client?.allowedGroups.join(', ')}.`;
+      return `"${user.username}" may not sign in to ${clientDisplayName(clients, signInClientId)}. It is only for ${client?.allowedGroups.join(', ')}.`;
     }
     return null;
   };
@@ -463,7 +463,7 @@ export function createInteractionRouter(deps: InteractionDeps): Router {
       type,
       actor: null,
       ip: req.ip ?? null,
-      target: { kind: AuditTargetKind.Client, id: clientId, name: nameOf(clientId) },
+      target: clientTargetIn(clients, clientId),
       detail: { method: SignInMethod.Upstream, provider: provider.name, ...detail },
     });
   };
@@ -492,7 +492,7 @@ export function createInteractionRouter(deps: InteractionDeps): Router {
       const { uid, params } = await host.current().interactionDetails(req, res);
       const waiting = pending.get(uid);
       res.json({
-        clientName: nameOf(String(params.client_id)),
+        clientName: clientDisplayName(clients, String(params.client_id)),
         passkeysAvailable: rp.isAvailable,
         upstreams: upstreams.list().map(({ id, name, kind }) => ({ id, name, kind })),
         // A sign-in that came back from an upstream provider and still needs a second factor.
@@ -526,7 +526,7 @@ export function createInteractionRouter(deps: InteractionDeps): Router {
         type,
         actor: named === null ? null : actorOf(named),
         ip: req.ip ?? null,
-        target: clientId === null ? undefined : { kind: AuditTargetKind.Client, id: clientId, name: nameOf(clientId) },
+        target: clientId === null ? undefined : clientTargetIn(clients, clientId),
         detail: named === null ? { username, ...detail } : detail,
       });
     };

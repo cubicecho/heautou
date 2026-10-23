@@ -1,6 +1,6 @@
 import type { ErrorOut, KoaContextWithOIDC } from 'oidc-provider';
 import { z } from 'zod';
-import { builtInClientName } from '../admin/admin-client.ts';
+import { clientDisplayName } from '../admin/admin-client.ts';
 import { HttpStatus } from '../core/wire.ts';
 import type { ClientStore } from '../store/clients.ts';
 
@@ -86,7 +86,7 @@ export function sendTo(ctx: KoaContextWithOIDC, url: string): void {
  */
 export function clientNameIn(clients: ClientStore, ctx: KoaContextWithOIDC): string | undefined {
   const clientId = ctx.oidc.client?.clientId;
-  return clientId === undefined ? undefined : (builtInClientName(clientId) ?? clients.find(clientId)?.name ?? clientId);
+  return clientId === undefined ? undefined : clientDisplayName(clients, clientId);
 }
 
 /**

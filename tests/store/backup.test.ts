@@ -4,20 +4,22 @@ import path from 'node:path';
 import { gunzipSync, gzipSync } from 'node:zlib';
 import { BACKUP_DEFAULTS } from '../../server/core/defaults.ts';
 import { createSecretBox, SECRET_KEY_BYTES, type SecretKeys } from '../../server/core/secret-box.ts';
-import { BACKUP_LAYOUT, openServices, type Services } from '../../server/core/services.ts';
+import { openServices, type Services } from '../../server/core/services.ts';
 import type { OpenDatabase } from '../../server/db/client.ts';
-import { adminSessions, oidcModels, users } from '../../server/db/schema.ts';
+import { readDataDirectory } from '../../server/db/import.ts';
+import { documents, oidcModels, users, webSessions } from '../../server/db/schema.ts';
 import { AuditType, userTarget } from '../../server/store/audit.ts';
 import {
   BACKUP_FORMAT,
+  BACKUP_LAYOUT,
   BACKUP_VERSION,
   type BackupArchive,
   BackupErrorCode,
   createBackup,
   readBackup,
-  readDataDirectory,
 } from '../../server/store/backup.ts';
 import { ClientAuthMethod } from '../../server/store/clients.ts';
+import { UpstreamKind } from '../../server/store/upstreams.ts';
 import { createTestDatabase } from '../db.ts';
 import { tempDir } from '../helpers.ts';
 import { PASSWORD, REDIRECT_URI } from '../oidc/browser.ts';
@@ -29,14 +31,11 @@ const PROVIDER_SESSION = { model: 'Session', id: 'session-1', payload: { kind: '
 /** The databases and services a test opened, settled and handed back after it. */
 const opened: { databases: OpenDatabase[]; services: Services[] } = { databases: [], services: [] };
 
-/** How long booting the databases a test needs may take on a busy machine: each one applies every migration. */
-const BOOT_TIMEOUT_MS = 60_000;
-
 // Boot the two databases a restore test holds at once before the tests, so no test's own time goes on booting them.
 beforeAll(async () => {
   const databases = await Promise.all([createTestDatabase(), createTestDatabase()]);
   await Promise.all(databases.map((database) => database.close()));
-}, BOOT_TIMEOUT_MS);
+});
 
 afterEach(async () => {
   await Promise.all(opened.services.map((services) => services.settled()));
@@ -96,7 +95,7 @@ async function populated(key: Buffer | null = null) {
     redirectUris: [REDIRECT_URI],
     postLogoutRedirectUris: [],
   });
-  const webSession = await services.adminSessions.create(user.id);
+  const webSession = await services.webSessions.create(user.id);
   await services.proxySessions.create({ userId: user.id, grantId: 'grant-1', amr: ['pwd'], acr: 'pwd' });
   services.audit.record({ type: AuditType.UserCreated, actor: null, ip: null, target: userTarget(user) });
   await services.settled();
@@ -154,7 +153,7 @@ describe('backups', () => {
     expect(Object.keys(without.files)).toEqual(
       expect.arrayContaining(['clients.json', 'users.json', 'keys.json', 'audit.jsonl']),
     );
-    expect(Object.keys(without.files)).not.toContain('admin-sessions.json');
+    expect(Object.keys(without.files)).not.toContain('web-sessions.json');
     expect(Object.keys(without.files)).not.toContain('proxy-sessions.json');
     expect(Object.keys(without.files).some((name) => name.startsWith('oidc/'))).toBe(false);
     expect(without.files['clients.json']).toContain('enc:v1:');
@@ -219,14 +218,100 @@ describe('backups', () => {
     expect(target.services.keys.current().jwks.map((jwk) => jwk.kid)).toEqual(sourceKids);
     expect(target.services.host.current().issuer).toBe(ISSUER);
     // Neither the target's own web sessions nor the source's come back.
-    expect(target.services.adminSessions.find(target.webSession)).toBeNull();
-    expect(target.services.adminSessions.find(source.webSession)).toBeNull();
-    expect(await target.database.db.select().from(adminSessions)).toEqual([]);
+    expect(target.services.webSessions.find(target.webSession)).toBeNull();
+    expect(target.services.webSessions.find(source.webSession)).toBeNull();
+    expect(await target.database.db.select().from(webSessions)).toEqual([]);
     expect(await target.database.db.select().from(oidcModels)).toMatchObject([
       { model: PROVIDER_SESSION.model, id: PROVIDER_SESSION.id },
     ]);
     // The restored data boots on its own.
     expect((await boot(target.database, key)).users.list().map((user) => user.username)).toEqual(['ada']);
+  });
+
+  it('restores an archive made before the documents were named for their concept', async () => {
+    const { files, createdAt } = await freshArchive();
+    // Version 1 as every build wrote it: the same paths, which a hand-made archive may add the web sessions' old one to.
+    const older = {
+      format: BACKUP_FORMAT,
+      version: 1,
+      createdAt,
+      includesSessions: false,
+      files: {
+        ...files,
+        'branding.json': `${JSON.stringify({ name: 'Home sign-in' })}\n`,
+        'admin-sessions.json': `${JSON.stringify({ hash: { userId: 'u-ada', expiresAt: Date.now() + 60_000 } })}\n`,
+      },
+    };
+
+    const target = await populated();
+    await target.services.backup.restore(zip(older));
+
+    expect(target.services.users.list().map((user) => user.username)).toEqual(['ada']);
+    expect(target.services.branding.read().name).toBe('Home sign-in');
+    const names = (await target.database.db.select({ name: documents.name }).from(documents)).map((row) => row.name);
+    expect(names).toEqual(expect.arrayContaining(['branding', 'keys']));
+    expect(names.filter((name) => name.endsWith('.json'))).toEqual([]);
+    expect(await target.database.db.select().from(webSessions)).toEqual([]);
+  });
+
+  it('brings back every store’s data, not only what the target held before', async () => {
+    const key = newKey();
+    /**
+     * Fills every store a restore reloads, each with values its server is told apart by.
+     *
+     * @param services - The server's services.
+     * @param userId - A user of that server.
+     * @param name - What sets this server's values apart.
+     * @returns The password link's token.
+     */
+    const fill = async (services: Services, userId: string, name: string): Promise<string> => {
+      await services.factors.setTotp(userId, `${name.toUpperCase()}SECRETBASE32`, 0);
+      await services.upstreams.create({
+        id: name,
+        name,
+        kind: UpstreamKind.Oidc,
+        issuer: `https://${name}.example/`,
+        clientId: `${name}-client`,
+        clientSecret: `${name}-secret`,
+      });
+      await services.protectedSites.create({ name, host: `${name}.home.lan` });
+      await services.branding.setName(name);
+      await services.settings.setPasswordRules({ minScore: name === 'source' ? 2 : 4 });
+      await services.pairings.start(`${name}-token`, { allowedGroups: [name] });
+      await services.mail.setOptions({ forgotPassword: name === 'source' });
+      const link = await services.passwordLinks.issue(userId);
+      await services.settled();
+      return link.token;
+    };
+    /**
+     * Reads what each filled store holds, as the running server sees it.
+     *
+     * @param services - The server's services.
+     * @param userId - The user the factors and the link are for.
+     * @param token - The password link's token.
+     * @returns The values, comparable between servers.
+     */
+    const read = (services: Services, userId: string, token: string) => ({
+      hasTotp: services.factors.summary(userId).hasTotp,
+      upstreams: services.upstreams.list().map((upstream) => upstream.id),
+      sites: services.protectedSites.list().map((site) => site.host),
+      brand: services.branding.read().name,
+      minScore: services.settings.passwordRules().minScore,
+      pairings: services.pairings.waitingFor('source-token')?.allowedGroups ?? null,
+      forgotPassword: services.mail.status().options.forgotPassword,
+      linkUser: services.passwordLinks.find(token),
+    });
+    const source = await populated(key);
+    const sourceToken = await fill(source.services, source.user.id, 'source');
+    const expected = read(source.services, source.user.id, sourceToken);
+    const archive = await source.services.backup.create({ includeSessions: false });
+
+    const target = await populated(key);
+    await fill(target.services, target.user.id, 'target');
+    await target.services.backup.restore(archive);
+
+    expect(read(target.services, source.user.id, sourceToken)).toEqual(expected);
+    expect(expected).toMatchObject({ hasTotp: true, upstreams: ['source'], brand: 'source', linkUser: source.user.id });
   });
 
   it('removes the provider sessions when the archive has none', async () => {

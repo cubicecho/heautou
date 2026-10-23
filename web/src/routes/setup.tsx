@@ -4,9 +4,12 @@ import { useState } from 'react';
 import { z } from 'zod';
 import { InputField, useAppForm } from '@/components/app-form';
 import { CenteredLayout } from '@/components/centered-layout';
+import { Disclosure } from '@/components/disclosure';
 import { PasswordField } from '@/components/password-field';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { CodeBlock } from '@/components/ui/code';
+import { CopyButton } from '@/components/ui/copy-button';
 import { FormElement } from '@/components/ui/form-element';
 import { BrandIcon } from '@/core/brand';
 import { jsonReply, postJson } from '@/core/json-reply';
@@ -20,8 +23,17 @@ const SETUP_URL = '/admin/setup';
 const ADMIN_LOGIN = '/admin/login';
 
 const statusSchema = z.object({ needed: z.boolean(), tokenRequired: z.boolean() });
-/** How the operator reads the token, in the quick start's setup. */
-const LOG_HINT = 'Find it in the server log: docker compose logs heautou | grep setup.';
+/** How the operator reads the setup link and its token, in the quick start's setup. */
+const LOG_COMMAND = 'docker compose logs heautou | grep setup';
+
+/**
+ * The command that finds the setup link in the server log, with a copy button.
+ */
+function LogCommand() {
+  return (
+    <CodeBlock content={LOG_COMMAND} wrap actionSlot={<CopyButton value={LOG_COMMAND} label="Copy the command" />} />
+  );
+}
 const resultSchema = z.object({ redirectTo: z.string() });
 
 /**
@@ -81,15 +93,18 @@ function SetupPage() {
         {({ password, username }) => <PasswordStrengthMeter password={password} owner={[username]} />}
       </form.Subscribe>
       {asksForToken ? (
-        <InputField
-          form={form}
-          name="token"
-          label="Setup token"
-          description={`Setup without a token has closed. ${LOG_HINT}`}
-          required
-          autoComplete="off"
-          validators={{ onChange: ({ value }) => (value.trim() ? undefined : 'Paste the setup token.') }}
-        />
+        <>
+          <InputField
+            form={form}
+            name="token"
+            label="Setup token"
+            description="Setup without a token has closed. The server log prints it; with Docker Compose, this finds it:"
+            required
+            autoComplete="off"
+            validators={{ onChange: ({ value }) => (value.trim() ? undefined : 'Paste the setup token.') }}
+          />
+          <LogCommand />
+        </>
       ) : null}
       {failure === null ? null : <Alert variant="destructive" title="No admin made" description={failure} />}
     </FormElement>
@@ -97,11 +112,36 @@ function SetupPage() {
   const done = (
     <Alert title="Heautou has an admin" description="Sign in with that account to manage clients and users." />
   );
-  const content = isDone ? done : setupForm;
-  const description =
-    linkToken === null && asksForToken === false
-      ? `Make the first admin account. To make an existing user the admin instead, open the setup link. ${LOG_HINT}`
-      : 'Make the first admin, or type an existing user’s username and password to make them the admin.';
+  // With the setup link or its token in hand, either path is open, so the page says both. Otherwise the other path
+  // waits behind a disclosure, since a fresh install has no user to promote.
+  const isFresh = linkToken === null && asksForToken === false;
+  const existingUser = (
+    <Disclosure
+      title="Make an existing user the admin"
+      description="For a server that already has users."
+      contentClassName="gap-2"
+      contentSlot={
+        <>
+          <p className="text-foreground/70 text-sm">
+            Open the setup link the server log prints, then type that user’s username and password. With Docker Compose,
+            this finds it:
+          </p>
+          <LogCommand />
+        </>
+      }
+    />
+  );
+  const content = isDone ? (
+    done
+  ) : (
+    <div className="grid gap-6">
+      {setupForm}
+      {isFresh ? existingUser : null}
+    </div>
+  );
+  const description = isFresh
+    ? 'Create the first admin account.'
+    : 'Make the first admin, or type an existing user’s username and password to make them the admin.';
 
   return (
     <CenteredLayout

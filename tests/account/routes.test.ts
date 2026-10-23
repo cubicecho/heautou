@@ -68,7 +68,7 @@ describe('the account page', () => {
   it('shows a signed-in user who they are and their sessions', async () => {
     const { browser, landing } = await signInToWebApp(app, 'ada');
     expect(landing).toBe('/account');
-    const res = await browser.send('/admin/account');
+    const res = await browser.send('/api/account');
     expect(await res.json()).toMatchObject({
       username: 'ada',
       isAdmin: false,
@@ -76,22 +76,24 @@ describe('the account page', () => {
       sessions: [{ clientNames: ['Heautou'] }],
     });
     await app.services.branding.setName('Home');
-    expect(await (await browser.send('/admin/account')).json()).toMatchObject({
+    expect(await (await browser.send('/api/account')).json()).toMatchObject({
       sessions: [{ clientNames: ['Home'] }],
     });
-    expect((await createBrowser(app.base).send('/admin/account')).status).toBe(HttpStatus.Unauthorized);
+    expect((await createBrowser(app.base).send('/api/account')).status).toBe(HttpStatus.Unauthorized);
+    // The routes moved from /admin/account; nothing outside the web app called them, so nothing answers there now.
+    expect((await browser.send('/admin/account')).status).toBe(HttpStatus.NotFound);
   });
 
   it('changes the password given the current one', async () => {
     const { browser } = await signInToWebApp(app, 'ada');
-    const wrong = await postJson(browser, '/admin/account/password', {
+    const wrong = await postJson(browser, '/api/account/password', {
       currentPassword: 'nope',
       newPassword: 'a brand new one',
     });
     expect(wrong.status).toBe(HttpStatus.Forbidden);
-    const short = await postJson(browser, '/admin/account/password', { currentPassword: PASSWORD, newPassword: 'x' });
+    const short = await postJson(browser, '/api/account/password', { currentPassword: PASSWORD, newPassword: 'x' });
     expect(short.status).toBe(HttpStatus.BadRequest);
-    const changed = await postJson(browser, '/admin/account/password', {
+    const changed = await postJson(browser, '/api/account/password', {
       currentPassword: PASSWORD,
       newPassword: 'a brand new one',
     });
@@ -101,7 +103,7 @@ describe('the account page', () => {
 
   it('refuses a weak new password, saying why', async () => {
     const { browser } = await signInToWebApp(app, 'ada');
-    const weak = await postJson(browser, '/admin/account/password', {
+    const weak = await postJson(browser, '/api/account/password', {
       currentPassword: PASSWORD,
       newPassword: 'password1',
     });
@@ -112,15 +114,15 @@ describe('the account page', () => {
 
   it('signs out everywhere', async () => {
     const { browser } = await signInToWebApp(app, 'ada');
-    const out = await postJson(browser, '/admin/account/sign-out-everywhere', {});
+    const out = await postJson(browser, '/api/account/sign-out-everywhere', {});
     expect(out.body.redirectTo).toBe('/admin/login?return=%2Faccount');
     expect(app.services.sessions.sessionsOf(adaId)).toEqual([]);
-    expect((await browser.send('/admin/account')).status).toBe(HttpStatus.Unauthorized);
+    expect((await browser.send('/api/account')).status).toBe(HttpStatus.Unauthorized);
   });
 
   it('turns away a cross-site POST', async () => {
     const { browser } = await signInToWebApp(app, 'ada');
-    const res = await browser.send('/admin/account/sign-out-everywhere', {
+    const res = await browser.send('/api/account/sign-out-everywhere', {
       method: 'POST',
       headers: { 'content-type': 'text/plain' },
       body: '{}',

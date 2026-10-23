@@ -287,7 +287,7 @@ Keep `trustForwardHeader` off unless another proxy sits in front of Traefik. Unt
 
 - A proxy session lasts 12 hours, or 2 hours without a request (`FORWARD_AUTH_DEFAULTS`). The cookie is
   `HttpOnly`, `SameSite=Lax`, and `Secure` when the issuer is https. Only its SHA-256 is stored, in
-  `proxy-sessions.json`, which backups leave out.
+  the `proxy_sessions` table, which backups leave out.
 - Each check also asks whether the provider grant it was made under still stands and the user is still enabled.
   So signing out at Heautou (`/oidc/session/end`), an admin ending the user's sessions or signing them out,
   disabling or deleting the user, or **Sign out everywhere** on `/account` all end it at the next request.

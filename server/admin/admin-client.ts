@@ -25,24 +25,28 @@ export function builtInClientName(clientId: string): string | null {
   return BUILT_IN_CLIENT_NAMES.get(clientId) ?? null;
 }
 
+/**
+ * Names a client as people see it: a built-in client by its own name, else by the name the client store holds.
+ *
+ * @param clients - The client store.
+ * @param clientId - Any client ID.
+ * @param [fallback] - The name to use for a client the store no longer has, such as the one a request gave.
+ * @returns The name, or the client ID when nothing names it.
+ */
+export function clientDisplayName(clients: ClientStore, clientId: string, fallback?: string): string {
+  return builtInClientName(clientId) ?? clients.find(clientId)?.name ?? fallback ?? clientId;
+}
+
 /** The admin UI's server routes. */
 export const ADMIN_PATH = {
   /** Starts a sign-in; `?return=` is where to go after. */
   login: '/admin/login',
   /** Where the provider sends the browser back to. */
   callback: '/admin/callback',
-  /** Ends the admin session (POST). */
+  /** Ends the web session (POST). */
   logout: '/admin/logout',
   /** Whether an admin is still to be made, and makes one (POST). */
   setup: '/admin/setup',
-  /** Who is signed in, for the account page. */
-  account: '/admin/account',
-  /** Changes the signed-in user's password (POST). */
-  accountPassword: '/admin/account/password',
-  /** Ends every session of the signed-in user (POST). */
-  accountSignOut: '/admin/account/sign-out-everywhere',
-  /** The signed-in user's recent sign-ins, from the audit log. */
-  accountActivity: '/admin/account/activity',
   /** Says whose a password link is (POST), and sets the password with it (POST to `/set`). */
   passwordLink: '/admin/password-link',
   passwordLinkSet: '/admin/password-link/set',
@@ -135,5 +139,5 @@ export function sessionClientName(clientId: string, clients: ClientStore, brandi
   if (clientId === ADMIN_DEFAULTS.clientId) {
     return branding.name;
   }
-  return builtInClientName(clientId) ?? clients.find(clientId)?.name ?? clientId;
+  return clientDisplayName(clients, clientId);
 }

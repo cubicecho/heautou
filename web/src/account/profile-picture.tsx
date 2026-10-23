@@ -5,15 +5,22 @@ import { useAccountPicture, useRemoveAccountPicture, useSetAccountPicture } from
 import { PictureSetting } from '@/pictures/picture-setting';
 
 /**
- * The signed-in user's profile picture, which apps get as the `picture` claim.
+ * The signed-in user's profile picture, which apps get as the `picture` claim. While pictures are off it is shown
+ * only to an admin, who can turn them on; anyone else has nothing to do with it.
  *
- * @returns The section.
+ * @param props - Who is looking.
+ * @param props.isAdmin - Whether the signed-in user is an admin.
+ * @returns The section, or nothing.
  */
-export function ProfilePictureSection() {
+export function ProfilePictureSection({ isAdmin }: { isAdmin: boolean }) {
   const picture = useAccountPicture();
   const set = useSetAccountPicture();
   const remove = useRemoveAccountPicture();
   const data = picture.data;
+  const isHidden = data?.isEnabled === false && isAdmin === false;
+  if (isHidden) {
+    return null;
+  }
 
   return (
     <Section

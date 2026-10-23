@@ -1,7 +1,14 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { useState } from 'react';
 import type { AuditEntryFieldsFragment } from '@/__generated__/graphql';
-import { AUDIT_TYPE_OPTIONS, auditTypeLabel, isAuditType, isWarning } from '@/activity/audit-types';
+import {
+  AUDIT_TYPE_OPTIONS,
+  auditTypeLabel,
+  detailText,
+  isAuditType,
+  isWarning,
+  targetKindLabel,
+} from '@/activity/audit-types';
 import { Combobox } from '@/components/combobox';
 import { List } from '@/components/list';
 import { ListItem } from '@/components/list-item';
@@ -27,9 +34,9 @@ type Entry = AuditEntryFieldsFragment;
 function summaryOf(entry: Entry): string {
   return joinStats(
     entry.actorUserId === null ? 'Nobody signed in' : `By ${entry.actorUsername ?? ''}`,
-    entry.targetKind !== null && `${entry.targetKind.toLowerCase()} ${entry.targetName ?? ''}`,
+    entry.targetKind !== null && `${targetKindLabel(entry.targetKind)} ${entry.targetName ?? ''}`,
     entry.ip !== null && `from ${entry.ip}`,
-    ...Object.entries(entry.detail).map(([name, value]) => `${name}: ${value}`),
+    ...Object.entries(entry.detail).map(([name, value]) => detailText(name, String(value))),
   );
 }
 
@@ -111,7 +118,8 @@ function ActivityPage() {
                 title={auditTypeLabel(entry.type)}
                 description={summaryOf(entry)}
                 meta={
-                  <span className="flex items-center gap-2" title={formatDateTime(entry.at)}>
+                  // Quieter than the title, since what happened is read first. The tooltip has the exact time.
+                  <span className="flex items-center gap-2 text-foreground/60 text-xs" title={formatDateTime(entry.at)}>
                     {isWarning(entry.type) ? <Badge variant="destructive">Failed</Badge> : null}
                     {formatAgo(entry.at)}
                   </span>

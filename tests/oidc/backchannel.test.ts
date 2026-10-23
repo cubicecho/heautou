@@ -206,7 +206,7 @@ describe('back-channel logout', () => {
     const callback = await signIn(app, '/admin/login', 'ada', PASSWORD, browser, `${app.base}/admin/callback`);
     await browser.send(callback.pathname + callback.search);
     const sid = await signInAda(client, browser);
-    const res = await browser.send('/admin/account/sign-out-everywhere', {
+    const res = await browser.send('/api/account/sign-out-everywhere', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: '{}',

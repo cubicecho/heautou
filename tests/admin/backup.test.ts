@@ -74,7 +74,7 @@ describe('backup routes', () => {
     const restored = await upload(admin, archive);
     expect(restored.status).toBe(HttpStatus.Ok);
     expect(await restored.json()).toMatchObject({ redirectTo: '/admin/login', restored: { includesSessions: false } });
-    expect(restored.headers.getSetCookie().join()).toMatch(/heautou_admin=;/);
+    expect(restored.headers.getSetCookie().join()).toMatch(/heautou_session=;/);
 
     expect(app.services.users.list().map((user) => user.username)).toEqual(['root']);
     const after = await adminGql(admin, '{ users { username } }');

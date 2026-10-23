@@ -4,6 +4,7 @@ import type { ForwardAuthFieldsFragment, ProtectedSiteFieldsFragment } from '@/_
 import { InputField, useAppForm } from '@/components/app-form';
 import { ConfirmButton } from '@/components/confirm-button';
 import { DescriptionList, PropertyRow } from '@/components/description-list';
+import { Disclosure } from '@/components/disclosure';
 import { DisclosureRow } from '@/components/disclosure-row';
 import { List } from '@/components/list';
 import { EmptyState } from '@/components/page';
@@ -16,7 +17,7 @@ import { Button } from '@/components/ui/button';
 import { CopyButton } from '@/components/ui/copy-button';
 import { FormElement } from '@/components/ui/form-element';
 import { Pencil, Plus, Trash2 } from '@/components/ui/icons';
-import { ShieldCheck } from '@/core/app-icons';
+import { ExternalLink, ShieldCheck } from '@/core/app-icons';
 import { messageOf } from '@/core/lists';
 import {
   useDeleteProtectedSite,
@@ -102,8 +103,12 @@ function CookieDomainForm({ settings }: { settings: ForwardAuthFieldsFragment })
   );
 }
 
+/** The forward auth guide in the repository, which the snippets are held to. */
+const FORWARD_AUTH_GUIDE = 'https://github.com/cubicecho/heautou/blob/main/docs/forward-auth.md';
+
 /**
- * What the reverse proxy is pointed at, the cookie domain, and a configuration to paste.
+ * What the reverse proxy is pointed at, the cookie domain, and a configuration to paste, behind a disclosure that
+ * starts open while there is something left to set up.
  *
  * @param props - The sites, for the snippet.
  * @param props.sites - The protected sites.
@@ -111,16 +116,42 @@ function CookieDomainForm({ settings }: { settings: ForwardAuthFieldsFragment })
 function ProxySetupSection({ sites }: { sites: readonly ProtectedSiteFieldsFragment[] }) {
   const query = useForwardAuth();
   const settings = query.data;
+  if (query.isError) {
+    return <QueryError error={query.error} onRetry={query.refetch} what="the proxy setup" />;
+  }
+  if (settings === undefined) {
+    return null;
+  }
+  const hasCookieDomain = settings.cookieDomain !== null && settings.cookieDomain !== undefined;
+  const isSetUp = sites.length > 0 && hasCookieDomain;
 
   return (
     <Section
-      title="Proxy setup"
-      description="Point the reverse proxy's forward auth at these, from where it reaches Heautou, or paste the snippet below. docs/forward-auth.md explains each one."
       surface="card"
       contentSlot={
-        <div className="grid gap-4">
-          {query.isError ? <QueryError error={query.error} onRetry={query.refetch} what="the proxy setup" /> : null}
-          {settings === undefined ? null : (
+        <Disclosure
+          title="Proxy setup"
+          titleClassName="text-foreground"
+          description="Point the reverse proxy's forward auth at these addresses, from where it reaches Heautou, or paste the snippet below."
+          defaultOpen={isSetUp === false}
+          actionSlot={
+            <Button
+              variant="outline"
+              size="sm"
+              iconSlot={<ExternalLink />}
+              content="Guide"
+              linkSlot={
+                <a
+                  href={FORWARD_AUTH_GUIDE}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label="The forward auth guide, on GitHub"
+                />
+              }
+            />
+          }
+          contentClassName="gap-4 pt-2"
+          contentSlot={
             <>
               <DescriptionList
                 contentSlot={[
@@ -155,17 +186,17 @@ function ProxySetupSection({ sites }: { sites: readonly ProtectedSiteFieldsFragm
                 ]}
               />
               <CookieDomainForm key={settings.cookieDomain ?? ''} settings={settings} />
-              {settings.cookieDomain === null || settings.cookieDomain === undefined ? (
+              {hasCookieDomain ? null : (
                 <Alert
                   variant="warning"
                   title="No cookie domain"
                   description="Only sites on Heautou's own host share the sign-in. Set the domain the sites and Heautou have in common, such as home.lan."
                 />
-              ) : null}
+              )}
               <ProxySnippet settings={settings} sites={sites} />
             </>
-          )}
-        </div>
+          }
+        />
       }
     />
   );
@@ -214,7 +245,6 @@ function SitesPage() {
       contentClassName="gap-4"
       contentSlot={
         <>
-          <ProxySetupSection sites={sites} />
           {remove.error === null ? null : (
             <Alert variant="destructive" title="Site not deleted" description={messageOf(remove.error)} />
           )}
@@ -239,13 +269,13 @@ function SitesPage() {
                 open={openId === site.id}
                 onOpenChange={(next) => setOpenId(next ? site.id : null)}
                 title={site.name}
-                badgesSlot={
+                meta={
                   <>
+                    <span className="font-mono text-foreground/60 text-xs">{addressOf(site)}</span>
                     {site.allowedGroups.length === 0 ? null : <Badge variant="secondary">Limited</Badge>}
                     {site.requireSecondFactor ? <Badge variant="outline">Second factor</Badge> : null}
                   </>
                 }
-                meta={<span className="font-mono text-foreground/60 text-xs">{addressOf(site)}</span>}
                 actionSlot={
                   <>
                     <Button
@@ -293,6 +323,8 @@ function SitesPage() {
               />
             ))}
           />
+          {/* Drawn once the sites are in, since whether it starts open depends on them. */}
+          {query.isPending ? null : <ProxySetupSection sites={sites} />}
           {isFormOpen ? (
             <SiteFormDialog
               key={editing.kind === 'edit' ? editing.site.id : 'new'}

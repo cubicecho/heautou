@@ -6,7 +6,7 @@ import type { DataDocument } from '../db/document.ts';
 /** The highest score zxcvbn gives a password. */
 export const MAX_PASSWORD_SCORE = 4;
 
-/** The provider's settings as the file holds them. A setting left out follows its default. */
+/** The provider's settings as the document holds them. A setting left out follows its default. */
 export interface SettingsDocument {
   /** Whether redirect URIs may be plain `http://` on any host. */
   allowHttpRedirectUris?: boolean;
@@ -43,7 +43,7 @@ export interface HttpRedirectSetting {
   isIssuerHttp: boolean;
 }
 
-/** The operator's settings, kept in one file. */
+/** The operator's settings, kept in one document. */
 export interface SettingsStore {
   /**
    * Reads whether plain http redirect URIs are allowed.
@@ -75,20 +75,20 @@ export interface SettingsStore {
 }
 
 /**
- * Opens the settings store on its file.
+ * Opens the settings store on its document.
  *
- * @param file - The file. Missing, every setting follows its default.
+ * @param document - The document. Missing, every setting follows its default.
  * @param issuer - The provider's issuer, which the http redirect default follows.
  * @returns The store.
  */
-export function createSettingsStore(file: DataDocument<SettingsDocument>, issuer: string): SettingsStore {
+export function createSettingsStore(document: DataDocument<SettingsDocument>, issuer: string): SettingsStore {
   const isIssuerHttp = new URL(issuer).protocol === 'http:';
   const httpRedirects = (): HttpRedirectSetting => {
-    const chosen = file.read().allowHttpRedirectUris;
+    const chosen = document.read().allowHttpRedirectUris;
     return { isAllowed: chosen ?? isIssuerHttp, isSet: chosen !== undefined, isIssuerHttp };
   };
   const passwordRules = (): PasswordRules => {
-    const { minPasswordScore, checkPasswordBreaches } = file.read();
+    const { minPasswordScore, checkPasswordBreaches } = document.read();
     return {
       minScore: minPasswordScore ?? PASSWORD_RULE_DEFAULTS.minScore,
       checkBreaches: checkPasswordBreaches ?? PASSWORD_RULE_DEFAULTS.checkBreaches,
@@ -97,7 +97,7 @@ export function createSettingsStore(file: DataDocument<SettingsDocument>, issuer
   return {
     httpRedirects,
     setHttpRedirects: async (isAllowed) => {
-      await file.update((current) => {
+      await document.update((current) => {
         const { allowHttpRedirectUris: _previous, ...rest } = current;
         return isAllowed === null ? rest : { ...rest, allowHttpRedirectUris: isAllowed };
       });
@@ -106,7 +106,7 @@ export function createSettingsStore(file: DataDocument<SettingsDocument>, issuer
     passwordRules,
     setPasswordRules: async (changes) => {
       const { minScore, checkBreaches } = parseInput(passwordRulesSchema, changes);
-      await file.update((current) => ({
+      await document.update((current) => ({
         ...current,
         ...(minScore === undefined ? {} : { minPasswordScore: minScore }),
         ...(checkBreaches === undefined ? {} : { checkPasswordBreaches: checkBreaches }),

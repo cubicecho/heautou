@@ -11,7 +11,7 @@ const TRUST_PROXY_OFF = 'false';
 /** A hop count: digits only. */
 const HOP_COUNT = /^\d+$/;
 const UNKNOWN_VERSION = 'unknown';
-/** Where the flat files go when `DATA_DIR` is unset: `data/` in the working directory. */
+/** Where the data goes when `DATA_DIR` is unset: `data/` in the working directory. */
 const DEFAULT_DATA_DIR = 'data';
 /** The path the provider is mounted under, and so the path of the issuer. */
 export const OIDC_MOUNT_PATH = '/oidc';

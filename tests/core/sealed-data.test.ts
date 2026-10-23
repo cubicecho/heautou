@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm';
 import { SECRET_KEY_BYTES, SecretKeyErrorCode, type SecretKeys } from '../../server/core/secret-box.ts';
 import { openServices, type Services } from '../../server/core/services.ts';
 import type { Database, OpenDatabase } from '../../server/db/client.ts';
-import { DOCUMENT_FILES } from '../../server/db/documents.ts';
+import { DOCUMENT_NAMES } from '../../server/db/documents.ts';
 import { clients, documents } from '../../server/db/schema.ts';
 import { ClientAuthMethod } from '../../server/store/clients.ts';
 import { createTestDatabase } from '../db.ts';
@@ -44,7 +44,7 @@ async function boot(db: Database, current: Buffer | null = null, previous: Buffe
  */
 async function storedSecrets(db: Database): Promise<string> {
   const clientRows = await db.select().from(clients);
-  const keyRows = await db.select().from(documents).where(eq(documents.name, DOCUMENT_FILES.keys));
+  const keyRows = await db.select().from(documents).where(eq(documents.name, DOCUMENT_NAMES.keys));
   return JSON.stringify({ clientRows, keyRows });
 }
 

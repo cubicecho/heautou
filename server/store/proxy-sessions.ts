@@ -3,7 +3,7 @@ import { FORWARD_AUTH_DEFAULTS } from '../core/defaults.ts';
 import { MS_PER_SECOND } from '../core/wire.ts';
 import type { DataDocument } from '../db/document.ts';
 
-/** One browser signed in to the protected sites, as the file holds it. */
+/** One browser signed in to the protected sites, as the document holds it. */
 export interface ProxySession {
   userId: string;
   /** The provider grant the sign-in was made under. Signing out at the provider revokes it, which ends this too. */
@@ -18,7 +18,7 @@ export interface ProxySession {
   lastSeenAt: number;
 }
 
-/** Sessions by the SHA-256 of their token, so the file alone cannot be replayed as a cookie. */
+/** Sessions by the SHA-256 of their token, so the tables alone cannot be replayed as a cookie. */
 export type ProxySessionDocument = Record<string, ProxySession>;
 
 /** What a sign-in starts a session with. */
@@ -63,14 +63,14 @@ function digest(token: string): string {
 }
 
 /**
- * Opens the proxy session store on its file.
+ * Opens the proxy session store on its document.
  *
- * @param file - The file holding the sessions.
+ * @param document - The document holding the sessions.
  * @param [now] - The clock, in epoch milliseconds.
  * @returns The store. Dead sessions are dropped whenever it writes.
  */
 export function createProxySessionStore(
-  file: DataDocument<ProxySessionDocument>,
+  document: DataDocument<ProxySessionDocument>,
   now: () => number = Date.now,
 ): ProxySessionStore {
   const { sessionSeconds, idleSeconds, touchSeconds, tokenBytes } = FORWARD_AUTH_DEFAULTS;
@@ -88,25 +88,25 @@ export function createProxySessionStore(
       const token = randomBytes(tokenBytes).toString('base64url');
       const at = now();
       const stored: ProxySession = { ...session, expiresAt: at + sessionSeconds * MS_PER_SECOND, lastSeenAt: at };
-      await file.update((sessions) => ({ ...liveExcept(sessions, null), [digest(token)]: stored }));
+      await document.update((sessions) => ({ ...liveExcept(sessions, null), [digest(token)]: stored }));
       return token;
     },
     use: async (token) => {
       const key = digest(token);
-      const session = file.read()[key];
+      const session = document.read()[key];
       const at = now();
       if (session === undefined || isAlive(session, at) === false) {
         return null;
       }
       const isStale = at - session.lastSeenAt >= touchSeconds * MS_PER_SECOND;
       if (isStale) {
-        await file.update((sessions) => ({ ...liveExcept(sessions, null), [key]: { ...session, lastSeenAt: at } }));
+        await document.update((sessions) => ({ ...liveExcept(sessions, null), [key]: { ...session, lastSeenAt: at } }));
       }
       return session;
     },
     remove: async (token) => {
       const key = digest(token);
-      await file.update((sessions) => liveExcept(sessions, key));
+      await document.update((sessions) => liveExcept(sessions, key));
     },
   };
 }
