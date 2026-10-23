@@ -1,4 +1,5 @@
 import type { AdapterPayload } from 'oidc-provider';
+import { PUBLIC_PATH } from '../account/paths.ts';
 import { OIDC_MOUNT_PATH } from '../core/config.ts';
 import { ADMIN_DEFAULTS, FORWARD_AUTH_DEFAULTS } from '../core/defaults.ts';
 import type { Branding } from '../store/branding.ts';
@@ -47,15 +48,6 @@ export const ADMIN_PATH = {
   logout: '/admin/logout',
   /** Whether an admin is still to be made, and makes one (POST). */
   setup: '/admin/setup',
-  /** Says whose a password link is (POST), and sets the password with it (POST to `/set`). */
-  passwordLink: '/admin/password-link',
-  passwordLinkSet: '/admin/password-link/set',
-  /** The provider's name and whether it has a logo, for every page. */
-  branding: '/admin/branding',
-  /** The logo image. */
-  logo: '/admin/branding/logo',
-  /** The lowest password strength the rules take, for the strength meters. */
-  passwordRules: '/admin/password-rules',
 } as const;
 
 /** The web app's pages the server links to. */
@@ -123,7 +115,7 @@ export interface BrandingView {
  */
 export function brandingView(branding: Branding): BrandingView {
   const { name, logo } = branding;
-  return { name, logoUrl: logo === null ? null : `${ADMIN_PATH.logo}?v=${encodeURIComponent(logo.updatedAt)}` };
+  return { name, logoUrl: logo === null ? null : `${PUBLIC_PATH.logo}?v=${encodeURIComponent(logo.updatedAt)}` };
 }
 
 /**

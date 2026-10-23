@@ -592,7 +592,7 @@ const passwordStrengthSchema = z.object({ minScore: z.number() });
 export function usePasswordStrengthRule() {
   return useQuery({
     queryKey: KEYS.passwordStrength,
-    queryFn: async () => jsonReply(await fetch('/admin/password-rules'), passwordStrengthSchema),
+    queryFn: async () => jsonReply(await fetch('/api/password-rules'), passwordStrengthSchema),
   });
 }
 
@@ -604,7 +604,7 @@ export function usePasswordStrengthRule() {
 export function useBranding() {
   return useQuery({
     queryKey: KEYS.branding,
-    queryFn: async () => jsonReply(await fetch('/admin/branding'), brandingSchema),
+    queryFn: async () => jsonReply(await fetch('/api/branding'), brandingSchema),
     staleTime: Number.POSITIVE_INFINITY,
   });
 }

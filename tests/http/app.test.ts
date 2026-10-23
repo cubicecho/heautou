@@ -115,7 +115,7 @@ describe('app', () => {
     const changed = await gql(SET_RULES, { minScore: MAX_PASSWORD_SCORE });
     expect(changed.data.setPasswordRules).toEqual({ minScore: MAX_PASSWORD_SCORE, checkBreaches: false });
     expect((await gql(SET_PASSWORD, { id, password: HARD })).errors[0].extensions.code).toBe(ErrorCode.BadUserInput);
-    expect(await (await fetch(`${app.base}/admin/password-rules`)).json()).toEqual({ minScore: MAX_PASSWORD_SCORE });
+    expect(await (await fetch(`${app.base}/api/password-rules`)).json()).toEqual({ minScore: MAX_PASSWORD_SCORE });
     const [entry] = (await app.services.audit.list({ first: 1, types: [AuditType.PasswordRulesSet] })).entries;
     expect(entry?.detail).toEqual({ minScore: String(MAX_PASSWORD_SCORE), breachCheck: 'off' });
 

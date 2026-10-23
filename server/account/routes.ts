@@ -15,6 +15,7 @@ import type { PasswordLinkStore } from '../store/password-links.ts';
 import type { SettingsStore } from '../store/settings.ts';
 import { isAdmin, type UserStore } from '../store/users.ts';
 import type { WebSessionStore } from '../store/web-sessions.ts';
+import { PUBLIC_PATH } from './paths.ts';
 import { ACCOUNT_API, clearSessionCookies, requireSignedIn, signedInUser, viewerOf } from './session.ts';
 
 /** The routes of the signed-in user's own account. */
@@ -73,9 +74,9 @@ function sendDeadLink(res: Response): void {
  * `GET /api/account` says who is signed in, with their sessions, or 401. `POST /api/account/password` changes
  * their password given the current one, and `POST /api/account/sign-out-everywhere` ends every session and token.
  * `GET /api/account/activity` lists their last `AUDIT_DEFAULTS.accountEntries` sign-ins.
- * `POST /admin/password-link` names a link's user and `POST /admin/password-link/set` sets the password with it;
- * the token travels in the body, never in a URL. `GET /admin/branding`, `/admin/branding/logo` and
- * `/admin/password-rules` are public: the sign-in and set-password pages show them.
+ * `POST /api/password-link` names a link's user and `POST /api/password-link/set` sets the password with it;
+ * the token travels in the body, never in a URL. `GET /api/branding`, `/api/branding/logo` and
+ * `/api/password-rules` are public: the sign-in and set-password pages show them.
  */
 export function createAccountRouter(deps: AccountDeps): Router {
   const { users, clients, webSessions, passwordLinks, sessions, branding, issuer, throttle, audit } = deps;
@@ -172,7 +173,7 @@ export function createAccountRouter(deps: AccountDeps): Router {
     res.json({ redirectTo: `${ADMIN_PATH.login}?return=${encodeURIComponent(WEB_APP_PAGE.account)}` });
   });
 
-  router.post(ADMIN_PATH.passwordLink, ...json, (req, res) => {
+  router.post(PUBLIC_PATH.passwordLink, ...json, (req, res) => {
     const parsed = linkSchema.safeParse(req.body);
     const userId = parsed.success ? passwordLinks.find(parsed.data.token) : null;
     const user = userId === null ? null : users.find(userId);
@@ -183,7 +184,7 @@ export function createAccountRouter(deps: AccountDeps): Router {
     res.json({ username: user.username, isInvite: user.hasPassword === false });
   });
 
-  router.post(ADMIN_PATH.passwordLinkSet, ...json, async (req, res) => {
+  router.post(PUBLIC_PATH.passwordLinkSet, ...json, async (req, res) => {
     const parsed = setWithLinkSchema.safeParse(req.body);
     if (parsed.success === false) {
       sendRefusal(res, HttpStatus.BadRequest, 'Send the link’s token and a password.');
@@ -213,15 +214,15 @@ export function createAccountRouter(deps: AccountDeps): Router {
     }
   });
 
-  router.get(ADMIN_PATH.passwordRules, (_req, res) => {
+  router.get(PUBLIC_PATH.passwordRules, (_req, res) => {
     res.json({ minScore: settings.passwordRules().minScore });
   });
 
-  router.get(ADMIN_PATH.branding, (_req, res) => {
+  router.get(PUBLIC_PATH.branding, (_req, res) => {
     res.json(brandingView(branding.read()));
   });
 
-  router.get(ADMIN_PATH.logo, (_req, res) => {
+  router.get(PUBLIC_PATH.logo, (_req, res) => {
     const { logo } = branding.read();
     if (logo === null) {
       sendRefusal(res, HttpStatus.NotFound, 'There is no logo.');

@@ -158,18 +158,18 @@ describe('password links', () => {
     expect(url.origin + url.pathname).toBe(`${app.base}/set-password`);
     const token = new URLSearchParams(url.hash.slice(1)).get('token');
     const visitor = createBrowser(app.base);
-    expect((await postJson(visitor, '/admin/password-link', { token })).body).toEqual({
+    expect((await postJson(visitor, '/api/password-link', { token })).body).toEqual({
       username: 'bob',
       isInvite: true,
     });
-    expect((await postJson(visitor, '/admin/password-link/set', { token, password: 'x' })).status).toBe(
+    expect((await postJson(visitor, '/api/password-link/set', { token, password: 'x' })).status).toBe(
       HttpStatus.BadRequest,
     );
-    const set = await postJson(visitor, '/admin/password-link/set', { token, password: 'bob’s own password' });
+    const set = await postJson(visitor, '/api/password-link/set', { token, password: 'bob’s own password' });
     expect(set.body.redirectTo).toBe('/admin/login?return=%2Faccount');
     expect((await signInToWebApp(app, 'bob', 'bob’s own password')).landing).toBe('/account');
-    expect((await postJson(visitor, '/admin/password-link', { token })).status).toBe(HttpStatus.NotFound);
-    expect((await postJson(visitor, '/admin/password-link/set', { token, password: 'again and again' })).status).toBe(
+    expect((await postJson(visitor, '/api/password-link', { token })).status).toBe(HttpStatus.NotFound);
+    expect((await postJson(visitor, '/api/password-link/set', { token, password: 'again and again' })).status).toBe(
       HttpStatus.NotFound,
     );
   });
@@ -179,10 +179,10 @@ describe('password links', () => {
     const link = await adminGql(admin, 'mutation($id: ID!) { createPasswordLink(id: $id) { url } }', { id });
     const token = new URLSearchParams(new URL(link.data.createPasswordLink.url).hash.slice(1)).get('token');
     const visitor = createBrowser(app.base);
-    const weak = await postJson(visitor, '/admin/password-link/set', { token, password: 'password1' });
+    const weak = await postJson(visitor, '/api/password-link/set', { token, password: 'password1' });
     expect(weak.status).toBe(HttpStatus.BadRequest);
     expect(weak.body.error).toMatch(/too easy to guess/);
-    expect((await postJson(visitor, '/admin/password-link/set', { token, password: PASSWORD })).status).toBe(
+    expect((await postJson(visitor, '/api/password-link/set', { token, password: PASSWORD })).status).toBe(
       HttpStatus.Ok,
     );
   });
@@ -201,13 +201,13 @@ describe('password links', () => {
     const first = tokenOf(await adminGql(admin, MAKE, { id }));
     const second = tokenOf(await adminGql(admin, MAKE, { id }));
     const visitor = createBrowser(app.base);
-    expect((await postJson(visitor, '/admin/password-link', { token: first })).status).toBe(HttpStatus.NotFound);
-    expect((await postJson(visitor, '/admin/password-link', { token: second })).body.isInvite).toBe(false);
+    expect((await postJson(visitor, '/api/password-link', { token: first })).status).toBe(HttpStatus.NotFound);
+    expect((await postJson(visitor, '/api/password-link', { token: second })).body.isInvite).toBe(false);
     await adminGql(admin, 'mutation($id: ID!, $p: String!) { setUserPassword(id: $id, password: $p) { id } }', {
       id,
       p: 'set by the admin',
     });
-    expect((await postJson(visitor, '/admin/password-link', { token: second })).status).toBe(HttpStatus.NotFound);
+    expect((await postJson(visitor, '/api/password-link', { token: second })).status).toBe(HttpStatus.NotFound);
   });
 });
 
@@ -296,21 +296,21 @@ describe('branding', () => {
 
   it('names the provider and serves its logo to anyone', async () => {
     const visitor = createBrowser(app.base);
-    expect(await (await visitor.send('/admin/branding')).json()).toEqual({ name: 'Heautou', logoUrl: null });
-    expect((await visitor.send('/admin/branding/logo')).status).toBe(HttpStatus.NotFound);
+    expect(await (await visitor.send('/api/branding')).json()).toEqual({ name: 'Heautou', logoUrl: null });
+    expect((await visitor.send('/api/branding/logo')).status).toBe(HttpStatus.NotFound);
     await adminGql(admin, 'mutation { setBrandingName(name: "Home") { name } }');
     const set = await adminGql(admin, 'mutation($d: String) { setBrandingLogo(dataUrl: $d) { logoUrl } }', {
       d: `data:image/png;base64,${PIXEL_PNG}`,
     });
     const { logoUrl } = set.data.setBrandingLogo;
-    expect(logoUrl).toMatch(/^\/admin\/branding\/logo\?v=/);
-    expect(await (await visitor.send('/admin/branding')).json()).toEqual({ name: 'Home', logoUrl });
+    expect(logoUrl).toMatch(/^\/api\/branding\/logo\?v=/);
+    expect(await (await visitor.send('/api/branding')).json()).toEqual({ name: 'Home', logoUrl });
     const logo = await visitor.send(logoUrl);
     expect(logo.headers.get('content-type')).toBe('image/png');
     expect(logo.headers.get('content-security-policy')).toContain('sandbox');
     expect(Buffer.from(await logo.arrayBuffer()).equals(Buffer.from(PIXEL_PNG, 'base64'))).toBe(true);
     await adminGql(admin, 'mutation { setBrandingLogo(dataUrl: null) { logoUrl } }');
-    expect((await visitor.send('/admin/branding/logo')).status).toBe(HttpStatus.NotFound);
+    expect((await visitor.send('/api/branding/logo')).status).toBe(HttpStatus.NotFound);
   });
 
   it('refuses a logo that is not an image', async () => {
@@ -353,7 +353,7 @@ describe('breached passwords', () => {
   it('refuses a password Have I Been Pwned knows, once the operator turns the check on', async () => {
     const { id } = await app.services.users.create({ username: 'dee', email: '', name: '', groups: [] });
     const { token } = await app.services.passwordLinks.issue(id);
-    const set = await postJson(createBrowser(app.base), '/admin/password-link/set', { token, password: PASSWORD });
+    const set = await postJson(createBrowser(app.base), '/api/password-link/set', { token, password: PASSWORD });
     expect(set.status).toBe(HttpStatus.BadRequest);
     expect(set.body.error).toMatch(/data breach/);
     expect(asked).toHaveLength(1);

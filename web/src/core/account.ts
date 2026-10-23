@@ -117,7 +117,7 @@ export function useSignOutEverywhere() {
 export function usePasswordLink(token: string | null) {
   return useQuery({
     queryKey: ['password-link', token],
-    queryFn: async () => jsonReply(await postJson('/admin/password-link', { token }), linkSchema),
+    queryFn: async () => jsonReply(await postJson('/api/password-link', { token }), linkSchema),
     enabled: token !== null,
     retry: false,
   });
@@ -131,7 +131,7 @@ export function usePasswordLink(token: string | null) {
 export function useSetPasswordWithLink() {
   return useMutation({
     mutationFn: async (body: { token: string; password: string }) =>
-      jsonReply(await postJson('/admin/password-link/set', body), redirectSchema),
+      jsonReply(await postJson('/api/password-link/set', body), redirectSchema),
   });
 }
 

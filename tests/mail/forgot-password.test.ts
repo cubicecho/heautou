@@ -97,7 +97,7 @@ describe('forgot password', () => {
     const fragment = new URLSearchParams(new URL(url).hash.slice(1));
     expect(fragment.get('uid')).toBe(uid);
     const token = fragment.get('token') ?? '';
-    const set = await postJson(browser, '/admin/password-link/set', { token, password: 'a brand new one' });
+    const set = await postJson(browser, '/api/password-link/set', { token, password: 'a brand new one' });
     expect(set.status).toBe(HttpStatus.Ok);
     expect(await app.services.users.authenticate('ada', 'a brand new one')).not.toBeNull();
     // The interaction is still alive, so the page can send the browser back to it.
