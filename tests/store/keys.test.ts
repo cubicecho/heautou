@@ -17,7 +17,7 @@ describe('key store', () => {
 
   it('makes keys once and rotates them when they are old', async () => {
     let time = Date.parse('2026-01-01T00:00:00Z');
-    const now = (): Date => new Date(time);
+    const now = (): number => time;
     const store = await openKeyStore(await openDocument(db, KEYS_DOCUMENT), now);
     const first = store.current();
     expect(first.jwks).toHaveLength(1);
@@ -31,7 +31,7 @@ describe('key store', () => {
     expect(jwks).toHaveLength(KEY_DEFAULTS.keptKeys);
     expect(cookieKeys).toHaveLength(KEY_DEFAULTS.keptKeys);
     expect(jwks.map((jwk) => jwk.kid)).not.toContain(first.jwks[0]?.kid);
-    expect(rotatedAt).toBe(now().toISOString());
+    expect(rotatedAt).toBe(new Date(now()).toISOString());
     expect(store.isDue()).toBe(false);
     expect((await openKeyStore(await openDocument(db, KEYS_DOCUMENT), now)).current()).toEqual(store.current());
   });

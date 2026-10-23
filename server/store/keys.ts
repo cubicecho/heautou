@@ -93,14 +93,14 @@ export const privateKeysIn: SecretMapper<ProviderKeys | null> = (keys, change) =
  * Opens the provider's keys, making and saving them on first boot.
  *
  * @param document - The document holding them. Its private halves are sealed when `SECRET_KEY` is set.
- * @param [now] - The clock.
+ * @param [now] - The clock, in epoch milliseconds.
  * @returns The store.
  */
 export async function openKeyStore(
   document: DataDocument<ProviderKeys | null>,
-  now: () => Date = () => new Date(),
+  now: () => number = Date.now,
 ): Promise<KeyStore> {
-  const stamp = (): string => now().toISOString();
+  const stamp = (): string => new Date(now()).toISOString();
   const stored = document.read();
   if (stored === null) {
     await document.update(() => ({
@@ -134,7 +134,7 @@ export async function openKeyStore(
     },
     isDue: () => {
       const { rotatedAt = stamp() } = current();
-      return now().getTime() - Date.parse(rotatedAt) > KEY_DEFAULTS.rotationDays * MS_PER_DAY;
+      return now() - Date.parse(rotatedAt) > KEY_DEFAULTS.rotationDays * MS_PER_DAY;
     },
   };
 }

@@ -258,8 +258,8 @@ export interface UpstreamStore {
 
 /** What the upstream store is built with besides its document. */
 export interface UpstreamStoreOptions {
-  /** The clock, for `createdAt` and the link times. */
-  now?: () => Date;
+  /** The clock, in epoch milliseconds, for `createdAt` and the link times. */
+  now?: () => number;
   /** Whether a plain http issuer is allowed on any host. Asked on every save; refused when left out. */
   allowsHttp?: () => boolean;
 }
@@ -301,7 +301,8 @@ export function createUpstreamStore(
   document: DataDocument<UpstreamsDocument>,
   options: UpstreamStoreOptions = {},
 ): UpstreamStore {
-  const { now = () => new Date(), allowsHttp = () => false } = options;
+  const { now = Date.now, allowsHttp = () => false } = options;
+  const timestamp = (): string => new Date(now()).toISOString();
   const read = (): UpstreamsDocument => {
     const { providers = [], links = [] } = document.read();
     return { providers, links };
@@ -358,7 +359,7 @@ export function createUpstreamStore(
       if (find(id) !== null) {
         throw badInput(`id: "${id}" is already taken.`);
       }
-      const provider: UpstreamProvider = { id, ...settle(fields, null), createdAt: now().toISOString() };
+      const provider: UpstreamProvider = { id, ...settle(fields, null), createdAt: timestamp() };
       await write((document) => ({ ...document, providers: [...document.providers, provider] }));
       return provider;
     },
@@ -400,12 +401,12 @@ export function createUpstreamStore(
       if (hasOne) {
         throw badInput(`You already have a ${provider.name} account linked. Unlink it first.`);
       }
-      const linked: UpstreamLink = { userId, ...key, label, linkedAt: now().toISOString(), lastUsedAt: null };
+      const linked: UpstreamLink = { userId, ...key, label, linkedAt: timestamp(), lastUsedAt: null };
       await write((document) => ({ ...document, links: [...document.links, linked] }));
       return linked;
     },
     usedLink: async (key) => {
-      const at = now().toISOString();
+      const at = timestamp();
       await write((document) => ({
         ...document,
         links: document.links.map((link) => (isSameIdentity(link, key) ? { ...link, lastUsedAt: at } : link)),

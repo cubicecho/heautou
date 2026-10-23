@@ -86,7 +86,7 @@ export interface ServiceSettings {
   issuer: string;
   /** Whether X-Forwarded-Proto and -Host are believed. */
   isProxied: boolean;
-  /** The clock, in epoch milliseconds, for the setup window, the setup URLs and key rotation. */
+  /** The clock every store and flow reads, in epoch milliseconds. */
   now?: () => number;
   /** The keys client secrets and private keys are sealed with. Unset or null keeps them plain text. */
   secretKeys?: SecretKeys | null;
@@ -177,6 +177,7 @@ export interface Services {
  */
 export async function openServices(settings: ServiceSettings): Promise<Services> {
   const db = settings.database;
+  const now = settings.now ?? Date.now;
   const store: DocumentStore = { db, queue: createWriteQueue() };
   const sealingKeys = settings.secretKeys ?? null;
   const box = sealingKeys === null ? null : createSecretBox(sealingKeys);
@@ -219,14 +220,10 @@ export async function openServices(settings: ServiceSettings): Promise<Services>
     users,
     base: adminUrls(settings.issuer).base,
   });
-  const factors = createFactorStore(
-    tracked(await openSealedDocument(factorDocument, box, factorSecretsIn)),
-    settings.now,
-  );
-  const audit = openAuditLog(store, settings.now);
-  const now = settings.now ?? Date.now;
+  const factors = createFactorStore(tracked(await openSealedDocument(factorDocument, box, factorSecretsIn)), now);
+  const audit = openAuditLog(store, now);
   const upstreams = createUpstreamStore(tracked(await openSealedDocument(upstreamDocument, box, upstreamSecretsIn)), {
-    now: () => new Date(now()),
+    now,
     allowsHttp: () => providerSettings.httpRedirects().isAllowed,
   });
   const upstreamFlows = createUpstreamFlows({
@@ -235,10 +232,7 @@ export async function openServices(settings: ServiceSettings): Promise<Services>
     issuer: settings.issuer,
     now,
   });
-  const keys = await openKeyStore(
-    tracked(await openSealedDocument(keyDocument, box, privateKeysIn)),
-    () => new Date(now()),
-  );
+  const keys = await openKeyStore(tracked(await openSealedDocument(keyDocument, box, privateKeysIn)), now);
   if (keys.isDue()) {
     const rotated = await keys.rotate();
     audit.record({
@@ -251,7 +245,7 @@ export async function openServices(settings: ServiceSettings): Promise<Services>
   }
   const webSessions = createWebSessionStore(tracked(await openDocument(store, WEB_SESSIONS_DOCUMENT)));
   const passwordLinks = createPasswordLinkStore(tracked(await openDocument(store, PASSWORD_LINKS_DOCUMENT)));
-  const pairings = createPairingStore(tracked(await openDocument(store, PAIRINGS_DOCUMENT)), settings.now);
+  const pairings = createPairingStore(tracked(await openDocument(store, PAIRINGS_DOCUMENT)), now);
   const branding = createBrandingStore(tracked(await openDocument(store, BRANDING_DOCUMENT)));
   const mail = createMailer({
     store: createMailStore(tracked(await openSealedDocument(mailDocument, box, mailSecretsIn))),
@@ -323,11 +317,11 @@ export async function openServices(settings: ServiceSettings): Promise<Services>
   const host: ProviderHost = createProviderHost(build, () =>
     JSON.stringify({ kids: keys.current().jwks.map((jwk) => jwk.kid), claims: claimNamesIn(users, clients) }),
   );
-  const setup = createSetupGate(users, settings.now);
+  const setup = createSetupGate(users, now);
   const dataSet = createDataSet(store);
   const backup: DataBackup = {
     isSealed: box !== null,
-    create: (options) => exportArchive(dataSet, options, settings.now),
+    create: (options) => exportArchive(dataSet, options, now),
     restore: async (archive) => {
       const summary = await restoreArchive(dataSet, archive, box);
       for (const reload of reloads) {
