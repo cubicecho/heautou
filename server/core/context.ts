@@ -18,7 +18,7 @@ export interface Context
     | 'keys'
     | 'branding'
     | 'passwordLinks'
-    | 'adminSessions'
+    | 'webSessions'
     | 'pairings'
     | 'pairingOffers'
     | 'settings'

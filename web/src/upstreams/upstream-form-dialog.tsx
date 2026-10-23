@@ -1,3 +1,4 @@
+import { UPSTREAM_ID_PATTERN } from '@server/store/upstream-id.ts';
 import { useRef, useState } from 'react';
 import type { UnknownIdentity, UpstreamFieldsFragment, UpstreamKind } from '@/__generated__/graphql';
 import { ComboboxField, InputField, SelectField, SwitchField, TextareaField, useAppForm } from '@/components/app-form';
@@ -29,7 +30,6 @@ const UNKNOWN_OPTIONS: { value: UnknownIdentity; label: string }[] = [
   { value: 'REFUSE', label: 'Turn them away until a user links the account' },
   { value: 'CREATE', label: 'Make a user for them' },
 ];
-const ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 const MAPPING_ROWS = 3;
 /** The fields under Advanced, so it stays open while one of them is wrong. */
 const ADVANCED_FIELDS = ['createDomains', 'groupsClaim', 'groupMappings'] as const;
@@ -197,7 +197,7 @@ export function UpstreamFormDialog({ upstream, open, onOpenChange }: UpstreamFor
               description="Made from the name. Lower-case letters, digits and dashes. It is part of the redirect URI, so it cannot change later."
               validators={{
                 onChange: ({ value }) =>
-                  ID_PATTERN.test(value.trim()) ? undefined : 'Use lower-case letters, digits and dashes.',
+                  UPSTREAM_ID_PATTERN.test(value.trim()) ? undefined : 'Use lower-case letters, digits and dashes.',
               }}
             />
           )}
@@ -213,7 +213,7 @@ export function UpstreamFormDialog({ upstream, open, onOpenChange }: UpstreamFor
                 level={3}
                 title="1. Register Heautou at the provider"
                 description={`Add this redirect URI in ${(isEdit ? presetOfKind(kind) : upstreamPresetById(presetId)).registerAt}`}
-                contentSlot={<RedirectUri id={isEdit ? upstream.id : ID_PATTERN.test(id) ? id : ''} />}
+                contentSlot={<RedirectUri id={isEdit ? upstream.id : UPSTREAM_ID_PATTERN.test(id) ? id : ''} />}
               />
             )}
           </form.Subscribe>

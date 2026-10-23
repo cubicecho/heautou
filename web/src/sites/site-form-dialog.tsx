@@ -1,3 +1,4 @@
+import { HOST_PATTERN } from '@server/store/site-host.ts';
 import type { ProtectedSiteFieldsFragment } from '@/__generated__/graphql';
 import { ComboboxField, InputField, SwitchField, useAppForm } from '@/components/app-form';
 import { DialogLayout } from '@/components/dialog-layout';
@@ -7,9 +8,6 @@ import { FormElement } from '@/components/ui/form-element';
 import { useGroupOptions } from '@/core/admin';
 import { messageOf } from '@/core/lists';
 import { useCreateProtectedSite, useUpdateProtectedSite } from '@/core/protected-sites';
-
-/** A host as the server takes it: a DNS name, no scheme, port or path. */
-const HOST_PATTERN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/i;
 
 interface SiteFormDialogProps {
   /** The site to edit, or null to add one. */
@@ -78,7 +76,7 @@ export function SiteFormDialog({ site, open, onOpenChange, onSaved }: SiteFormDi
             description="The host the proxy is asked about, without https:// or a port."
             validators={{
               onChange: ({ value }) =>
-                HOST_PATTERN.test(value.trim()) ? undefined : 'A host name such as sonarr.home.lan.',
+                HOST_PATTERN.test(value.trim().toLowerCase()) ? undefined : 'A host name such as sonarr.home.lan.',
             }}
           />
           <InputField

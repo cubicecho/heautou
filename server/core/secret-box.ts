@@ -24,7 +24,7 @@ export interface SecretKeys {
 export const SecretKeyErrorCode = {
   /** `SECRET_KEY` or its file is not 32 bytes of base64. */
   Malformed: 'SECRET_KEY_MALFORMED',
-  /** The files hold sealed values but no key is set. */
+  /** The data holds sealed values but no key is set. */
   Missing: 'SECRET_KEY_MISSING',
   /** A value was sealed with a key that is neither `SECRET_KEY` nor `SECRET_KEY_PREVIOUS`, or it was changed. */
   Wrong: 'SECRET_KEY_WRONG',
@@ -48,7 +48,7 @@ export class SecretKeyError extends Error {
   }
 }
 
-/** Seals and opens secrets. Plain values open as themselves, so files from before a key was set still read. */
+/** Seals and opens secrets. Plain values open as themselves, so data from before a key was set still reads. */
 export interface SecretBox {
   /**
    * Seals a secret under the current key.

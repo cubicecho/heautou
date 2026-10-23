@@ -6,6 +6,7 @@ import type { DataDocument } from '../db/document.ts';
 import { replaceGroupIn } from './claims.ts';
 import { redirectUriProblem } from './redirect-uris.ts';
 import type { SecretMapper } from './sealed-document.ts';
+import { UPSTREAM_ID_PATTERN } from './upstream-id.ts';
 
 /** How an upstream provider signs users in. */
 export const UpstreamKind = {
@@ -85,19 +86,18 @@ export interface UpstreamLink {
   lastUsedAt: string | null;
 }
 
-/** The upstreams file. */
+/** The upstreams document. */
 export interface UpstreamsDocument {
   providers: UpstreamProvider[];
   links: UpstreamLink[];
 }
 
-/** The file before anything is added. */
+/** The document before anything is added. */
 export const EMPTY_UPSTREAMS: Readonly<UpstreamsDocument> = Object.freeze({ providers: [], links: [] });
 
 /** Who an identity is, as the sign-in learned it, without what it says about the person. */
 export type IdentityKey = Pick<UpstreamLink, 'providerId' | 'issuer' | 'subject'>;
 
-const ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 /** A domain an address may end in, such as `example.com`. */
 const DOMAIN_PATTERN = /^[a-z0-9-]+(\.[a-z0-9-]+)+$/;
 /** What a scope may hold (RFC 6749 section 3.3). */
@@ -189,9 +189,9 @@ const idSchema = z
   .trim()
   .min(1, 'give the provider an id')
   .max(UPSTREAM_DEFAULTS.maxIdLength)
-  .regex(ID_PATTERN, 'use lower-case letters, digits and "-", starting with a letter or digit');
+  .regex(UPSTREAM_ID_PATTERN, 'use lower-case letters, digits and "-", starting with a letter or digit');
 
-/** The upstream providers and the identities linked to users, kept in one JSON file. */
+/** The upstream providers and the identities linked to users, kept in one document. */
 export interface UpstreamStore {
   list: () => UpstreamProvider[];
   find: (id: string) => UpstreamProvider | null;
@@ -256,7 +256,7 @@ export interface UpstreamStore {
   replaceGroup: (from: string, to: string | null) => Promise<void>;
 }
 
-/** What the upstream store is built with besides its file. */
+/** What the upstream store is built with besides its document. */
 export interface UpstreamStoreOptions {
   /** The clock, for `createdAt` and the link times. */
   now?: () => Date;
@@ -265,11 +265,11 @@ export interface UpstreamStoreOptions {
 }
 
 /**
- * Finds the secrets in the upstreams file: each provider's client secret.
+ * Finds the secrets in the upstreams document: each provider's client secret.
  *
- * @param document - The file as stored.
+ * @param document - The document as stored.
  * @param change - Seals or opens one secret.
- * @returns The file with its secrets changed.
+ * @returns The document with its secrets changed.
  */
 export const upstreamSecretsIn: SecretMapper<UpstreamsDocument> = (document, change) => ({
   ...document,
@@ -290,20 +290,20 @@ function isSameIdentity(link: IdentityKey, key: IdentityKey): boolean {
 }
 
 /**
- * Builds the upstream store over a JSON file. An issuer is held to the https rule redirect URIs are
+ * Builds the upstream store over its document. An issuer is held to the https rule redirect URIs are
  * (`redirect-uris.ts`) when a provider is saved.
  *
- * @param file - The file holding the providers and the links.
+ * @param document - The document holding the providers and the links.
  * @param [options] - The clock and whether plain http issuers are allowed.
  * @returns The store.
  */
 export function createUpstreamStore(
-  file: DataDocument<UpstreamsDocument>,
+  document: DataDocument<UpstreamsDocument>,
   options: UpstreamStoreOptions = {},
 ): UpstreamStore {
   const { now = () => new Date(), allowsHttp = () => false } = options;
   const read = (): UpstreamsDocument => {
-    const { providers = [], links = [] } = file.read();
+    const { providers = [], links = [] } = document.read();
     return { providers, links };
   };
   const find = (id: string): UpstreamProvider | null => read().providers.find((provider) => provider.id === id) ?? null;
@@ -315,7 +315,7 @@ export function createUpstreamStore(
     return provider;
   };
   const write = async (change: (document: UpstreamsDocument) => UpstreamsDocument): Promise<void> => {
-    await file.update(() => change(read()));
+    await document.update(() => change(read()));
   };
 
   /**

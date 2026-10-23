@@ -6,11 +6,9 @@ import type { Database } from '../db/client.ts';
 import { createDataSet, type DataSet } from '../db/data-set.ts';
 import { createWriteQueue, type DataDocument, type DocumentStore, openDocument } from '../db/document.ts';
 import {
-  ADMIN_SESSIONS_DOCUMENT,
   APIS_DOCUMENT,
   BRANDING_DOCUMENT,
   CLIENTS_DOCUMENT,
-  DOCUMENT_FILES,
   FACTORS_DOCUMENT,
   KEYS_DOCUMENT,
   MAIL_DOCUMENT,
@@ -21,29 +19,22 @@ import {
   SETTINGS_DOCUMENT,
   UPSTREAMS_DOCUMENT,
   USERS_DOCUMENT,
+  WEB_SESSIONS_DOCUMENT,
 } from '../db/documents.ts';
 import { forwardAuthUrls, proxyClientMetadata } from '../forward-auth/client.ts';
 import type { ForwardAuthConfig } from '../forward-auth/routes.ts';
 import { createMailer, type Mailer, type MailTransportFactory, smtpTransport } from '../mail/mailer.ts';
 import { sendNotifications } from '../mail/notifications.ts';
 import { createAdapterFactory, openModelDocuments } from '../oidc/adapter.ts';
-import { recordProviderEvents } from '../oidc/audit-events.ts';
+import { clientTargetIn, recordProviderEvents } from '../oidc/audit-events.ts';
 import { createLogoutNotifier } from '../oidc/backchannel.ts';
 import { createProviderHost, type ProviderHost } from '../oidc/host.ts';
 import { createPairingOffers, type PairingOffers } from '../oidc/pairing-offers.ts';
 import { claimNamesIn, createProvider, SCOPES } from '../oidc/provider.ts';
 import { createSessionTools, type SessionTools } from '../oidc/sessions.ts';
-import { type AdminSessionStore, createAdminSessionStore } from '../store/admin-sessions.ts';
 import { type ApiStore, createApiStore } from '../store/apis.ts';
-import { type AuditLog, AuditTargetKind, AuditType, KEYS_TARGET, openAuditLog } from '../store/audit.ts';
-import {
-  type BackupLayout,
-  type BackupOptions,
-  createBackup,
-  filesToRestore,
-  type RestoreSummary,
-  readBackup,
-} from '../store/backup.ts';
+import { type AuditLog, AuditType, KEYS_TARGET, openAuditLog } from '../store/audit.ts';
+import { type BackupOptions, exportArchive, type RestoreSummary, restoreArchive } from '../store/backup.ts';
 import { type BrandingStore, createBrandingStore } from '../store/branding.ts';
 import { type ClientStore, clientSecretsIn, createClientStore } from '../store/clients.ts';
 import { createFactorStore, type FactorStore, factorSecretsIn } from '../store/factors.ts';
@@ -57,22 +48,13 @@ import { checkSecrets, openSealedDocument } from '../store/sealed-document.ts';
 import { createSettingsStore, type SettingsStore } from '../store/settings.ts';
 import { createUpstreamStore, type UpstreamStore, upstreamSecretsIn } from '../store/upstreams.ts';
 import { createUserStore, type UserStore } from '../store/users.ts';
+import { createWebSessionStore, type WebSessionStore } from '../store/web-sessions.ts';
 import { createUpstreamClient } from '../upstream/client.ts';
 import { createUpstreamFlows, type UpstreamFlows } from '../upstream/flows.ts';
 import type { ObjectStorage } from './object-storage.ts';
 import { createPasswordPolicy, type FetchRange, type PasswordPolicy } from './password-policy.ts';
 import { createProfilePictures, type ProfilePictures } from './pictures.ts';
 import { createSecretBox, type SecretKeys } from './secret-box.ts';
-
-/**
- * What a backup leaves out or needs. Every other store's file is taken, so a new store is backed up without being
- * listed here.
- */
-export const BACKUP_LAYOUT: BackupLayout = Object.freeze({
-  /** The web app's sessions: a restore signs everyone out rather than bringing back sessions from the backup. */
-  skipped: Object.freeze([DOCUMENT_FILES.adminSessions, DOCUMENT_FILES.proxySessions]),
-  required: Object.freeze([DOCUMENT_FILES.keys]),
-});
 
 /** Backs the data up and puts a backup back, from the running server. */
 export interface DataBackup {
@@ -149,7 +131,7 @@ export interface Services {
   /** The upstream sign-ins and links under way. */
   upstreamFlows: UpstreamFlows;
   /** The web app's sessions, for admins and for users on their account page. */
-  adminSessions: AdminSessionStore;
+  webSessions: WebSessionStore;
   passwordLinks: PasswordLinkStore;
   /** Setup URLs handed out for apps to pair with. */
   pairings: PairingStore;
@@ -267,7 +249,7 @@ export async function openServices(settings: ServiceSettings): Promise<Services>
       detail: { kid: rotated.jwks[0]?.kid ?? '', reason: 'scheduled' },
     });
   }
-  const adminSessions = createAdminSessionStore(tracked(await openDocument(store, ADMIN_SESSIONS_DOCUMENT)));
+  const webSessions = createWebSessionStore(tracked(await openDocument(store, WEB_SESSIONS_DOCUMENT)));
   const passwordLinks = createPasswordLinkStore(tracked(await openDocument(store, PASSWORD_LINKS_DOCUMENT)));
   const pairings = createPairingStore(tracked(await openDocument(store, PAIRINGS_DOCUMENT)), settings.now);
   const branding = createBrandingStore(tracked(await openDocument(store, BRANDING_DOCUMENT)));
@@ -327,11 +309,8 @@ export async function openServices(settings: ServiceSettings): Promise<Services>
           type,
           actor: null,
           ip: ctx.ip,
-          target: {
-            kind: AuditTargetKind.Client,
-            id: client.clientId,
-            name: client.clientName ?? clients.find(client.clientId)?.name ?? client.clientId,
-          },
+          // The provider passes an update the client as it was before, so its own name is only the fallback.
+          target: clientTargetIn(clients, client.clientId, client.clientName),
         });
         refreshSoon();
       };
@@ -348,14 +327,9 @@ export async function openServices(settings: ServiceSettings): Promise<Services>
   const dataSet = createDataSet(store);
   const backup: DataBackup = {
     isSealed: box !== null,
-    create: async (options) => {
-      const files = await dataSet.exportFiles({ ...options, skipped: BACKUP_LAYOUT.skipped });
-      return createBackup(files, BACKUP_LAYOUT, options, settings.now);
-    },
+    create: (options) => exportArchive(dataSet, options, settings.now),
     restore: async (archive) => {
-      const checked = readBackup(archive, BACKUP_LAYOUT, box);
-      const { files, summary } = filesToRestore(BACKUP_LAYOUT, checked);
-      await dataSet.replaceAll(files);
+      const summary = await restoreArchive(dataSet, archive, box);
       for (const reload of reloads) {
         await reload();
       }
@@ -374,7 +348,7 @@ export async function openServices(settings: ServiceSettings): Promise<Services>
     factors,
     upstreams,
     upstreamFlows,
-    adminSessions,
+    webSessions,
     passwordLinks,
     pairings,
     pairingOffers: createPairingOffers({

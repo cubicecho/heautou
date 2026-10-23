@@ -191,7 +191,7 @@ export interface AdminSettings {
   sessionSeconds: number;
   /** How long a started admin sign-in may take to come back, in seconds. */
   loginSeconds: number;
-  /** Random bytes in an admin session token and in the setup token, before base64url. */
+  /** Random bytes in a web session token and in the setup token, before base64url. */
   tokenBytes: number;
   /**
    * How long after boot the first admin can be made without the setup token, in seconds. Only a new user can be
@@ -519,7 +519,7 @@ export interface ForwardAuthSettings {
   sessionSeconds: number;
   /** How long a proxy session lasts without a request, in seconds. */
   idleSeconds: number;
-  /** How often a session's last request is written down at most, in seconds, so not every request writes the file. */
+  /** How often a session's last request is written down at most, in seconds, so not every request writes its row. */
   touchSeconds: number;
   /** How long a started proxy sign-in may take to come back, in seconds. */
   loginSeconds: number;

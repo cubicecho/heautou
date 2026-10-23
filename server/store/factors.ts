@@ -41,7 +41,7 @@ export interface UserFactors {
   passkeys: Passkey[];
 }
 
-/** The factors file: each user's factors by user ID. A user with none has no entry. */
+/** The factors document: each user's factors by user ID. A user with none has no entry. */
 export type FactorsDocument = Record<string, UserFactors>;
 
 /** A passkey without its key material: what leaves the server. */
@@ -55,7 +55,7 @@ export interface FactorSummary {
   passkeys: PasskeyInfo[];
 }
 
-/** The second factors, kept in one JSON file. */
+/** The second factors, kept in one document. */
 export interface FactorStore {
   summary: (userId: string) => FactorSummary;
   /** Whether the user has to give a second factor after their password. */
@@ -119,11 +119,11 @@ export interface FactorStore {
 }
 
 /**
- * Finds the secrets in the factors file: each authenticator app's secret.
+ * Finds the secrets in the factors document: each authenticator app's secret.
  *
- * @param document - The file as stored.
+ * @param document - The document as stored.
  * @param change - Seals or opens one secret.
- * @returns The file with its secrets changed.
+ * @returns The document with its secrets changed.
  */
 export const factorSecretsIn: SecretMapper<FactorsDocument> = (document, change) =>
   Object.fromEntries(
@@ -178,18 +178,18 @@ function infoOf({ id, name, createdAt, lastUsedAt }: Passkey): PasskeyInfo {
 }
 
 /**
- * Builds the factor store over a JSON file.
+ * Builds the factor store over its document.
  *
- * @param file - The file holding every user's factors.
+ * @param document - The document holding every user's factors.
  * @param [now] - The clock, in epoch milliseconds.
  * @returns The store.
  */
-export function createFactorStore(file: DataDocument<FactorsDocument>, now: () => number = Date.now): FactorStore {
-  const of = (userId: string): UserFactors => file.read()[userId] ?? NO_FACTORS;
+export function createFactorStore(document: DataDocument<FactorsDocument>, now: () => number = Date.now): FactorStore {
+  const of = (userId: string): UserFactors => document.read()[userId] ?? NO_FACTORS;
   const change = async (userId: string, update: (factors: UserFactors) => UserFactors): Promise<void> => {
-    await file.update((document) => {
-      const next = update(document[userId] ?? NO_FACTORS);
-      const { [userId]: _replaced, ...others } = document;
+    await document.update((byUser) => {
+      const next = update(byUser[userId] ?? NO_FACTORS);
+      const { [userId]: _replaced, ...others } = byUser;
       // Recovery codes stand in for a factor, so they go with the last one.
       const isEmpty = next.totp === null && next.passkeys.length === 0;
       return isEmpty ? others : { ...others, [userId]: next };
@@ -246,7 +246,7 @@ export function createFactorStore(file: DataDocument<FactorsDocument>, now: () =
     },
     passkeysOf: (userId) => of(userId).passkeys,
     findPasskey: (credentialId) => {
-      for (const [userId, factors] of Object.entries(file.read())) {
+      for (const [userId, factors] of Object.entries(document.read())) {
         const passkey = factors.passkeys.find((each) => each.id === credentialId);
         if (passkey !== undefined) {
           return { userId, passkey };
@@ -264,9 +264,9 @@ export function createFactorStore(file: DataDocument<FactorsDocument>, now: () =
       return infoOf(passkey);
     },
     usedPasskey: async (credentialId, counter) => {
-      await file.update((document) =>
+      await document.update((byUser) =>
         Object.fromEntries(
-          Object.entries(document).map(([userId, factors]) => [
+          Object.entries(byUser).map(([userId, factors]) => [
             userId,
             {
               ...factors,
@@ -287,7 +287,7 @@ export function createFactorStore(file: DataDocument<FactorsDocument>, now: () =
       return infoOf(passkey);
     },
     removeAll: async (userId) => {
-      const hadAny = file.read()[userId] !== undefined;
+      const hadAny = document.read()[userId] !== undefined;
       if (hadAny) {
         await change(userId, () => NO_FACTORS);
       }

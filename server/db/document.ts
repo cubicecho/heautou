@@ -58,8 +58,11 @@ export type RowsOf<TTables extends readonly PgTable[], Shape extends 'insert' | 
 
 /** How a document is laid out in its tables. */
 export interface DocumentMapping<T, TTables extends readonly PgTable[] = readonly PgTable[]> {
-  /** Its file in a backup archive and in the data directory of a version before the database, such as `users.json`. */
-  file: string;
+  /**
+   * Its name, such as `users.json`: the row a single document is kept in, and its path in a backup archive and in the
+   * data directory of a version before the database.
+   */
+  name: string;
   /** The document a new install starts with. */
   fallback: T;
   /** Its tables, each one a table before any that points at it. */
@@ -85,7 +88,7 @@ export interface DocumentMapping<T, TTables extends readonly PgTable[] = readonl
  * the import from an older data directory.
  */
 export interface LooseMapping {
-  file: string;
+  name: string;
   fallback: unknown;
   tables: readonly RowSet[];
   /**
@@ -115,7 +118,7 @@ export interface LooseMapping {
 export function loosen<T, TTables extends readonly PgTable[]>(mapping: DocumentMapping<T, TTables>): LooseMapping {
   const tables: readonly RowSet[] = mapping.tables;
   return {
-    file: mapping.file,
+    name: mapping.name,
     fallback: mapping.fallback,
     tables,
     // The one place the typed rows meet the loose ones the queries here pass around. A document handed in is one this
@@ -282,11 +285,11 @@ async function writeDifference(
 /**
  * Says why a write was dropped without being tried.
  *
- * @param file - The document.
+ * @param name - The document's name.
  * @returns The error.
  */
-function droppedWrite(file: string): Error {
-  return new Error(`An earlier change to ${file} failed to save, so this one, made on top of it, was dropped.`);
+function droppedWrite(name: string): Error {
+  return new Error(`An earlier change to ${name} failed to save, so this one, made on top of it, was dropped.`);
 }
 
 /** The database the documents are kept in, and the queue every write to it takes. */
@@ -365,7 +368,7 @@ export function documentFromRows<T, TTables extends readonly PgTable[]>(
       const madeIn = generation;
       const write = async (): Promise<void> => {
         if (madeIn !== generation) {
-          throw droppedWrite(mapping.file);
+          throw droppedWrite(mapping.name);
         }
         const nextRows = toRows(next);
         try {
@@ -396,7 +399,7 @@ export function documentFromRows<T, TTables extends readonly PgTable[]>(
  *
  * @param tx - The transaction the whole restore runs in.
  * @param mapping - How the document is laid out.
- * @param document - The document, as its file holds it.
+ * @param document - The document, as its archive file holds it.
  */
 export async function replaceDocument(tx: Transaction, mapping: LooseMapping, document: unknown): Promise<void> {
   const rows = mapping.toRows(document);

@@ -1,11 +1,11 @@
 // A backup: every store's data as the files the data directory held before the database, gzipped as one JSON
 // document, and checking one before it is taken back. `server/db/data-set.ts` writes the files out and puts them back.
-import { type Dirent, readdirSync, readFileSync } from 'node:fs';
-import path from 'node:path';
 import { gunzipSync, gzipSync } from 'node:zlib';
 import { z } from 'zod';
 import { BACKUP_DEFAULTS, type BackupSettings } from '../core/defaults.ts';
 import { isSealed, type SecretBox, SecretKeyError } from '../core/secret-box.ts';
+import type { DataSet } from '../db/data-set.ts';
+import { DOCUMENT_NAMES } from '../db/documents.ts';
 
 /** What the `format` member of every archive says. */
 export const BACKUP_FORMAT = 'heautou-backup';
@@ -31,6 +31,20 @@ export interface BackupLayout {
   /** Files an archive must hold, without which the restored server could not start. */
   required: readonly string[];
 }
+
+/**
+ * What a backup leaves out or needs. Every other store's document is taken, so a new store is backed up without being
+ * listed here.
+ */
+export const BACKUP_LAYOUT: BackupLayout = Object.freeze({
+  /** The web app's sessions: a restore signs everyone out rather than bringing back sessions from the backup. */
+  skipped: Object.freeze([DOCUMENT_NAMES.webSessions, DOCUMENT_NAMES.proxySessions]),
+  required: Object.freeze([DOCUMENT_NAMES.keys]),
+});
+
+/** Where a restore was asked for, as its audit entry says. */
+export const RestoreVia = { Web: 'web', Cli: 'cli' } as const;
+export type RestoreVia = (typeof RestoreVia)[keyof typeof RestoreVia];
 
 /** What to take. */
 export interface BackupOptions {
@@ -82,7 +96,7 @@ export class BackupError extends Error {
 
 /** The data files are JSON documents, and the audit log is JSON lines. Anything else in the directory is not data. */
 const JSON_EXTENSION = '.json';
-const JSON_LINES_EXTENSION = '.jsonl';
+export const JSON_LINES_EXTENSION = '.jsonl';
 /** One part of a path: letters, digits, dots, dashes and underscores, but not `.` or `..` alone. */
 const PATH_PART = /^(?!\.{1,2}$)[\w.-]+$/;
 
@@ -100,40 +114,8 @@ const archiveSchema = z.object({
  * @param relative - A path under the data directory, with `/` between parts.
  * @returns True for a `.json` or `.jsonl` file.
  */
-function isDataFile(relative: string): boolean {
+export function isDataFile(relative: string): boolean {
   return relative.endsWith(JSON_EXTENSION) || relative.endsWith(JSON_LINES_EXTENSION);
-}
-
-/**
- * Says whether a path is under a directory, or is it.
- *
- * @param relative - A path with `/` between parts.
- * @param dir - The directory, the same way.
- * @returns Whether it is.
- */
-function isUnder(relative: string, dir: string): boolean {
-  return relative === dir || relative.startsWith(`${dir}/`);
-}
-
-/**
- * Lists the data files under the data directory: every `.json` and `.jsonl` file at any depth, so a store added
- * later is backed up without being named here. Temporary files a write left behind are not data.
- *
- * @param dataDir - The data directory.
- * @returns Their paths under it, with `/` between parts, sorted.
- */
-export function listDataFiles(dataDir: string): string[] {
-  let entries: Dirent[];
-  try {
-    entries = readdirSync(dataDir, { recursive: true, withFileTypes: true });
-  } catch {
-    return [];
-  }
-  return entries
-    .filter((entry) => entry.isFile())
-    .map((entry) => path.relative(dataDir, path.join(entry.parentPath, entry.name)).split(path.sep).join('/'))
-    .filter(isDataFile)
-    .sort();
 }
 
 /**
@@ -142,7 +124,7 @@ export function listDataFiles(dataDir: string): string[] {
  * @param text - The file's text.
  * @returns For each non-empty line, its value, or undefined where it does not parse.
  */
-function linesOf(text: string): unknown[] {
+export function linesOf(text: string): unknown[] {
   return text
     .split('\n')
     .filter((line) => line.trim() !== '')
@@ -163,7 +145,7 @@ function linesOf(text: string): unknown[] {
  * @returns Its document, or its lines for JSON lines.
  * @throws BackupError when it, or one of its lines, is not JSON.
  */
-function parseDataFile(relative: string, text: string): unknown[] {
+export function parseDataFile(relative: string, text: string): unknown[] {
   if (relative.endsWith(JSON_LINES_EXTENSION)) {
     const values = linesOf(text);
     if (values.includes(undefined)) {
@@ -200,44 +182,6 @@ function sealedValuesIn(value: unknown, found: string[] = []): string[] {
     }
   }
   return found;
-}
-
-/**
- * Reads one data file of an older data directory. A JSON lines file loses lines a crash cut short, which the audit
- * log skipped when it read them anyway.
- *
- * @param dataDir - The data directory.
- * @param relative - The file's path under it.
- * @returns Its text.
- * @throws BackupError when a JSON file does not parse.
- */
-function readDataFile(dataDir: string, relative: string): string {
-  const text = readFileSync(path.join(dataDir, ...relative.split('/')), 'utf8');
-  if (relative.endsWith(JSON_LINES_EXTENSION)) {
-    const kept = text.split('\n').filter((line) => line.trim() !== '' && linesOf(line)[0] !== undefined);
-    return kept.length === 0 ? '' : `${kept.join('\n')}\n`;
-  }
-  parseDataFile(relative, text);
-  return text;
-}
-
-/**
- * Reads the data files a version before the database kept in its data directory.
- *
- * @param dataDir - The data directory.
- * @param exceptUnder - Directories under it to leave alone, such as PGlite's.
- * @returns Each file's text, by its path under the directory.
- * @throws BackupError when a JSON file does not parse.
- */
-export function readDataDirectory(dataDir: string, exceptUnder: readonly string[]): Record<string, string> {
-  const files: Record<string, string> = {};
-  for (const relative of listDataFiles(dataDir)) {
-    const isLeftAlone = exceptUnder.some((dir) => isUnder(relative, dir));
-    if (isLeftAlone === false) {
-      files[relative] = readDataFile(dataDir, relative);
-    }
-  }
-  return files;
 }
 
 /**
@@ -402,4 +346,59 @@ export function filesToRestore(
     includesSessions: backup.includesSessions,
   };
   return { files, summary };
+}
+
+/**
+ * Makes an archive of the data as the tables hold it.
+ *
+ * @param dataSet - Everything kept, as files.
+ * @param options - Whether to take the provider's sessions and tokens.
+ * @param [now] - The clock, in epoch milliseconds.
+ * @returns The gzipped archive.
+ * @throws BackupError when a file every server has is missing.
+ */
+export async function exportArchive(
+  dataSet: DataSet,
+  options: BackupOptions,
+  now: () => number = Date.now,
+): Promise<Buffer> {
+  const files = await dataSet.exportFiles({ ...options, skipped: BACKUP_LAYOUT.skipped });
+  return createBackup(files, BACKUP_LAYOUT, options, now);
+}
+
+/**
+ * Checks an archive and puts its data in the tables in one transaction, emptying the skipped documents. Nothing is
+ * written when the archive is refused. A running server still has to read its stores again.
+ *
+ * @param dataSet - Everything kept, as files.
+ * @param archive - The gzipped archive.
+ * @param box - The keys the data is sealed with, or null when no `SECRET_KEY` is set.
+ * @returns What was put back.
+ * @throws BackupError when the archive is refused.
+ */
+export async function restoreArchive(
+  dataSet: DataSet,
+  archive: Buffer,
+  box: SecretBox | null,
+): Promise<RestoreSummary> {
+  const checked = readBackup(archive, BACKUP_LAYOUT, box);
+  const { files, summary } = filesToRestore(BACKUP_LAYOUT, checked);
+  await dataSet.replaceAll(files);
+  return summary;
+}
+
+/**
+ * Says what a restore put back, for its `DataRestored` entry.
+ *
+ * @param summary - What the restore put back.
+ * @param via - Where it was asked for.
+ * @returns The entry's detail.
+ */
+export function restoredDetail(summary: RestoreSummary, via: RestoreVia): Record<string, string> {
+  return {
+    madeAt: summary.createdAt,
+    files: String(summary.files),
+    sessions: summary.includesSessions ? 'included' : 'left out',
+    via,
+  };
 }

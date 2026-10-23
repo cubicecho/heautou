@@ -1,6 +1,6 @@
 import { KEY_DEFAULTS } from '../../server/core/defaults.ts';
 import { HttpStatus } from '../../server/core/wire.ts';
-import { AuditType } from '../../server/store/audit.ts';
+import { AuditType, actorOf } from '../../server/store/audit.ts';
 import { ClientAuthMethod } from '../../server/store/clients.ts';
 import { startTestApp, type TestApp } from '../helpers.ts';
 import {
@@ -257,19 +257,31 @@ describe('the audit log', () => {
   });
 
   it('filters by type and by user, a page at a time', async () => {
-    const ada = app.services.users.list().find((user) => user.username === 'ada');
-    const failed = await adminGql(admin, AUDIT_LOG, { where: { type: { eq: 'SIGN_IN_FAILED' } } });
+    const grace = await app.services.users.create({
+      username: 'grace',
+      password: PASSWORD,
+      email: '',
+      name: '',
+      groups: [],
+    });
+    const actor = actorOf(grace);
+    app.services.audit.record({ type: AuditType.SignInFailed, actor, ip: null });
+    app.services.audit.record({ type: AuditType.SignInFailed, actor, ip: null });
+    app.services.audit.record({ type: AuditType.SignInSucceeded, actor, ip: null });
+    await app.services.audit.settled();
+    const byGrace = {
+      OR: [{ actorUserId: { eq: grace.id } }, { targetKind: { eq: 'USER' }, targetId: { eq: grace.id } }],
+    };
+    const failed = await adminGql(admin, AUDIT_LOG, { where: { ...byGrace, type: { eq: 'SIGN_IN_FAILED' } } });
     expect(failed.data.auditEntries.map((entry: { type: string }) => entry.type)).toEqual([
       'SIGN_IN_FAILED',
       'SIGN_IN_FAILED',
-      'SIGN_IN_FAILED',
     ]);
-    const byAda = { OR: [{ actorUserId: { eq: ada?.id } }, { targetKind: { eq: 'USER' }, targetId: { eq: ada?.id } }] };
-    const first = await adminGql(admin, AUDIT_LOG, { where: byAda, limit: 1 });
+    const first = await adminGql(admin, AUDIT_LOG, { where: byGrace, limit: 1 });
     expect(first.data.auditEntries).toHaveLength(1);
     const [firstEntry] = first.data.auditEntries;
     expect(firstEntry.cursor).toEqual(expect.any(String));
-    const next = await adminGql(admin, AUDIT_LOG, { where: byAda, limit: 1, after: firstEntry.cursor });
+    const next = await adminGql(admin, AUDIT_LOG, { where: byGrace, limit: 1, after: firstEntry.cursor });
     expect(next.data.auditEntries).toHaveLength(1);
     expect(next.data.auditEntries[0]).not.toEqual(firstEntry);
   });

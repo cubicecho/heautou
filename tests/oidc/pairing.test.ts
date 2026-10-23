@@ -197,6 +197,12 @@ describe('pairing an app with a setup URL', () => {
       AuditType.RegistrationUpdated,
       AuditType.PairingCompleted,
     ]);
+    // Named as the client store names it, as every other entry is: an update by the name it was given.
+    expect(recorded.map((entry) => entry.target?.name)).toEqual([
+      'Telos (home)',
+      'Telos (home)',
+      APP_METADATA.client_name,
+    ]);
     expect(JSON.stringify(recorded)).not.toContain(registered.registration_access_token);
   });
 

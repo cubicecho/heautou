@@ -41,6 +41,123 @@ export function userTarget(user: { id: string; username: string }): AuditTarget 
   return { kind: AuditTargetKind.User, id: user.id, name: user.username };
 }
 
+/** Who made an admin change and where it is recorded: a GraphQL resolver's context. */
+export interface AdminChangeContext {
+  audit: AuditLog;
+  /** The signed-in admin. */
+  viewer: { id: string; username: string };
+  /** Their address. */
+  ip: string | null;
+}
+
+/**
+ * Records what the signed-in admin did. Only changes that worked get here.
+ *
+ * @param ctx - Who did it, and the log.
+ * @param type - What they did.
+ * @param target - What they did it to.
+ * @param [detail] - What else to keep. Never a password, token, secret or setup URL.
+ */
+export function recordAdminChange(
+  ctx: AdminChangeContext,
+  type: AuditType,
+  target: AuditTarget,
+  detail?: AuditEvent['detail'],
+): void {
+  ctx.audit.record({ type, actor: actorOf(ctx.viewer), ip: ctx.ip, target, detail });
+}
+
+/** How much of a pairing's id names it as a target. */
+const PAIRING_NAME_LENGTH = 8;
+
+/** The target of settings changes. */
+export const SETTINGS_TARGET: AuditTarget = Object.freeze({
+  kind: AuditTargetKind.Settings,
+  id: 'settings',
+  name: 'Settings',
+});
+
+/** The target of email settings changes. */
+export const MAIL_TARGET: AuditTarget = Object.freeze({ kind: AuditTargetKind.Settings, id: 'mail', name: 'Email' });
+
+/** The target of forward auth's cookie domain changes. */
+export const PROXY_COOKIE_DOMAIN_TARGET: AuditTarget = Object.freeze({
+  kind: AuditTargetKind.Settings,
+  id: 'proxy-cookie-domain',
+  name: 'Proxy cookie domain',
+});
+
+/** The target of branding changes. */
+export const BRANDING_TARGET: AuditTarget = Object.freeze({
+  kind: AuditTargetKind.Branding,
+  id: 'branding',
+  name: 'Branding',
+});
+
+/**
+ * Names a client as an entry's target.
+ *
+ * @param client - The client, and the name to show it by.
+ * @returns The target.
+ */
+export function clientTarget(client: { clientId: string; name: string }): AuditTarget {
+  return { kind: AuditTargetKind.Client, id: client.clientId, name: client.name };
+}
+
+/**
+ * Names an API as an entry's target.
+ *
+ * @param api - The API.
+ * @returns The target.
+ */
+export function apiTarget(api: { identifier: string; name: string }): AuditTarget {
+  return { kind: AuditTargetKind.Api, id: api.identifier, name: api.name };
+}
+
+/**
+ * Names a group as an entry's target. A group's name is its id.
+ *
+ * @param name - The group.
+ * @returns The target.
+ */
+export function groupTarget(name: string): AuditTarget {
+  return { kind: AuditTargetKind.Group, id: name, name };
+}
+
+/**
+ * Names a pairing as an entry's target, by the start of its id.
+ *
+ * @param pairing - The pairing.
+ * @returns The target.
+ */
+export function pairingTarget(pairing: { id: string }): AuditTarget {
+  return {
+    kind: AuditTargetKind.Pairing,
+    id: pairing.id,
+    name: `Setup URL ${pairing.id.slice(0, PAIRING_NAME_LENGTH)}`,
+  };
+}
+
+/**
+ * Names a protected site as an entry's target.
+ *
+ * @param site - The site.
+ * @returns The target.
+ */
+export function siteTarget(site: { id: string; name: string }): AuditTarget {
+  return { kind: AuditTargetKind.ProtectedSite, id: site.id, name: site.name };
+}
+
+/**
+ * Names an upstream provider as an entry's target.
+ *
+ * @param provider - The provider.
+ * @returns The target.
+ */
+export function upstreamTarget(provider: { id: string; name: string }): AuditTarget {
+  return { kind: AuditTargetKind.Upstream, id: provider.id, name: provider.name };
+}
+
 /** What it was done to. The name is as it was then, so an entry still reads after a rename or delete. */
 export interface AuditTarget {
   kind: AuditTargetKind;

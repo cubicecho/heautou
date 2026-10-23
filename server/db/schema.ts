@@ -253,7 +253,7 @@ export const passwordLinks = pgTable('password_links', {
 });
 
 /** A web app session, by the sha256 of its cookie's token. */
-export const adminSessions = pgTable('admin_sessions', {
+export const webSessions = pgTable('admin_sessions', {
   tokenHash: text('token_hash').primaryKey(),
   userId: text('user_id').notNull(),
   expiresAt: instant('expires_at').notNull(),
@@ -287,7 +287,7 @@ export const protectedSites = pgTable(
 
 /** The settings that are one document each: branding, the keys, mail, the operator's settings, the proxy cookie. */
 export const documents = pgTable('documents', {
-  /** The document's file name in a backup, such as `branding.json`. */
+  /** The document's name, also its path in a backup, such as `branding.json`. */
   name: text('name').primaryKey(),
   /** The document as the store keeps it, secrets sealed. */
   body: jsonb('body').$type<unknown>().notNull(),

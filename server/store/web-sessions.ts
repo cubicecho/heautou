@@ -3,21 +3,21 @@ import { ADMIN_DEFAULTS } from '../core/defaults.ts';
 import { MS_PER_SECOND } from '../core/wire.ts';
 import type { DataDocument } from '../db/document.ts';
 
-/** One signed-in admin browser. */
-interface AdminSession {
+/** One browser signed in to the web app. */
+interface WebSession {
   userId: string;
   /** In epoch milliseconds. */
   expiresAt: number;
 }
 
-/** Sessions by the SHA-256 of their token, so the file alone cannot be replayed as a cookie. */
-export type AdminSessionDocument = Record<string, AdminSession>;
+/** Sessions by the SHA-256 of their token, so the tables alone cannot be replayed as a cookie. */
+export type WebSessionDocument = Record<string, WebSession>;
 
 /**
- * The web app's sessions: the admin UI's, and the account page's for users who are not admins. The cookie and the
- * file keep the admin name they had before there was an account page.
+ * Web sessions: browsers signed in to heautou's web app, which is the admin UI for an admin and the account page for
+ * anyone. The cookie, the table and the document keep the admin name they had before there was an account page.
  */
-export interface AdminSessionStore {
+export interface WebSessionStore {
   /**
    * Starts a session.
    *
@@ -57,39 +57,39 @@ function digest(token: string): string {
 }
 
 /**
- * Opens the admin session store on its file.
+ * Opens the web session store on its document.
  *
- * @param file - The file holding the sessions.
+ * @param document - The document holding the sessions.
  * @param [now] - The clock, in epoch milliseconds.
  * @returns The store. Expired sessions are dropped whenever it writes.
  */
-export function createAdminSessionStore(
-  file: DataDocument<AdminSessionDocument>,
+export function createWebSessionStore(
+  document: DataDocument<WebSessionDocument>,
   now: () => number = Date.now,
-): AdminSessionStore {
-  const live = (sessions: AdminSessionDocument): AdminSessionDocument =>
+): WebSessionStore {
+  const live = (sessions: WebSessionDocument): WebSessionDocument =>
     Object.fromEntries(Object.entries(sessions).filter(([, session]) => session.expiresAt > now()));
 
   return {
     create: async (userId) => {
       const token = randomBytes(ADMIN_DEFAULTS.tokenBytes).toString('base64url');
       const expiresAt = now() + ADMIN_DEFAULTS.sessionSeconds * MS_PER_SECOND;
-      await file.update((sessions) => ({ ...live(sessions), [digest(token)]: { userId, expiresAt } }));
+      await document.update((sessions) => ({ ...live(sessions), [digest(token)]: { userId, expiresAt } }));
       return token;
     },
     find: (token) => {
-      const session = file.read()[digest(token)];
+      const session = document.read()[digest(token)];
       const isLive = session !== undefined && session.expiresAt > now();
       return isLive ? session.userId : null;
     },
     remove: async (token) => {
       const key = digest(token);
-      await file.update((sessions) =>
+      await document.update((sessions) =>
         Object.fromEntries(Object.entries(live(sessions)).filter(([other]) => other !== key)),
       );
     },
     removeUser: async (userId) => {
-      await file.update((sessions) =>
+      await document.update((sessions) =>
         Object.fromEntries(Object.entries(live(sessions)).filter(([, session]) => session.userId !== userId)),
       );
     },

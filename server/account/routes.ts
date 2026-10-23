@@ -1,5 +1,6 @@
 import express, { type Response, Router } from 'express';
 import { z } from 'zod';
+import { ADMIN_PATH, adminUrls, brandingView, sessionClientName, WEB_APP_PAGE } from '../admin/admin-client.ts';
 import { ADMIN_DEFAULTS, AUDIT_DEFAULTS, BRANDING_DEFAULTS, HTTP_DEFAULTS } from '../core/defaults.ts';
 import { errorMessage } from '../core/errors.ts';
 import type { PasswordPolicy } from '../core/password-policy.ts';
@@ -7,21 +8,20 @@ import { HttpStatus } from '../core/wire.ts';
 import { sameOriginJson, sendRefusal } from '../http/guards.ts';
 import { type LoginThrottle, sendTooMany } from '../http/rate-limit.ts';
 import type { SessionTools } from '../oidc/sessions.ts';
-import type { AdminSessionStore } from '../store/admin-sessions.ts';
 import { type AuditLog, type AuditTarget, AuditType, actorOf, SIGN_IN_TYPES } from '../store/audit.ts';
 import type { BrandingStore } from '../store/branding.ts';
 import type { ClientStore } from '../store/clients.ts';
 import type { PasswordLinkStore } from '../store/password-links.ts';
 import type { SettingsStore } from '../store/settings.ts';
 import { isAdmin, type UserStore } from '../store/users.ts';
-import { ADMIN_PATH, adminUrls, brandingView, sessionClientName, WEB_APP_PAGE } from './admin-client.ts';
-import { COOKIE, sessionCookieOptions, signedInUser } from './routes.ts';
+import type { WebSessionStore } from '../store/web-sessions.ts';
+import { COOKIE, requireSignedIn, sessionCookieOptions, signedInUser, viewerOf } from './session.ts';
 
 /** What the account, password link and branding routes use. */
 export interface AccountDeps {
   users: UserStore;
   clients: ClientStore;
-  adminSessions: AdminSessionStore;
+  webSessions: WebSessionStore;
   passwordLinks: PasswordLinkStore;
   sessions: SessionTools;
   branding: BrandingStore;
@@ -66,7 +66,7 @@ function sendDeadLink(res: Response): void {
  * `/admin/password-rules` are public: the sign-in and set-password pages show them.
  */
 export function createAccountRouter(deps: AccountDeps): Router {
-  const { users, clients, adminSessions, passwordLinks, sessions, branding, issuer, throttle, audit } = deps;
+  const { users, clients, webSessions, passwordLinks, sessions, branding, issuer, throttle, audit } = deps;
   const { settings, passwordPolicy } = deps;
   const urls = adminUrls(issuer);
   const json = [sameOriginJson(urls.origin), express.json({ limit: HTTP_DEFAULTS.bodyLimit })];
@@ -79,14 +79,11 @@ export function createAccountRouter(deps: AccountDeps): Router {
    */
   const targetName = (target: AuditTarget): string =>
     target.id === ADMIN_DEFAULTS.clientId || clients.find(target.id) !== null ? clientName(target.id) : target.name;
+  const signedIn = requireSignedIn(deps);
   const router = Router();
 
-  router.get(ADMIN_PATH.account, (req, res) => {
-    const user = signedInUser(deps, req);
-    if (user === null) {
-      sendRefusal(res, HttpStatus.Unauthorized, 'Sign in first.');
-      return;
-    }
+  router.get(ADMIN_PATH.account, signedIn, (_req, res) => {
+    const user = viewerOf(res);
     const { id, username, name, email, groups } = user;
     res.json({
       id,
@@ -102,12 +99,8 @@ export function createAccountRouter(deps: AccountDeps): Router {
     });
   });
 
-  router.get(ADMIN_PATH.accountActivity, async (req, res) => {
-    const user = signedInUser(deps, req);
-    if (user === null) {
-      sendRefusal(res, HttpStatus.Unauthorized, 'Sign in first.');
-      return;
-    }
+  router.get(ADMIN_PATH.accountActivity, signedIn, async (_req, res) => {
+    const user = viewerOf(res);
     const { entries } = await audit.list({
       first: AUDIT_DEFAULTS.accountEntries,
       types: SIGN_IN_TYPES,
@@ -124,12 +117,8 @@ export function createAccountRouter(deps: AccountDeps): Router {
     });
   });
 
-  router.post(ADMIN_PATH.accountPassword, ...json, async (req, res) => {
-    const user = signedInUser(deps, req);
-    if (user === null) {
-      sendRefusal(res, HttpStatus.Unauthorized, 'Sign in first.');
-      return;
-    }
+  router.post(ADMIN_PATH.accountPassword, ...json, signedIn, async (req, res) => {
+    const user = viewerOf(res);
     const parsed = changePasswordSchema.safeParse(req.body);
     if (parsed.success === false) {
       sendRefusal(res, HttpStatus.BadRequest, 'Send the current password and the new one.');
@@ -163,7 +152,7 @@ export function createAccountRouter(deps: AccountDeps): Router {
   router.post(ADMIN_PATH.accountSignOut, ...json, async (req, res) => {
     const user = signedInUser(deps, req);
     if (user !== null) {
-      await adminSessions.removeUser(user.id);
+      await webSessions.removeUser(user.id);
       await sessions.revokeAccount(user.id, req.ip ?? null);
       audit.record({ type: AuditType.AccountSignedOutEverywhere, actor: actorOf(user), ip: req.ip ?? null });
     }

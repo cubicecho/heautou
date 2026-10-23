@@ -2,10 +2,11 @@ import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import express, { type Express, type Request, type Response } from 'express';
 import { createYoga } from 'graphql-yoga';
-import { createAccountRouter } from '../admin/account.ts';
+import { createFactorRouter } from '../account/factors.ts';
+import { createAccountRouter } from '../account/routes.ts';
+import { viewerOf } from '../account/session.ts';
 import { adminUrls } from '../admin/admin-client.ts';
 import { createBackupRouter } from '../admin/backup.ts';
-import { createFactorRouter } from '../admin/factors.ts';
 import { createPictureRouter } from '../admin/pictures.ts';
 import { createAdminRouter, requireAdmin } from '../admin/routes.ts';
 import { isProduction, OIDC_MOUNT_PATH, trustProxy } from '../core/config.ts';
@@ -20,7 +21,6 @@ import { graphqlLogger } from '../graphql/logger.ts';
 import { useOperationLimits } from '../graphql/operation-limits.ts';
 import { createForgotPasswordRouter } from '../mail/forgot-password.ts';
 import { createInteractionRouter } from '../oidc/interactions.ts';
-import type { PublicUser } from '../store/users.ts';
 import { createUpstreamRouter } from '../upstream/routes.ts';
 import { sameOriginJson } from './guards.ts';
 import { securityHeaders, webAppHeaders } from './headers.ts';
@@ -31,7 +31,7 @@ const GRAPHQL_ENDPOINT = '/graphql';
 const HEALTH_ENDPOINT = '/healthz';
 /** Every path but the server's own, so the web app's routes load index.html. */
 const WEB_ROUTES = /^(?!\/(graphql|healthz)$|\/(oidc|interaction|admin|upstream|auth)(\/|$)).*/;
-/** The routes that start sign-ins or write files, limited per address. */
+/** The routes that start sign-ins or write data, limited per address. */
 const LIMITED_ROUTES = [
   `${OIDC_MOUNT_PATH}/auth`,
   `${OIDC_MOUNT_PATH}/reg`,
@@ -79,7 +79,7 @@ export function createApp(services: Services): Express {
       keys: services.keys,
       branding: services.branding,
       passwordLinks: services.passwordLinks,
-      adminSessions: services.adminSessions,
+      webSessions: services.webSessions,
       pairings: services.pairings,
       pairingOffers: services.pairingOffers,
       settings: services.settings,
@@ -89,7 +89,7 @@ export function createApp(services: Services): Express {
       pictures: services.pictures,
       protectedSites: services.protectedSites,
       forwardAuth: services.forwardAuth,
-      viewer: res.locals.viewer as PublicUser,
+      viewer: viewerOf(res),
       ip: req.ip ?? null,
     }),
   });

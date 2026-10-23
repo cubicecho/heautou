@@ -96,7 +96,7 @@ export function sendTooMany(res: Response, seconds: number): void {
 }
 
 /**
- * Limits how many requests one address makes, for the routes that start sign-ins or write files.
+ * Limits how many requests one address makes, for the routes that start sign-ins or write data.
  *
  * @param [limiter] - The limiter. One allowing `RATE_LIMIT_DEFAULTS.requestsPerIp` a window by default.
  * @returns The middleware.

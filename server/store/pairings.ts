@@ -142,18 +142,21 @@ function toPairing(id: string, record: PairingRecord): Pairing {
 }
 
 /**
- * Opens the pairing store on its file.
+ * Opens the pairing store on its document.
  *
- * @param file - The file holding the pairings.
+ * @param document - The document holding the pairings.
  * @param [now] - The clock, in epoch milliseconds.
  * @returns The store. Expired pairings are dropped whenever it writes.
  */
-export function createPairingStore(file: DataDocument<PairingDocument>, now: () => number = Date.now): PairingStore {
+export function createPairingStore(
+  document: DataDocument<PairingDocument>,
+  now: () => number = Date.now,
+): PairingStore {
   const live = (): [string, PairingRecord][] =>
-    Object.entries(file.read()).filter(([, record]) => record.expiresAt > now());
+    Object.entries(document.read()).filter(([, record]) => record.expiresAt > now());
 
   const write = async (change: (entries: [string, PairingRecord][]) => [string, PairingRecord][]): Promise<void> => {
-    await file.update(() => Object.fromEntries(change(live())));
+    await document.update(() => Object.fromEntries(change(live())));
   };
 
   const change = async (id: string, edit: (record: PairingRecord) => PairingRecord): Promise<void> => {
