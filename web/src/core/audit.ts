@@ -1,3 +1,4 @@
+import { AUDIT_DEFAULTS } from '@server/core/defaults.ts';
 import { type InfiniteData, useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import {
@@ -20,9 +21,6 @@ export interface AuditFilters {
 
 /** The first page of the audit log has no cursor. */
 const FIRST_PAGE: string | null = null;
-
-/** How many audit log entries a page shows. */
-const AUDIT_PAGE_SIZE = 50;
 
 /** One page of the audit log, and the cursor the next one starts after, or null on the last. */
 interface AuditPage {
@@ -58,12 +56,12 @@ export function auditWhere({ type, userId }: AuditFilters): AuditEntryFilters | 
  */
 async function auditPage(filters: AuditFilters, after: string | null): Promise<AuditPage> {
   const { auditEntries } = await request(AuditEntriesDocument, {
-    limit: AUDIT_PAGE_SIZE + 1,
+    limit: AUDIT_DEFAULTS.pageSize + 1,
     after,
     where: auditWhere(filters),
   });
-  const entries = auditEntries.slice(0, AUDIT_PAGE_SIZE);
-  const hasMore = auditEntries.length > AUDIT_PAGE_SIZE;
+  const entries = auditEntries.slice(0, AUDIT_DEFAULTS.pageSize);
+  const hasMore = auditEntries.length > AUDIT_DEFAULTS.pageSize;
   return { entries, nextCursor: hasMore ? (entries.at(-1)?.cursor ?? null) : null };
 }
 

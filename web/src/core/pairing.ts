@@ -1,3 +1,4 @@
+import { MS_PER_SECOND } from '@server/core/wire.ts';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import {
@@ -10,6 +11,7 @@ import {
   type PairingInput,
   StartPairingDocument,
 } from '@/__generated__/graphql';
+import { PAIR_DIALOG_DEFAULTS } from '@/core/defaults';
 import { request, subscribe } from '@/core/gql';
 import { QUERY_KEYS, refetching } from '@/core/query-keys';
 
@@ -24,15 +26,9 @@ export function useStartPairing() {
   });
 }
 
-/** How often the pair dialog asks again for a paired app's API, in milliseconds. */
-const OFFER_POLL_MS = 3000;
-
-/** How many times it asks before it stops. */
-const OFFER_POLLS = 10;
-
 /**
  * Says whether a paired app may still describe more to set up, so its pairing is asked for again: it is paired and
- * not finished, it has offered no API yet, and it has not been asked `OFFER_POLLS` times.
+ * not finished, it has offered no API yet, and it has not been asked `PAIR_DIALOG_DEFAULTS.offerPolls` times.
  *
  * @param pairing - The pairing as last read, if any.
  * @param updates - How many times it has been read.
@@ -43,7 +39,7 @@ function isLookingForOffers(pairing: PairingFieldsFragment | null | undefined, u
     pairing?.status === 'PAIRED' &&
     pairing.finished === false &&
     (pairing.offers?.api ?? null) === null &&
-    updates <= OFFER_POLLS
+    updates <= PAIR_DIALOG_DEFAULTS.offerPolls
   );
 }
 
@@ -89,7 +85,9 @@ export function usePairing(id: string) {
     // An app is often still finishing its pairing when it first shows as paired, and describes its API only after,
     // so ask again for a while until it does.
     refetchInterval: (current) =>
-      isLookingForOffers(current.state.data, current.state.dataUpdateCount) ? OFFER_POLL_MS : false,
+      isLookingForOffers(current.state.data, current.state.dataUpdateCount)
+        ? PAIR_DIALOG_DEFAULTS.offerPollSeconds * MS_PER_SECOND
+        : false,
     // Render again on every answer, even one that changed nothing, so the count of answers read below is current.
     notifyOnChangeProps: 'all',
   });

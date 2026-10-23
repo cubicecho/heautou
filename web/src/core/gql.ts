@@ -1,6 +1,7 @@
 import type { TypedDocumentNode } from '@graphql-typed-document-node/core';
-import { HttpStatus } from '@server/core/wire.ts';
+import { HttpStatus, MS_PER_SECOND } from '@server/core/wire.ts';
 import { print } from 'graphql';
+import { SUBSCRIPTION_DEFAULTS } from '@/core/defaults';
 import { ACCOUNT_PAGE, signInPath } from '@/core/paths';
 
 /** The browser talks to its own origin; Vite proxies `/graphql` to the server in dev. */
@@ -83,8 +84,6 @@ export async function request<TResult, TVariables>(
   return body.data;
 }
 
-/** How long a dropped subscription waits before it opens again. */
-const RESUBSCRIBE_MS = 3000;
 /** What separates server-sent events. */
 const EVENT_END = '\n\n';
 
@@ -122,7 +121,7 @@ function parseEvent(block: string): { event: string; data: string } {
 
 /**
  * Opens a GraphQL subscription over server-sent events, the way Yoga serves them, and keeps it open: a stream that
- * drops is opened again after `RESUBSCRIBE_MS`.
+ * drops is opened again after `SUBSCRIPTION_DEFAULTS.resubscribeSeconds`.
  *
  * @param document - The typed subscription.
  * @param variables - Its variables.
@@ -193,7 +192,7 @@ export function subscribe<TResult, TVariables>(
         }
         return;
       }
-      await new Promise((resolve) => setTimeout(resolve, RESUBSCRIBE_MS));
+      await new Promise((resolve) => setTimeout(resolve, SUBSCRIPTION_DEFAULTS.resubscribeSeconds * MS_PER_SECOND));
     }
   })();
   return () => abort.abort();
