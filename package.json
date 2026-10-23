@@ -2,7 +2,7 @@
   "name": "heautou",
   "private": true,
   "license": "MIT",
-  "version": "1.20.0",
+  "version": "1.20.1",
   "description": "A minimal OpenID Connect provider for self-hosted environments, with a small web UI for clients and users.",
   "type": "module",
   "engines": {

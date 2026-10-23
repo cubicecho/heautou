@@ -1,3 +1,12 @@
+## [1.20.1](https://github.com/cubicecho/heautou/compare/v1.20.0...v1.20.1) (2026-10-23)
+
+
+### Bug Fixes
+
+* **db:** hold PGlite's directory lock across containers ([719f564](https://github.com/cubicecho/heautou/commit/719f56495a4c09d2557c63afd3ea6b0105a4007a))
+* **db:** name a Postgres database's port once in the logs ([b46b1ac](https://github.com/cubicecho/heautou/commit/b46b1acead7d8fbfc356d74543a2899fc350f39d))
+* **db:** refuse to open a database another heautou holds on Postgres ([6178eda](https://github.com/cubicecho/heautou/commit/6178eda194a635d23879f52ccc7a0f27c3a31186))
+
 # [1.20.0](https://github.com/cubicecho/heautou/compare/v1.19.0...v1.20.0) (2026-10-23)
 
 
