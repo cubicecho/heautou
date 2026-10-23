@@ -656,7 +656,7 @@ interface AuditPage {
 }
 
 /** The audit log's pages as the query cache holds them. */
-type AuditPages = InfiniteData<AuditPage, string | null>;
+export type AuditPages = InfiniteData<AuditPage, string | null>;
 
 /**
  * Turns the activity page's filters into the audit log's: one type, and entries done by the user or to them.
@@ -664,7 +664,7 @@ type AuditPages = InfiniteData<AuditPage, string | null>;
  * @param filters - The type and user to keep.
  * @returns The filters, or null for every entry.
  */
-function auditWhere({ type, userId }: AuditFilters): AuditEntryFilters | null {
+export function auditWhere({ type, userId }: AuditFilters): AuditEntryFilters | null {
   const byType: AuditEntryFilters = type === null ? {} : { type: { eq: type } };
   const byUser: AuditEntryFilters =
     userId === null
@@ -714,7 +714,7 @@ export function useAuditLog(filters: AuditFilters) {
  * @param entry - The entry the server just recorded.
  * @returns The pages with it.
  */
-function withNewEntry(data: AuditPages | undefined, entry: AuditEntryFieldsFragment): AuditPages | undefined {
+export function withNewEntry(data: AuditPages | undefined, entry: AuditEntryFieldsFragment): AuditPages | undefined {
   const [first, ...rest] = data?.pages ?? [];
   if (
     data === undefined ||

@@ -50,7 +50,7 @@ const passkeyOptionsSchema = z.object({
 type SecondFactorChoice = z.infer<typeof choiceSchema>;
 
 /** A refusal from an interaction route: what to show, and whether the sign-in has to start again. */
-class SignInRefusal extends Error {
+export class SignInRefusal extends Error {
   readonly restart: boolean;
 
   /**
@@ -73,7 +73,7 @@ class SignInRefusal extends Error {
  * @returns The reply.
  * @throws SignInRefusal with the server's message when it refuses.
  */
-async function post<T>(url: string, body: unknown, schema: z.ZodType<T>): Promise<T> {
+export async function post<T>(url: string, body: unknown, schema: z.ZodType<T>): Promise<T> {
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
