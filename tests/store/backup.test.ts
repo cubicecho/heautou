@@ -18,6 +18,7 @@ import {
   readDataDirectory,
 } from '../../server/store/backup.ts';
 import { ClientAuthMethod } from '../../server/store/clients.ts';
+import { UpstreamKind } from '../../server/store/upstreams.ts';
 import { createTestDatabase } from '../db.ts';
 import { tempDir } from '../helpers.ts';
 import { PASSWORD, REDIRECT_URI } from '../oidc/browser.ts';
@@ -224,6 +225,66 @@ describe('backups', () => {
     ]);
     // The restored data boots on its own.
     expect((await boot(target.database, key)).users.list().map((user) => user.username)).toEqual(['ada']);
+  });
+
+  it('brings back every store’s data, not only what the target held before', async () => {
+    const key = newKey();
+    /**
+     * Fills every store a restore reloads, each with values its server is told apart by.
+     *
+     * @param services - The server's services.
+     * @param userId - A user of that server.
+     * @param name - What sets this server's values apart.
+     * @returns The password link's token.
+     */
+    const fill = async (services: Services, userId: string, name: string): Promise<string> => {
+      await services.factors.setTotp(userId, `${name.toUpperCase()}SECRETBASE32`, 0);
+      await services.upstreams.create({
+        id: name,
+        name,
+        kind: UpstreamKind.Oidc,
+        issuer: `https://${name}.example/`,
+        clientId: `${name}-client`,
+        clientSecret: `${name}-secret`,
+      });
+      await services.protectedSites.create({ name, host: `${name}.home.lan` });
+      await services.branding.setName(name);
+      await services.settings.setPasswordRules({ minScore: name === 'source' ? 2 : 4 });
+      await services.pairings.start(`${name}-token`, { allowedGroups: [name] });
+      await services.mail.setOptions({ forgotPassword: name === 'source' });
+      const link = await services.passwordLinks.issue(userId);
+      await services.settled();
+      return link.token;
+    };
+    /**
+     * Reads what each filled store holds, as the running server sees it.
+     *
+     * @param services - The server's services.
+     * @param userId - The user the factors and the link are for.
+     * @param token - The password link's token.
+     * @returns The values, comparable between servers.
+     */
+    const read = (services: Services, userId: string, token: string) => ({
+      hasTotp: services.factors.summary(userId).hasTotp,
+      upstreams: services.upstreams.list().map((upstream) => upstream.id),
+      sites: services.protectedSites.list().map((site) => site.host),
+      brand: services.branding.read().name,
+      minScore: services.settings.passwordRules().minScore,
+      pairings: services.pairings.waitingFor('source-token')?.allowedGroups ?? null,
+      forgotPassword: services.mail.status().options.forgotPassword,
+      linkUser: services.passwordLinks.find(token),
+    });
+    const source = await populated(key);
+    const sourceToken = await fill(source.services, source.user.id, 'source');
+    const expected = read(source.services, source.user.id, sourceToken);
+    const archive = await source.services.backup.create({ includeSessions: false });
+
+    const target = await populated(key);
+    await fill(target.services, target.user.id, 'target');
+    await target.services.backup.restore(archive);
+
+    expect(read(target.services, source.user.id, sourceToken)).toEqual(expected);
+    expect(expected).toMatchObject({ hasTotp: true, upstreams: ['source'], brand: 'source', linkUser: source.user.id });
   });
 
   it('removes the provider sessions when the archive has none', async () => {
