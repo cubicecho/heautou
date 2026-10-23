@@ -287,8 +287,9 @@ Owner: `server/store/audit.ts`.
 - **Backup layout:** which archive files a backup skips and which it needs. Owner:
   `BACKUP_LAYOUT` in `server/core/services.ts`.
 - **Import:** the first boot on an older JSON data directory, which puts its files in the
-  tables and moves them to `imported-json/`. Owner: `server/db/import.ts` (it reads the
-  directory through `readDataDirectory` in `server/store/backup.ts`).
+  tables and moves them to `imported-json/`. Owner: `server/db/import.ts`
+  (`readDataDirectory`), checking each file as a restore does (`parseDataFile` in
+  `server/store/backup.ts`).
 - **Model document:** one oidc-provider model's entries (sessions, codes, tokens), one
   document per model. Owner: `server/oidc/adapter.ts`.
 - **Generated read:** a GraphQL query field drizzle-graphql builds from a table. Owner:

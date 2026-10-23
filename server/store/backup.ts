@@ -1,7 +1,5 @@
 // A backup: every store's data as the files the data directory held before the database, gzipped as one JSON
 // document, and checking one before it is taken back. `server/db/data-set.ts` writes the files out and puts them back.
-import { type Dirent, readdirSync, readFileSync } from 'node:fs';
-import path from 'node:path';
 import { gunzipSync, gzipSync } from 'node:zlib';
 import { z } from 'zod';
 import { BACKUP_DEFAULTS, type BackupSettings } from '../core/defaults.ts';
@@ -82,7 +80,7 @@ export class BackupError extends Error {
 
 /** The data files are JSON documents, and the audit log is JSON lines. Anything else in the directory is not data. */
 const JSON_EXTENSION = '.json';
-const JSON_LINES_EXTENSION = '.jsonl';
+export const JSON_LINES_EXTENSION = '.jsonl';
 /** One part of a path: letters, digits, dots, dashes and underscores, but not `.` or `..` alone. */
 const PATH_PART = /^(?!\.{1,2}$)[\w.-]+$/;
 
@@ -100,40 +98,8 @@ const archiveSchema = z.object({
  * @param relative - A path under the data directory, with `/` between parts.
  * @returns True for a `.json` or `.jsonl` file.
  */
-function isDataFile(relative: string): boolean {
+export function isDataFile(relative: string): boolean {
   return relative.endsWith(JSON_EXTENSION) || relative.endsWith(JSON_LINES_EXTENSION);
-}
-
-/**
- * Says whether a path is under a directory, or is it.
- *
- * @param relative - A path with `/` between parts.
- * @param dir - The directory, the same way.
- * @returns Whether it is.
- */
-function isUnder(relative: string, dir: string): boolean {
-  return relative === dir || relative.startsWith(`${dir}/`);
-}
-
-/**
- * Lists the data files under the data directory: every `.json` and `.jsonl` file at any depth, so a store added
- * later is backed up without being named here. Temporary files a write left behind are not data.
- *
- * @param dataDir - The data directory.
- * @returns Their paths under it, with `/` between parts, sorted.
- */
-export function listDataFiles(dataDir: string): string[] {
-  let entries: Dirent[];
-  try {
-    entries = readdirSync(dataDir, { recursive: true, withFileTypes: true });
-  } catch {
-    return [];
-  }
-  return entries
-    .filter((entry) => entry.isFile())
-    .map((entry) => path.relative(dataDir, path.join(entry.parentPath, entry.name)).split(path.sep).join('/'))
-    .filter(isDataFile)
-    .sort();
 }
 
 /**
@@ -142,7 +108,7 @@ export function listDataFiles(dataDir: string): string[] {
  * @param text - The file's text.
  * @returns For each non-empty line, its value, or undefined where it does not parse.
  */
-function linesOf(text: string): unknown[] {
+export function linesOf(text: string): unknown[] {
   return text
     .split('\n')
     .filter((line) => line.trim() !== '')
@@ -163,7 +129,7 @@ function linesOf(text: string): unknown[] {
  * @returns Its document, or its lines for JSON lines.
  * @throws BackupError when it, or one of its lines, is not JSON.
  */
-function parseDataFile(relative: string, text: string): unknown[] {
+export function parseDataFile(relative: string, text: string): unknown[] {
   if (relative.endsWith(JSON_LINES_EXTENSION)) {
     const values = linesOf(text);
     if (values.includes(undefined)) {
@@ -200,44 +166,6 @@ function sealedValuesIn(value: unknown, found: string[] = []): string[] {
     }
   }
   return found;
-}
-
-/**
- * Reads one data file of an older data directory. A JSON lines file loses lines a crash cut short, which the audit
- * log skipped when it read them anyway.
- *
- * @param dataDir - The data directory.
- * @param relative - The file's path under it.
- * @returns Its text.
- * @throws BackupError when a JSON file does not parse.
- */
-function readDataFile(dataDir: string, relative: string): string {
-  const text = readFileSync(path.join(dataDir, ...relative.split('/')), 'utf8');
-  if (relative.endsWith(JSON_LINES_EXTENSION)) {
-    const kept = text.split('\n').filter((line) => line.trim() !== '' && linesOf(line)[0] !== undefined);
-    return kept.length === 0 ? '' : `${kept.join('\n')}\n`;
-  }
-  parseDataFile(relative, text);
-  return text;
-}
-
-/**
- * Reads the data files a version before the database kept in its data directory.
- *
- * @param dataDir - The data directory.
- * @param exceptUnder - Directories under it to leave alone, such as PGlite's.
- * @returns Each file's text, by its path under the directory.
- * @throws BackupError when a JSON file does not parse.
- */
-export function readDataDirectory(dataDir: string, exceptUnder: readonly string[]): Record<string, string> {
-  const files: Record<string, string> = {};
-  for (const relative of listDataFiles(dataDir)) {
-    const isLeftAlone = exceptUnder.some((dir) => isUnder(relative, dir));
-    if (isLeftAlone === false) {
-      files[relative] = readDataFile(dataDir, relative);
-    }
-  }
-  return files;
 }
 
 /**

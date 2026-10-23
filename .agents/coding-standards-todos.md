@@ -57,7 +57,7 @@ average 13); every failing file passes alone. See T5 and T6.
 | M4 | Model change | Makes backup and restore one operation of the backup module that the CLI and the server share; reading an older data directory moves to the import | Removes a copied restore and a CLI that imports all the services | — | approved |
 | T1 | Test [pin] | Pins that a restore brings back every store, not only the six checked today | Protects M4 and any services.ts change | — | done |
 | T3 | Test [pin] | Pins the backup CLI's `--sessions` flag and its refusals | Protects R8 | — | done |
-| R7 | Refactor [pattern] | Moves the older-data-directory reader from the backup module to the import module | M4 | M4 | approved |
+| R7 | Refactor [pattern] | Moves the older-data-directory reader from the backup module to the import module | M4 | M4 | done |
 | R8 | Refactor [reuse] | One export and one restore (check, pick files, replace, audit entry) used by both the CLI and the running server | M4; services.ts changes most of any file | M4, T1, T3 | approved |
 | M5 | Model change | Retires "file" as the code's word for a store's document; "file" then means only an archive file | One concept, one name (P25), and the JSON-era word stops misleading | — | approved |
 | R12 | Refactor [sweep] | Renames every store's `file` parameter to `document` (84 hits, 18 files) | M5 | M5 | approved |
