@@ -1,3 +1,4 @@
+import { UPSTREAM_DEFAULTS } from '@server/core/defaults.ts';
 import { UPSTREAM_ID_PATTERN } from '@server/store/upstream-id.ts';
 import { useRef, useState } from 'react';
 import {
@@ -61,6 +62,19 @@ function mappingsProblem(text: string): string | undefined {
     return at <= 0 || line.slice(at + 1).trim() === '';
   });
   return bad === undefined ? undefined : `Write "${bad}" as upstream-group = local-group.`;
+}
+
+/**
+ * Says what is wrong with an upstream ID, by the rule the server saves it by.
+ *
+ * @param id - The ID, trimmed.
+ * @returns What to fix, or undefined for an ID the server takes.
+ */
+function idProblem(id: string): string | undefined {
+  if (id.length > UPSTREAM_DEFAULTS.maxIdLength) {
+    return `Use at most ${UPSTREAM_DEFAULTS.maxIdLength} characters.`;
+  }
+  return UPSTREAM_ID_PATTERN.test(id) ? undefined : 'Use lower-case letters, digits and dashes.';
 }
 
 interface UpstreamFormDialogProps {
@@ -189,10 +203,7 @@ export function UpstreamFormDialog({ upstream, open, onOpenChange }: UpstreamFor
               required
               placeholder="google"
               description="Made from the name. Lower-case letters, digits and dashes. It is part of the redirect URI, so it cannot change later."
-              validators={{
-                onChange: ({ value }) =>
-                  UPSTREAM_ID_PATTERN.test(value.trim()) ? undefined : 'Use lower-case letters, digits and dashes.',
-              }}
+              validators={{ onChange: ({ value }) => idProblem(value.trim()) }}
             />
           )}
           <form.Subscribe
@@ -207,7 +218,7 @@ export function UpstreamFormDialog({ upstream, open, onOpenChange }: UpstreamFor
                 level={3}
                 title="1. Register Heautou at the provider"
                 description={`Add this redirect URI in ${(isEdit ? presetOfKind(kind) : upstreamPresetById(presetId)).registerAt}`}
-                contentSlot={<RedirectUri id={isEdit ? upstream.id : UPSTREAM_ID_PATTERN.test(id) ? id : ''} />}
+                contentSlot={<RedirectUri id={isEdit ? upstream.id : idProblem(id) === undefined ? id : ''} />}
               />
             )}
           </form.Subscribe>
