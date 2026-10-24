@@ -14,6 +14,7 @@ import {
 import { request } from '@/core/gql';
 import { jsonReply, okReplySchema, postJson } from '@/core/json-reply';
 import { QUERY_KEYS } from '@/core/query-keys';
+import { interactionPath, isSignInOpen } from '@/core/sign-in';
 import { fragmentParam } from '@/core/url-fragment';
 
 /**
@@ -116,8 +117,7 @@ export async function signInAfterReset(fallback: string): Promise<string> {
   if (UID_PATTERN.test(uid) === false) {
     return fallback;
   }
-  const details = await fetch(`/interaction/${uid}/details`).catch(() => null);
-  return details?.ok === true ? `/login/${uid}` : fallback;
+  return (await isSignInOpen(uid)) ? `/login/${uid}` : fallback;
 }
 
 const availableSchema = z.object({ isAvailable: z.boolean() });
@@ -132,8 +132,7 @@ export function useForgotPasswordAvailable(uid: string) {
   return useQuery({
     queryKey: [...QUERY_KEYS.forgotPassword, uid],
     queryFn: async () =>
-      (await jsonReply(await fetch(`/interaction/${encodeURIComponent(uid)}/forgot-password`), availableSchema))
-        .isAvailable,
+      (await jsonReply(await fetch(`${interactionPath(uid)}/forgot-password`), availableSchema)).isAvailable,
     retry: false,
   });
 }
@@ -147,9 +146,6 @@ export function useForgotPasswordAvailable(uid: string) {
 export function useForgotPassword(uid: string) {
   return useMutation({
     mutationFn: async (identifier: string) =>
-      jsonReply(
-        await postJson(`/interaction/${encodeURIComponent(uid)}/forgot-password`, { identifier }),
-        okReplySchema,
-      ),
+      jsonReply(await postJson(`${interactionPath(uid)}/forgot-password`, { identifier }), okReplySchema),
   });
 }

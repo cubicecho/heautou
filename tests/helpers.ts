@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { SECRET_KEY_BYTES, type SecretKeys } from '../server/core/secret-box.ts';
 import { openServices, type ServiceSettings, type Services } from '../server/core/services.ts';
-import type { OpenDatabase } from '../server/db/client.ts';
+import type { Database, OpenDatabase } from '../server/db/client.ts';
 import { createApp } from '../server/http/app.ts';
 import type { NewUser, PublicUser } from '../server/store/users.ts';
 import { PASSWORD } from './browser.ts';
@@ -52,6 +52,22 @@ export function newSecretKeys(previous: Buffer | null = null): SecretKeys {
  */
 export function tempDir(): string {
   return mkdtempSync(path.join(tmpdir(), 'heautou-test-'));
+}
+
+/** The issuer services opened without a server are given: nothing listens there. */
+export const UNSERVED_ISSUER = 'http://127.0.0.1:1/oidc';
+
+/**
+ * Opens the services on a database without a server, as a boot does, and waits for what the boot writes.
+ *
+ * @param database - The database.
+ * @param [secretKeys] - The sealing keys, or null for none.
+ * @returns The services, their issuer an address nothing listens on.
+ */
+export async function openTestServices(database: Database, secretKeys: SecretKeys | null = null): Promise<Services> {
+  const services = await openServices({ database, issuer: UNSERVED_ISSUER, isProxied: false, secretKeys });
+  await services.settled();
+  return services;
 }
 
 /** A running app on its own database. */

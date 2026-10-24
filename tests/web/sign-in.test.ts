@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { post, SignInRefusal } from '../../web/src/routes/login.$uid.tsx';
+import { post, SignInRefusal } from '../../web/src/core/sign-in.ts';
 
 const HTTP_OK = 200;
 const HTTP_FORBIDDEN = 403;

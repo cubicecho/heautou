@@ -4,13 +4,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gunzipSync } from 'node:zlib';
 import type { SecretKeys } from '../server/core/secret-box.ts';
-import { openServices, type Services } from '../server/core/services.ts';
+import type { Services } from '../server/core/services.ts';
 import { openDatabase } from '../server/db/client.ts';
 import { AuditType } from '../server/store/audit.ts';
 import { PASSWORD } from './browser.ts';
-import { newSecretKey, newSecretKeys, tempDir } from './helpers.ts';
+import { newSecretKey, newSecretKeys, openTestServices, tempDir } from './helpers.ts';
 
-const ISSUER = 'http://127.0.0.1:1/oidc';
 const CLI = fileURLToPath(new URL('../server/backup.ts', import.meta.url));
 /** Booting PGlite in a directory and migrating it, three times over, with the CLI's own boots between. */
 const CLI_TIMEOUT_MS = 120_000;
@@ -72,7 +71,7 @@ async function withDataDir(
   const database = await openDatabase({ url: '', dataDir, isProduction: false });
   try {
     await database.migrate();
-    const services = await openServices({ database: database.db, issuer: ISSUER, isProxied: false, secretKeys });
+    const services = await openTestServices(database.db, secretKeys);
     await use(services);
     await services.settled();
   } finally {
