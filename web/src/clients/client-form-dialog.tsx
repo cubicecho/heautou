@@ -458,7 +458,13 @@ export function ClientFormDialog({ client, open, onOpenChange, onSaved }: Client
           <Button variant="outline" onClick={close} content="Cancel" />
           <form.AppForm>
             <form.Subscribe selector={(state) => sitePresetById(state.values.preset) !== undefined}>
-              {(isSite) => <form.SubmitButton content={isEdit ? 'Save changes' : 'Create client'} disabled={isSite} />}
+              {(isSite) => (
+                <form.SubmitButton
+                  requireChanges={isEdit}
+                  content={isEdit ? 'Save changes' : 'Create client'}
+                  disabled={isSite}
+                />
+              )}
             </form.Subscribe>
           </form.AppForm>
         </>
