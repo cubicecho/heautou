@@ -137,7 +137,7 @@ function LoginPage() {
   const hasUpstreams = upstreams.length > 0;
   const canUsePasskeys = details.data?.passkeysAvailable === true && browserSupportsWebAuthn();
   const isAskingCode = secondFactor !== null && (secondFactor.totp || secondFactor.recoveryCode);
-  const canUseOwnPasskey = secondFactor !== null && secondFactor.passkey && canUsePasskeys;
+  const canUseOwnPasskey = secondFactor?.passkey && canUsePasskeys;
   const description =
     secondFactor !== null
       ? cameBackFrom === null
