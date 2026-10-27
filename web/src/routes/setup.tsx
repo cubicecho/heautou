@@ -73,7 +73,7 @@ function SetupPage() {
   const canSetUp = status.data?.needed === true;
 
   const setupForm = (
-    <FormElement id={FORM_ID} onSubmit={() => form.handleSubmit()} className="grid gap-4">
+    <div className="grid gap-4">
       <InputField
         form={form}
         name="username"
@@ -102,7 +102,7 @@ function SetupPage() {
         </>
       )}
       {failure !== null && <Alert variant="destructive" title="No admin made" description={failure} />}
-    </FormElement>
+    </div>
   );
   const done = (
     <Alert title="Heautou has an admin" description="Sign in with that account to manage clients and users." />
@@ -144,6 +144,17 @@ function SetupPage() {
       iconSlot={<BrandIcon className="size-5" />}
       title="Set up Heautou"
       description={description}
+      wrapperSlot={
+        canSetUp
+          ? (parts, { className }) => (
+              <form.AppForm>
+                <FormElement id={FORM_ID} onSubmit={() => form.handleSubmit()} className={className}>
+                  {parts}
+                </FormElement>
+              </form.AppForm>
+            )
+          : undefined
+      }
       contentSlot={
         status.error === null ? (
           content
@@ -153,9 +164,7 @@ function SetupPage() {
       }
       footerActionsSlot={
         canSetUp ? (
-          <form.AppForm>
-            <form.SubmitButton content="Make admin" />
-          </form.AppForm>
+          <form.SubmitButton content="Make admin" />
         ) : isDone ? (
           <Button content="Sign in" onClick={() => window.location.assign(SIGN_IN_PATH)} />
         ) : undefined

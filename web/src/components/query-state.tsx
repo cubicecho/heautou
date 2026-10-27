@@ -1,6 +1,6 @@
 import { useState } from "react";
+import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { RefreshCw, TriangleAlert } from "@/components/ui/icons";
 import { cn, type SlotNode } from "@/lib/utils";
 
@@ -173,7 +173,7 @@ export function QueryError({
         className={cn("cube-rn-view", "min-w-0 gap-1 px-2 py-1", className)}
       >
         <div className="cube-rn-view min-w-0 flex-row items-center gap-1.5">
-          <TriangleAlert className="h-3.5 w-3.5 shrink-0 text-negative" aria-hidden />
+          <TriangleAlert className="size-4 shrink-0 text-negative" aria-hidden />
           <span className="cube-rn-text min-w-0 flex-1 font-semibold text-negative text-xs">
             Could not load {what}
           </span>
@@ -185,7 +185,7 @@ export function QueryError({
             size="xs"
             onClick={retry}
             disabled={retrying}
-            iconSlot={<RefreshCw className="h-3.5 w-3.5" aria-hidden />}
+            iconSlot={<RefreshCw className="size-4" aria-hidden />}
             content={label}
           />
         </div>
@@ -193,44 +193,35 @@ export function QueryError({
     );
   }
 
+  // Alert's destructive callout rather than a second error box of its own: the hue on the tint,
+  // the edge and the icon, the words in ink (red text on the red tint is under 4.5:1 in light),
+  // and Alert's own `role="alert"`.
   return (
-    <Card
-      role="alert"
-      data-slot="query-error"
-      // No tinted ground behind it. The version this was lifted from washed the card with
-      // `bg-negative/5`, which drops both the red heading and the grey message under 4.5:1
-      // against their own background — 4.36 and 4.33, caught by the story's axe run. The border
-      // and the icon say "this failed" without moving the ground the words sit on.
-      className={cn("gap-2 border-negative/40 p-4", className)}
-    >
-      {/* `flex-row` is explicit because a column is Yoga's default, and the icon carries its own
-          colour because native inherits none — the two standing conversion rules. */}
-      <div className="cube-rn-view flex-row items-center gap-2">
-        <TriangleAlert className="h-4 w-4 text-negative" aria-hidden />
-        <span className="cube-rn-text font-semibold text-negative text-sm">
-          Could not load {what}
-        </span>
-      </div>
-      <span className="cube-rn-text text-foreground/60 text-sm">{reason}</span>
-      <div className="cube-rn-view flex-row">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={retry}
-          disabled={retrying}
-          iconSlot={<RefreshCw className="h-3.5 w-3.5" aria-hidden />}
-          content={label}
-        />
-      </div>
-    </Card>
+    <div data-slot="query-error" className={cn("cube-rn-view", "min-w-0", className)}>
+      <Alert
+        variant="destructive"
+        title={`Could not load ${what}`}
+        description={reason}
+        actionSlot={
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={retry}
+            disabled={retrying}
+            iconSlot={<RefreshCw className="size-4" aria-hidden />}
+            content={label}
+          />
+        }
+      />
+    </div>
   );
 }
 
 /**
  * What a list shows before its first answer.
  *
- * Drawn as the row it stands in for — a bordered `Card`, which is what these lists are lists of
- * on device — so the screen does not change shape underneath the reader when the answer lands.
+ * Drawn as the row it stands in for — a title bar over a line bar — so the screen does not change
+ * shape underneath the reader when the answer lands.
  * The web half of `main` drew an outlined `Item` here; `Item` is a DOM-only primitive, and a
  * placeholder that matches the row is the point rather than which component draws it.
  *
@@ -270,22 +261,22 @@ export function RowSkeleton({
     );
   }
 
+  // Bars in the shape of a row, not a bordered card per row: a list of plain rows that loaded as
+  // stacked cards jumped to flat rows when the answer landed.
   return (
     <div role="status" aria-label="Loading" className={cn("cube-rn-view", "gap-2", className)}>
       {Array.from({ length: rows }, (_, index) => (
-        <Card
+        <div
           // biome-ignore lint/suspicious/noArrayIndexKey: placeholders, in a list with no identity
           key={index}
           data-slot="row-skeleton"
           aria-hidden
-          className="gap-2 p-4"
+          className="cube-rn-view gap-2 py-2"
         >
-          {/* `animate-pulse` resolves to nothing on device and is kept for the same reason
-              `page.tsx` keeps `container mx-auto`: the class is what the compiled web half needs,
-              and dropping it here to tidy the native file would quietly regress the DOM. */}
+          {/* `animate-pulse` resolves to nothing on device; the compiled web half needs it. */}
           <div className="cube-rn-view h-4 w-1/3 animate-pulse rounded-md bg-foreground/10" />
           <div className="cube-rn-view h-3 w-2/3 animate-pulse rounded-md bg-foreground/10" />
-        </Card>
+        </div>
       ))}
     </div>
   );

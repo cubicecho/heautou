@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import * as React from "react";
+import { CARD_SURFACE_CLASS } from "@/components/ui/card";
 import {
   DescriptionHint,
   DescriptionHintText,
@@ -103,8 +104,10 @@ export function Section({
       role="heading"
       aria-level={level}
       className={cn(
+        // An overline in full ink: grey, it was outranked by the larger grey description under it.
+        // Weight, caps and ink lead; the size stays small.
         "cube-rn-text",
-        "truncate font-semibold text-foreground/60 text-xs uppercase tracking-wide",
+        "truncate font-semibold text-foreground text-xs uppercase tracking-wide",
         folded && "min-w-0 shrink",
         titleClassName,
       )}
@@ -123,8 +126,8 @@ export function Section({
       className={cn(
         "cube-rn-view",
         "min-w-0 gap-3",
-        surface === "card" &&
-          "rounded-lg border border-foreground/10 bg-secondary p-4 text-foreground",
+        // Card's own surface, not a copy of its classes that drifts from it.
+        surface === "card" && cn(CARD_SURFACE_CLASS, "p-4"),
         className,
       )}
     >

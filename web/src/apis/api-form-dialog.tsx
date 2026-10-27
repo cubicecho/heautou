@@ -124,8 +124,15 @@ export function ApiFormDialog({ api, open, onOpenChange, onSaved }: ApiFormDialo
       description="A service of your own that takes access tokens from this provider. Apps ask for a token to it with the resource parameter."
       size="lg"
       hasUnsavedChanges={() => form.state.isDefaultValue === false}
+      wrapperSlot={(parts, { className }) => (
+        <form.AppForm>
+          <FormElement onSubmit={() => form.handleSubmit()} className={className}>
+            {parts}
+          </FormElement>
+        </form.AppForm>
+      )}
       contentSlot={
-        <FormElement onSubmit={() => form.handleSubmit()} className="grid gap-4">
+        <div className="grid gap-4">
           {isNew && (
             <InputField
               form={form}
@@ -180,14 +187,12 @@ export function ApiFormDialog({ api, open, onOpenChange, onSaved }: ApiFormDialo
             placeholder="No client yet"
           />
           <SaveFailure error={failure} />
-        </FormElement>
+        </div>
       }
       footerActionsSlot={(close) => (
         <>
           <Button variant="outline" onClick={close} content="Cancel" />
-          <form.AppForm>
-            <form.SubmitButton requireChanges={isEdit} content={isEdit ? 'Save changes' : 'Create API'} />
-          </form.AppForm>
+          <form.SubmitButton requireChanges={isEdit} content={isEdit ? 'Save changes' : 'Create API'} />
         </>
       )}
     />

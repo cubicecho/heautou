@@ -161,7 +161,7 @@ function LoginPage() {
   );
 
   const passwordStep = (
-    <FormElement id={PASSWORD_FORM_ID} onSubmit={() => passwordForm.handleSubmit()} className="grid gap-4">
+    <div className="grid gap-4">
       <InputField
         form={passwordForm}
         name="username"
@@ -195,11 +195,11 @@ function LoginPage() {
           ))}
         </div>
       )}
-    </FormElement>
+    </div>
   );
 
   const secondFactorStep = (
-    <FormElement id={CODE_FORM_ID} onSubmit={() => codeForm.handleSubmit()} className="grid gap-4">
+    <div className="grid gap-4">
       {isAskingCode && (
         <InputField
           form={codeForm}
@@ -217,7 +217,7 @@ function LoginPage() {
         />
       )}
       {failureAlert}
-    </FormElement>
+    </div>
   );
 
   if (isForgotten && secondFactor === null) {
@@ -230,6 +230,26 @@ function LoginPage() {
       iconSlot={<BrandIcon className="size-5" />}
       title={secondFactor === null ? 'Sign in' : 'Confirm it’s you'}
       description={description}
+      // Each step is its own form, around the footer too, so its submit is inside it and Enter sends it.
+      wrapperSlot={
+        details.error !== null
+          ? undefined
+          : secondFactor === null
+            ? (parts, { className }) => (
+                <passwordForm.AppForm>
+                  <FormElement id={PASSWORD_FORM_ID} onSubmit={() => passwordForm.handleSubmit()} className={className}>
+                    {parts}
+                  </FormElement>
+                </passwordForm.AppForm>
+              )
+            : (parts, { className }) => (
+                <codeForm.AppForm>
+                  <FormElement id={CODE_FORM_ID} onSubmit={() => codeForm.handleSubmit()} className={className}>
+                    {parts}
+                  </FormElement>
+                </codeForm.AppForm>
+              )
+      }
       contentSlot={
         details.error === null ? (
           secondFactor === null ? (
@@ -249,18 +269,12 @@ function LoginPage() {
         details.error !== null ? undefined : secondFactor === null ? (
           <>
             {canUsePasskeys && passkeyButton}
-            <passwordForm.AppForm>
-              <passwordForm.SubmitButton content="Sign in" />
-            </passwordForm.AppForm>
+            <passwordForm.SubmitButton content="Sign in" />
           </>
         ) : (
           <>
             {canUseOwnPasskey && passkeyButton}
-            {isAskingCode && (
-              <codeForm.AppForm>
-                <codeForm.SubmitButton content="Continue" />
-              </codeForm.AppForm>
-            )}
+            {isAskingCode && <codeForm.SubmitButton content="Continue" />}
           </>
         )
       }

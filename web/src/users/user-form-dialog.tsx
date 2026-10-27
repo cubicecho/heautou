@@ -84,8 +84,15 @@ export function UserFormDialog({ user, open, onOpenChange, onInvited }: UserForm
       title={isEdit ? `Edit ${user.username}` : 'New user'}
       description="Someone who can sign in to the clients. Name, email, groups and claims go into their tokens."
       hasUnsavedChanges={() => form.state.isDefaultValue === false}
+      wrapperSlot={(parts, { className }) => (
+        <form.AppForm>
+          <FormElement onSubmit={() => form.handleSubmit()} className={className}>
+            {parts}
+          </FormElement>
+        </form.AppForm>
+      )}
       contentSlot={
-        <FormElement onSubmit={() => form.handleSubmit()} className="grid gap-4">
+        <div className="grid gap-4">
           <InputField
             form={form}
             name="username"
@@ -133,14 +140,12 @@ export function UserFormDialog({ user, open, onOpenChange, onInvited }: UserForm
             validators={{ onChange: ({ value }) => claimsProblem(value) }}
           />
           <SaveFailure error={failure} />
-        </FormElement>
+        </div>
       }
       footerActionsSlot={(close) => (
         <>
           <Button variant="outline" onClick={close} content="Cancel" />
-          <form.AppForm>
-            <form.SubmitButton requireChanges={isEdit} content={isEdit ? 'Save changes' : 'Create user'} />
-          </form.AppForm>
+          <form.SubmitButton requireChanges={isEdit} content={isEdit ? 'Save changes' : 'Create user'} />
         </>
       )}
     />

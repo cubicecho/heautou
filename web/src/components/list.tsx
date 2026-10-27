@@ -124,5 +124,13 @@ function rows(
   });
 }
 
+/**
+ * Whether a `List` handed this `contentSlot` would draw a row — it draws nothing when it would not.
+ * For a shell with an `emptySlot`, which cannot see what a list it was handed will render.
+ */
+function hasRows(slot: SlotNode): boolean {
+  return rows(slot).length > 0;
+}
+
 export type { ListProps, ListRowProps };
-export { List, ListRow };
+export { hasRows, List, ListRow };

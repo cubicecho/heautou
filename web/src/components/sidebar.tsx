@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import * as React from "react";
 import { type HeaderContentFooterProps, StickyHeaderContentFooter } from "@/components/header-content-footer";
+import { SidebarPositionContext } from "@/components/split-layout";
 import { Badge } from "@/components/ui/badge";
 import { ChevronLeft, ChevronRight } from "@/components/ui/icons";
 import { IconClassContext } from "@/components/ui/icons-base";
@@ -57,7 +58,8 @@ export type SidebarProps = {
   label?: string | undefined;
   /**
    * Which edge of the screen the sidebar sits against, which decides the edge its border is on.
-   * `start` (the default) draws it on the right, facing the content.
+   * `start` draws it on the right, facing the content. Inside a `SidebarLayout` it defaults to the
+   * layout's `sidebarPosition`, and to `start` anywhere else.
    */
   side?: "start" | "end" | undefined;
   /**
@@ -93,7 +95,7 @@ export type SidebarProps = {
 };
 
 /**
- * The sidebar frame: header, a body that scrolls, footer, on the sidebar palette, at a fixed
+ * The sidebar frame: header, a body that scrolls, footer, on the page colour behind a rule, at a fixed
  * `w-64`. It needs a height from its ancestors (`h-full`), or the body grows instead of scrolling.
  *
  * It draws its own border on the edge that faces the content, so inside a `SidebarLayout` pass
@@ -106,7 +108,7 @@ export function Sidebar({
   headerSlot,
   footerSlot,
   label,
-  side = "start",
+  side: sideProp,
   hideBelow,
   collapsed = false,
   onCollapsedChange,
@@ -116,6 +118,9 @@ export function Sidebar({
   contentClassName,
   footerClassName,
 }: SidebarProps) {
+  // Inside a `SidebarLayout` the edge is the layout's, unless the caller says otherwise.
+  const layoutSide = React.useContext(SidebarPositionContext);
+  const side = sideProp ?? layoutSide ?? "start";
   const state = React.useMemo(
     () => ({ collapsed, onCollapsedChange, side }),
     [collapsed, onCollapsedChange, side],
@@ -129,8 +134,10 @@ export function Sidebar({
       data-slot="sidebar"
       aria-label={label}
       className={cn(
+        // App chrome is the page colour and a /10 rule, as the top and bottom bars are: on
+        // `secondary` the fill was 1.04:1 against the page in light and added nothing.
         "cube-rn-view",
-        "h-full min-h-0 shrink-0 border-foreground/10 bg-secondary",
+        "h-full min-h-0 shrink-0 border-foreground/10 bg-background",
         collapsed ? "w-14" : "w-64",
         side === "start" ? "border-r" : "border-l",
         hideBelow ? HIDE_BELOW[hideBelow] : undefined,
@@ -411,7 +418,7 @@ function rowClassName(active: boolean, className: string | undefined) {
     // The web half's icons size from here, as a `Button`'s do; device's from the context below.
     "[&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
     active
-      ? "bg-active text-active-foreground focus-visible:bg-active/90"
+      ? "group/nav bg-active text-active-foreground focus-visible:bg-hover focus-visible:text-foreground"
       : "text-foreground hover:bg-hover focus-visible:bg-hover",
     className,
   );
@@ -497,8 +504,13 @@ function SidebarNavItemBody({
 }: SidebarNavItemBodyProps) {
   // Native inherits no colour, so the label, the count and the icon each carry it. The active
   // count takes the row's foreground rather than muted: muted on the selection fill is under 4.5:1.
-  const text = active ? "text-active-foreground" : "text-foreground";
-  const muted = active ? "text-active-foreground" : "text-foreground/60";
+  // Focused, the current row looks hovered, so its ink turns `foreground` with the fill.
+  const text = active
+    ? "text-active-foreground group-focus-visible/nav:text-foreground"
+    : "text-foreground";
+  const muted = active
+    ? "text-active-foreground group-focus-visible/nav:text-foreground"
+    : "text-foreground/60";
 
   if (collapsed) {
     // The icon alone, as the bar's item draws a place. A row with no icon is its first letter, so
@@ -518,7 +530,7 @@ function SidebarNavItemBody({
             {Array.from(label.trim())[0]?.toUpperCase()}
           </span>
         )}
-        <IconMarkers count={count} status={status} ring="border-secondary" />
+        <IconMarkers count={count} status={status} ring="border-background" />
       </>
     );
   }
@@ -730,7 +742,9 @@ export type BarNavItemProps = Omit<PressableProps, "children" | "className" | "s
 const BarNavItem = React.forwardRef<HTMLButtonElement, BarNavItemProps>(
   ({ href, label, iconSlot, count, status, active = false, className, ...props }, ref) => {
     // Native inherits no colour, so the icon carries its own; the web half's takes the link's.
-    const text = active ? "text-active-foreground" : "text-foreground/60";
+    const text = active
+      ? "text-active-foreground group-focus-visible/nav:text-foreground"
+      : "text-foreground/60";
 
     return (
       <TooltipProvider>
@@ -751,7 +765,7 @@ const BarNavItem = React.forwardRef<HTMLButtonElement, BarNavItemProps>(
                 "focus-visible:outline-none",
                 "[&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
                 active
-                  ? "bg-active text-active-foreground focus-visible:bg-active/90"
+                  ? "group/nav bg-active text-active-foreground focus-visible:bg-hover focus-visible:text-foreground"
                   : "text-foreground/60 hover:bg-hover hover:text-foreground focus-visible:bg-hover focus-visible:text-foreground",
                 className,
               )}

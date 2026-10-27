@@ -253,9 +253,21 @@ export function PairDialog({ open, onOpenChange, onPaired }: PairDialogProps) {
       title="Pair an app"
       description="Makes a setup URL the app registers itself with. Nothing to copy into its config."
       size="lg"
+      // Only on the first step: `SetupUrl` is a form of its own, and a form can't hold another.
+      wrapperSlot={
+        started === undefined
+          ? (parts, { className }) => (
+              <form.AppForm>
+                <FormElement onSubmit={() => form.handleSubmit()} className={className}>
+                  {parts}
+                </FormElement>
+              </form.AppForm>
+            )
+          : undefined
+      }
       contentSlot={
         started === undefined ? (
-          <FormElement onSubmit={() => form.handleSubmit()} className="grid gap-4">
+          <div className="grid gap-4">
             <ComboboxField
               form={form}
               name="allowedGroups"
@@ -276,7 +288,7 @@ export function PairDialog({ open, onOpenChange, onPaired }: PairDialogProps) {
             {start.error !== null && (
               <Alert variant="destructive" title="No setup URL made" description={messageOf(start.error)} />
             )}
-          </FormElement>
+          </div>
         ) : (
           <SetupUrl
             key={started.pairing.id}
@@ -294,9 +306,7 @@ export function PairDialog({ open, onOpenChange, onPaired }: PairDialogProps) {
         started === undefined ? (
           <>
             <Button variant="outline" onClick={close} content="Cancel" />
-            <form.AppForm>
-              <form.SubmitButton content="Make setup URL" />
-            </form.AppForm>
+            <form.SubmitButton content="Make setup URL" />
           </>
         ) : (
           <Button variant="outline" onClick={close} content="Close" />

@@ -178,7 +178,7 @@ function FieldContent({ className, ...props }: ViewProps) {
   return (
     <div
       data-slot="field-content"
-      className={cn("cube-rn-view", "min-w-0 flex-1 flex-col gap-1.5", className)}
+      className={cn("cube-rn-view", "min-w-0 flex-1 flex-col gap-1", className)}
       {...(props as React.ComponentPropsWithoutRef<"div">)}
     />
   );

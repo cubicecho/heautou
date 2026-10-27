@@ -35,8 +35,15 @@ export function RenameGroupDialog({ name, open, onOpenChange }: RenameGroupDialo
       title={`Rename ${name}`}
       description="Every user and client with the group gets the new name. Applications see it in the next tokens they get."
       hasUnsavedChanges={() => form.state.isDefaultValue === false}
+      wrapperSlot={(parts, { className }) => (
+        <form.AppForm>
+          <FormElement onSubmit={() => form.handleSubmit()} className={className}>
+            {parts}
+          </FormElement>
+        </form.AppForm>
+      )}
       contentSlot={
-        <FormElement onSubmit={() => form.handleSubmit()} className="grid gap-4">
+        <div className="grid gap-4">
           <InputField
             form={form}
             name="newName"
@@ -49,14 +56,12 @@ export function RenameGroupDialog({ name, open, onOpenChange }: RenameGroupDialo
           {rename.error !== null && (
             <Alert variant="destructive" title="Not renamed" description={messageOf(rename.error)} />
           )}
-        </FormElement>
+        </div>
       }
       footerActionsSlot={(close) => (
         <>
           <Button variant="outline" onClick={close} content="Cancel" />
-          <form.AppForm>
-            <form.SubmitButton content="Rename" />
-          </form.AppForm>
+          <form.SubmitButton content="Rename" />
         </>
       )}
     />

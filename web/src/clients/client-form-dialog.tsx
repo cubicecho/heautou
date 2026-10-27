@@ -345,8 +345,15 @@ export function ClientFormDialog({ client, open, onOpenChange, onSaved }: Client
       description="An application that signs its users in through this provider."
       size="lg"
       hasUnsavedChanges={() => form.state.isDefaultValue === false}
+      wrapperSlot={(parts, { className }) => (
+        <form.AppForm>
+          <FormElement onSubmit={() => form.handleSubmit()} className={className}>
+            {parts}
+          </FormElement>
+        </form.AppForm>
+      )}
       contentSlot={
-        <FormElement onSubmit={() => form.handleSubmit()} className="grid gap-4">
+        <div className="grid gap-4">
           {isNew && (
             <SelectField
               form={form}
@@ -451,22 +458,20 @@ export function ClientFormDialog({ client, open, onOpenChange, onSaved }: Client
             }
           </form.Subscribe>
           <SaveFailure error={failure} />
-        </FormElement>
+        </div>
       }
       footerActionsSlot={(close) => (
         <>
           <Button variant="outline" onClick={close} content="Cancel" />
-          <form.AppForm>
-            <form.Subscribe selector={(state) => sitePresetById(state.values.preset) !== undefined}>
-              {(isSite) => (
-                <form.SubmitButton
-                  requireChanges={isEdit}
-                  content={isEdit ? 'Save changes' : 'Create client'}
-                  disabled={isSite}
-                />
-              )}
-            </form.Subscribe>
-          </form.AppForm>
+          <form.Subscribe selector={(state) => sitePresetById(state.values.preset) !== undefined}>
+            {(isSite) => (
+              <form.SubmitButton
+                requireChanges={isEdit}
+                content={isEdit ? 'Save changes' : 'Create client'}
+                disabled={isSite}
+              />
+            )}
+          </form.Subscribe>
         </>
       )}
     />

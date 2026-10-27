@@ -56,6 +56,17 @@ function SetPasswordPage() {
           ? `Choose a password for your ${brandName} account. You sign in with it next.`
           : `Choose a new password for your ${brandName} account.`
       }
+      wrapperSlot={
+        isDead || who === undefined
+          ? undefined
+          : (parts, { className }) => (
+              <form.AppForm>
+                <FormElement id={FORM_ID} onSubmit={() => form.handleSubmit()} className={className}>
+                  {parts}
+                </FormElement>
+              </form.AppForm>
+            )
+      }
       contentSlot={
         isDead ? (
           <Alert
@@ -70,7 +81,7 @@ function SetPasswordPage() {
         ) : who === undefined ? (
           <Spinner />
         ) : (
-          <FormElement id={FORM_ID} onSubmit={() => form.handleSubmit()} className="grid gap-4">
+          <div className="grid gap-4">
             {/* Lets a password manager save the password under the right account. */}
             <input type="text" name="username" value={who.username} autoComplete="username" readOnly hidden />
             <PasswordField
@@ -99,16 +110,10 @@ function SetPasswordPage() {
             {setPassword.error !== null && (
               <Alert variant="destructive" title="Password not set" description={messageOf(setPassword.error)} />
             )}
-          </FormElement>
+          </div>
         )
       }
-      footerActionsSlot={
-        isDead || who === undefined ? undefined : (
-          <form.AppForm>
-            <form.SubmitButton content="Set password" />
-          </form.AppForm>
-        )
-      }
+      footerActionsSlot={isDead || who === undefined ? undefined : <form.SubmitButton content="Set password" />}
     />
   );
 }

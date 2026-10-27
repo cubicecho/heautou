@@ -92,7 +92,7 @@ export function SettingRow({
       )}
     >
       {title || description ? (
-        <div data-slot="setting-row-text" className="cube-rn-view min-w-48 flex-1 gap-0.5">
+        <div data-slot="setting-row-text" className="cube-rn-view min-w-48 flex-1 gap-1">
           {folded ? (
             // Beside the title and not inside it: the title is a `Text`.
             <div
