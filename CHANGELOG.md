@@ -1,3 +1,10 @@
+## [1.20.4](https://github.com/cubicecho/heautou/compare/v1.20.3...v1.20.4) (2026-10-27)
+
+
+### Bug Fixes
+
+* **web:** submit dialog and sign-in forms on Enter ([edfae25](https://github.com/cubicecho/heautou/commit/edfae254751a290ef11b7a3adde4719641121e47))
+
 ## [1.20.3](https://github.com/cubicecho/heautou/compare/v1.20.2...v1.20.3) (2026-10-27)
 
 
