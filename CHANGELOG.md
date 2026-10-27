@@ -1,3 +1,11 @@
+## [1.20.3](https://github.com/cubicecho/heautou/compare/v1.20.2...v1.20.3) (2026-10-27)
+
+
+### Bug Fixes
+
+* **web:** hold the upstream ID field to the server's length limit ([ec3fcb8](https://github.com/cubicecho/heautou/commit/ec3fcb8013251e52ee2b484de8b8d58ed394e193))
+* **web:** keep Save off in the client, user and site edit dialogs until something changes ([85af1c3](https://github.com/cubicecho/heautou/commit/85af1c360d0a753fd15b83c914db5d5665857433))
+
 ## [1.20.2](https://github.com/cubicecho/heautou/compare/v1.20.1...v1.20.2) (2026-10-23)
 
 
