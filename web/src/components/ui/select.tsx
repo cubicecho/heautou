@@ -79,7 +79,7 @@ function SelectTrigger({
       className={cn(
         SELECT_TRIGGER_CLASS,
         SELECT_TRIGGER_TEXT_CLASS,
-        "flex focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-negative aria-invalid:focus:border-active focus:border-active data-[placeholder]:text-foreground/60 data-[size=sm]:h-8 [&>span]:line-clamp-1",
+        "flex focus:outline-none disabled:cursor-not-allowed disabled:bg-foreground/10 disabled:opacity-50 aria-invalid:border-negative aria-invalid:focus:border-active focus:border-active data-[placeholder]:text-foreground/60 data-[size=sm]:h-8 [&>span]:line-clamp-1",
         className,
       )}
     >

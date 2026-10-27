@@ -91,7 +91,7 @@ function MenuContent({
         sideOffset={sideOffset}
         className={cn(
           MENU_CONTENT_CLASS,
-          "z-50 max-h-(--radix-dropdown-menu-content-available-height) origin-(--radix-dropdown-menu-content-transform-origin) overflow-x-hidden overflow-y-auto rounded-md border bg-secondary text-foreground shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
+          "z-50 max-h-(--radix-dropdown-menu-content-available-height) origin-(--radix-dropdown-menu-content-transform-origin) overflow-x-hidden overflow-y-auto text-foreground data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
           className,
         )}
         {...props}
@@ -126,7 +126,13 @@ function MenuItem({
   const { setOpen, skipReturnRef } = useContext(MenuContext);
   const row = (
     <>
-      {iconSlot}
+      {/* The icon quieter than the label, except on a destructive row, where it follows the
+          row's `negative` through currentColor. */}
+      {iconSlot ? (
+        <span className={cn("flex shrink-0", destructive === false && "text-foreground/60")}>
+          {iconSlot}
+        </span>
+      ) : null}
       <span className={cn(MENU_ITEM_TEXT_CLASS, "truncate")}>{label}</span>
       {typeof trailing === "string" ? (
         <span className={MENU_TRAILING_CLASS}>{trailing}</span>
@@ -205,7 +211,7 @@ function ToggleRowBody({
 }: Pick<MenuCheckboxItemProps, "iconSlot" | "label" | "trailing">) {
   return (
     <>
-      {iconSlot}
+      {iconSlot ? <span className="flex shrink-0 text-foreground/60">{iconSlot}</span> : null}
       <span className={cn(MENU_ITEM_TEXT_CLASS, "truncate")}>{label}</span>
       {typeof trailing === "string" ? (
         <span className={MENU_TRAILING_CLASS}>{trailing}</span>

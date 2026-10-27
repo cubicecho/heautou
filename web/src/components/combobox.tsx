@@ -464,11 +464,16 @@ function SearchMenu({
           {...trigger}
           className={cn(
             "h-auto min-h-10 w-full justify-between gap-2 bg-background px-3 py-1.5 font-normal",
-            "whitespace-normal aria-invalid:border-negative disabled:cursor-not-allowed",
+            // It looks like a field, so it behaves like one: no hover fill, and focus turns its
+            // border `active`, as the select trigger beside it does — not a button's fill.
+            "hover:bg-background focus-visible:bg-background focus-visible:border-active",
+            "whitespace-normal aria-invalid:border-negative aria-invalid:focus-visible:border-active disabled:cursor-not-allowed",
             className,
           )}
           content={triggerSlot}
-          trailingSlot={<ChevronsUpDown className="size-4 shrink-0 opacity-50" aria-hidden />}
+          trailingSlot={
+            <ChevronsUpDown className="size-4 shrink-0 text-foreground/60" aria-hidden />
+          }
         />
       </PopoverTrigger>
       <PopoverContent
@@ -476,7 +481,7 @@ function SearchMenu({
         // radix's popover is a `role="dialog"`, and a dialog needs a name; the device's sheet has
         // no role to name, and the title is simply the first thing read in it.
         aria-labelledby={titleId}
-        className={cn("w-[var(--radix-popover-trigger-width)] p-0", contentClassName)}
+        className={cn("w-[var(--radix-popover-trigger-width)] gap-0 p-0", contentClassName)}
       >
         <span id={titleId} className={cn("cube-rn-text", SR_ONLY, NOTE_INK)}>
           {popoverLabel}

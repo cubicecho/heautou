@@ -98,7 +98,7 @@ export function Disclosure({
           onClick={toggle}
           className={cn(
             "cube-rn-view cube-rn-pressable",
-            "min-w-0 flex-1 flex-row items-start gap-1.5 rounded-sm",
+            "min-w-0 flex-1 flex-row items-start gap-2 rounded-sm",
             "text-left focus-visible:bg-hover focus-visible:outline-none",
           )}
         >
@@ -135,7 +135,9 @@ export function Disclosure({
         <div
           data-slot="disclosure-content"
           id={contentId}
-          className={cn("cube-rn-view", "min-w-0 gap-2", contentClassName)}
+          // Indented to the title (the 16px chevron and its 8px gap), so the body reads as the
+          // title's and not as the next thing on the page.
+          className={cn("cube-rn-view", "min-w-0 gap-2 pl-6", contentClassName)}
         >
           {contentSlot}
         </div>

@@ -80,10 +80,12 @@ export function RouteError({
       <div className="cube-rn-view rounded-full bg-negative/10 p-4">
         <CircleAlert className="h-7 w-7 text-negative" />
       </div>
-      <div className="cube-rn-view max-w-sm items-center">
-        <span data-slot="route-error-title" className="cube-rn-text font-semibold text-foreground">
+      {/* One width for the text and the details under it, not two centred columns. The title is
+          the screen's heading: `role`/`aria-level` because an `<h1>` has no native counterpart. */}
+      <div className="cube-rn-view max-w-md items-center">
+        <h1 data-slot="route-error-title" className="cube-rn-text font-semibold text-foreground">
           {title}
-        </span>
+        </h1>
         <span className="cube-rn-text mt-1 text-center text-sm text-foreground/60">{summary}</span>
       </div>
       {shown ? (

@@ -138,9 +138,10 @@ function ConfirmDialogBody({
           <Label id={labelId} htmlFor={inputId}>
             {requireTextLabel ?? (
               <>
-                Type{" "}
-                <span className="cube-rn-text font-semibold text-foreground">{requireText}</span> to
-                confirm
+                {/* Monospace, so the literal reads as the thing to type: inside an already
+                    semibold label a bolder word did not stand out. */}
+                Type <span className="cube-rn-text font-mono text-foreground">{requireText}</span>{" "}
+                to confirm
               </>
             )}
           </Label>

@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { createContext, type ReactNode, useContext } from "react";
 import { cn, type SlotNode } from "@/lib/utils";
 
 /**
@@ -195,6 +195,12 @@ function Heading({
  * one line, because the variable is how wide the action is, not the window. The title wraps and
  * never truncates.
  */
+/**
+ * Set by a shell that already insets its content — `Page` — so a `PageHeader` inside it does not
+ * add its own `px-4` and top padding on top, which put the title 16px right of the body under it.
+ */
+export const PageInsetContext = createContext(false);
+
 export function PageHeader({
   contentSlot,
   title,
@@ -209,6 +215,7 @@ export function PageHeader({
   contentClassName,
 }: PageHeaderProps) {
   const { title: titleSize, icon: iconSize, row: rowFloor, bar: barHeight } = LEVELS[level];
+  const inset = useContext(PageInsetContext);
 
   // The rule these apps already follow without having named it: a page header draws a line under
   // itself exactly when nothing else separates it from the body. The list headers, which all
@@ -228,7 +235,11 @@ export function PageHeader({
       className={cn("cube-rn-view", BAR, "h-5 w-72")}
     />
   ) : (
-    <p data-slot="page-header-description" className="cube-rn-text text-foreground/60 text-sm">
+    // `max-w-prose`: under a page-wide header a description could run to 200 characters a line.
+    <p
+      data-slot="page-header-description"
+      className="cube-rn-text max-w-prose text-foreground/60 text-sm"
+    >
       {description}
     </p>
   );
@@ -239,7 +250,13 @@ export function PageHeader({
     <div
       data-slot="page-header"
       aria-busy={loading || undefined}
-      className={cn("cube-rn-view", "min-w-0 flex-col gap-3 px-4 py-4", rule, className)}
+      className={cn(
+        "cube-rn-view",
+        "min-w-0 flex-col gap-3 px-4 py-4",
+        inset && "px-0 pt-0",
+        rule,
+        className,
+      )}
     >
       {breadcrumbsSlot ? (
         <div data-slot="page-header-breadcrumbs" className={cn("cube-rn-view", SLOT, "min-w-0")}>
@@ -251,18 +268,22 @@ export function PageHeader({
         data-slot="page-header-title-row"
         // `content-center`: a wrapping row packs its lines at the start on device and under
         // react-native-web, so the floor was left as an empty band under a lone title (#248).
+        // `items-start`: the action lines up with the title, as CardLayout's does, rather than
+        // floating between the title and the description under it.
         className={cn(
           "cube-rn-view",
-          "flex-row flex-wrap content-center items-center justify-between gap-x-4 gap-y-2",
+          "flex-row flex-wrap content-center items-start justify-between gap-x-4 gap-y-2",
           rowFloor,
         )}
       >
-        {/* `basis-64` is the threshold, and the only number here that is a judgement rather than
-            a measurement: the title keeps at least 16rem or the action wraps under it. `min-w-0`
-            is what then lets the block shrink below its longest word. */}
+        {/* `basis-40` is the threshold, and the only number here that is a judgement rather than
+            a measurement: the title keeps at least 10rem or the action wraps under it. At 16rem
+            any action wider than about 70px dropped under even a one-word title on a phone; 10rem
+            is the floor CardLayout's header already uses. `min-w-0` is what then lets the block
+            shrink below its longest word. */}
         <div
           data-slot="page-header-titles"
-          className="cube-rn-view min-w-0 flex-1 basis-64 flex-col gap-1"
+          className="cube-rn-view min-w-0 flex-1 basis-40 flex-col gap-1"
         >
           <div className="cube-rn-view min-w-0 flex-row items-center gap-2">
             {iconSlot ? (

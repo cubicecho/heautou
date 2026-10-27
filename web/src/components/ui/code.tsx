@@ -258,8 +258,9 @@ export function CodeBlock({
       <div
         data-slot="code-block"
         className={cn(
+          // The tint is the boundary; a border on top of it only darkened the edge.
           "cube-rn-view",
-          "flex-row items-start rounded-md border border-foreground/10 bg-foreground/10",
+          "flex-row items-start rounded-md bg-foreground/10",
           follow && "relative",
           className,
         )}
@@ -275,11 +276,7 @@ export function CodeBlock({
     <CodeBlockTitleContext.Provider value={title}>
       <div
         data-slot="code-block"
-        className={cn(
-          "cube-rn-view",
-          "rounded-md border border-foreground/10 bg-foreground/10",
-          className,
-        )}
+        className={cn("cube-rn-view", "rounded-md bg-foreground/10", className)}
       >
         <div
           data-slot="code-block-header"
@@ -288,7 +285,7 @@ export function CodeBlock({
           className="cube-rn-view min-h-10 flex-row items-center gap-2 border-b border-foreground/10 pl-3"
         >
           <span
-            className={cn("cube-rn-text", ONE_LINE, "shrink text-xs font-medium text-foreground")}
+            className={cn("cube-rn-text", ONE_LINE, "shrink text-xs font-semibold text-foreground")}
           >
             {title}
           </span>

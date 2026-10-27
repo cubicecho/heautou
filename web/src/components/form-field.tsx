@@ -290,11 +290,11 @@ export function FormField({
   );
 
   // One child, so `FieldLabel`'s own `gap-2` — which is there for icons — is not spent between a
-  // word and its asterisk.
+  // word and its asterisk. `ml-1` is a space's width, the gap native's `" *"` leaves.
   const labelText = required ? (
     <span className="min-w-0">
       {label}
-      <span data-slot="form-field-required" aria-hidden="true" className="ml-0.5 text-negative">
+      <span data-slot="form-field-required" aria-hidden="true" className="ml-1 text-negative">
         *
       </span>
     </span>
@@ -386,7 +386,9 @@ export function FormField({
       // `Field` turns the whole field destructive from this attribute, which is the primitive's
       // own error state rather than one invented here.
       data-invalid={shownError ? true : undefined}
-      className={cn("min-w-0", className)}
+      // A checkbox or switch beside a caption with a description lines up with the caption's
+      // first line, as on native, not with the middle of the two-line block.
+      className={cn("min-w-0", orientation === "horizontal" && "items-start", className)}
     >
       {orientation === "horizontal" ? (
         <>
@@ -449,12 +451,11 @@ export function ticks(text: string): ReactNode {
 
     // No background. `code` in shadcn's docs is `bg-foreground/10`, and this lands inside a
     // `text-foreground/60` description — muted on muted is 4.34:1, under the 4.5 a body-size
-    // string needs. Monospace at a hair under the surrounding size says the same thing and stays
-    // readable. The size is there because a monospace face at `1em` reads larger than the sans
-    // beside it.
+    // string needs. Monospace a step under the surrounding size says the same thing and stays
+    // readable: a monospace face at the same size reads larger than the sans beside it.
     return (
       // biome-ignore lint/suspicious/noArrayIndexKey: a span of a split string has no identity but its position
-      <code key={index} className="font-mono text-[0.9em]">
+      <code key={index} className="font-mono text-xs">
         {part}
       </code>
     );

@@ -30,8 +30,23 @@ const CARD = "w-full max-w-sm";
  * `contentSlot`, `footerSlot`, `footerActionsSlot` and the rest — and hands them to it unchanged.
  * `className` is the page around the card; `cardClassName` is the card.
  */
-export function CenteredLayout({ className, cardClassName, ...card }: CenteredLayoutProps) {
-  const body = <CardLayout {...card} className={cn(CARD, cardClassName)} />;
+export function CenteredLayout({
+  className,
+  cardClassName,
+  titleClassName,
+  level = 1,
+  ...card
+}: CenteredLayoutProps) {
+  // The card is the page here, so its title is the page's: an h1 at PageHeader level 1's text-xl,
+  // not a card title barely over the field labels under it. A caller's titleClassName still wins.
+  const body = (
+    <CardLayout
+      {...card}
+      level={level}
+      titleClassName={cn("text-xl", titleClassName)}
+      className={cn(CARD, cardClassName)}
+    />
+  );
   return (
     <main
       data-slot="centered-layout"
