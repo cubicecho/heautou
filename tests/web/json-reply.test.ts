@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { jsonReply, postJson } from '../../web/src/core/json-reply.ts';
+import { jsonReply, postJson, ReplyError } from '../../web/src/core/json-reply.ts';
 
 const HTTP_OK = 200;
 const HTTP_BAD_REQUEST = 400;
@@ -30,6 +30,13 @@ describe('jsonReply', () => {
   it("throws the server's error for a refusal", async () => {
     const refusal = jsonReply(replyOf(HTTP_BAD_REQUEST, { error: 'That name is taken.' }), okSchema);
     await expect(refusal).rejects.toThrow('That name is taken.');
+  });
+
+  it("keeps a refusal's status and its fields besides the error", async () => {
+    const reply = replyOf(HTTP_BAD_REQUEST, { error: 'Start again.', restart: true });
+    const refusal = await jsonReply(reply, okSchema).catch((error: unknown) => error);
+    expect(refusal).toBeInstanceOf(ReplyError);
+    expect(refusal).toMatchObject({ status: HTTP_BAD_REQUEST, fields: { restart: true } });
   });
 
   it('names the status for a refusal that is not JSON', async () => {

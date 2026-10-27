@@ -1,7 +1,7 @@
 import { gunzipSync, gzipSync } from 'node:zlib';
 import { BACKUP_DEFAULTS } from '../../server/core/defaults.ts';
 import { createSecretBox, isSealed, type SecretKeys } from '../../server/core/secret-box.ts';
-import { openServices, type Services } from '../../server/core/services.ts';
+import type { Services } from '../../server/core/services.ts';
 import type { OpenDatabase } from '../../server/db/client.ts';
 import { archivePathOf, DOCUMENT_NAMES, oidcModelDocument } from '../../server/db/documents.ts';
 import { documents, oidcModels, users, webSessions } from '../../server/db/schema.ts';
@@ -20,9 +20,8 @@ import { ClientAuthMethod } from '../../server/store/clients.ts';
 import { UpstreamKind } from '../../server/store/upstreams.ts';
 import { PASSWORD, REDIRECT_URI } from '../browser.ts';
 import { createTestDatabase } from '../db.ts';
-import { newSecretKey, newSecretKeys } from '../helpers.ts';
+import { newSecretKeys, openTestServices, UNSERVED_ISSUER } from '../helpers.ts';
 
-const ISSUER = 'http://127.0.0.1:1/oidc';
 /** The provider session each populated database starts with, standing in for its sessions and tokens. */
 const PROVIDER_SESSION = { model: 'Session', id: 'session-1', payload: { kind: 'Session' }, expiresAt: null };
 
@@ -50,20 +49,14 @@ afterEach(async () => {
 });
 
 /**
- * Opens the services on a database, as a boot does.
+ * Opens the services on a database, as a boot does, and hands them back after the test.
  *
  * @param database - The database.
- * @param [current] - The sealing key, or null for none.
- * @param [previous] - The key before it.
+ * @param [secretKeys] - The sealing keys, or null for none.
  * @returns The services.
  */
-async function boot(
-  database: OpenDatabase,
-  current: Buffer | null = null,
-  previous: Buffer | null = null,
-): Promise<Services> {
-  const secretKeys: SecretKeys | null = current === null ? null : { current, previous };
-  const services = await openServices({ database: database.db, issuer: ISSUER, isProxied: false, secretKeys });
+async function boot(database: OpenDatabase, secretKeys: SecretKeys | null = null): Promise<Services> {
+  const services = await openTestServices(database.db, secretKeys);
   opened.services.push(services);
   return services;
 }
@@ -72,14 +65,14 @@ async function boot(
  * Boots an empty database with a user, a confidential client, a web session, a forward auth session, an audit entry
  * and a provider session in it.
  *
- * @param [key] - The sealing key.
+ * @param [secretKeys] - The sealing keys.
  * @returns The database, its services, and what was made.
  */
-async function populated(key: Buffer | null = null) {
+async function populated(secretKeys: SecretKeys | null = null) {
   const database = await createTestDatabase();
   opened.databases.push(database);
   await database.db.insert(oidcModels).values(PROVIDER_SESSION);
-  const services = await boot(database, key);
+  const services = await boot(database, secretKeys);
   const user = await services.users.create({
     username: 'ada',
     password: PASSWORD,
@@ -143,8 +136,7 @@ async function refusal(run: () => unknown): Promise<string> {
 
 describe('backups', () => {
   it('takes every store, secrets sealed, leaving out web sessions and, unless asked, provider sessions', async () => {
-    const key = newSecretKey();
-    const { services, client } = await populated(key);
+    const { services, client } = await populated(newSecretKeys());
 
     const without = unzip(await services.backup.create({ includeSessions: false }));
     expect(without).toMatchObject({ format: BACKUP_FORMAT, version: BACKUP_VERSION, includesSessions: false });
@@ -181,8 +173,8 @@ describe('backups', () => {
   });
 
   it('round trips through a restore into a running server, signing everyone out', async () => {
-    const key = newSecretKey();
-    const source = await populated(key);
+    const keys = newSecretKeys();
+    const source = await populated(keys);
     const apiIdentifier = 'https://photos-api.home.lan';
     await source.services.apis.create({
       identifier: apiIdentifier,
@@ -192,7 +184,7 @@ describe('backups', () => {
     const archive = await source.services.backup.create({ includeSessions: true });
     const sourceKids = source.services.keys.current().jwks.map((jwk) => jwk.kid);
 
-    const target = await populated(key);
+    const target = await populated(keys);
     await target.services.users.create({ username: 'later', password: PASSWORD, email: '', name: '', groups: [] });
     const restored = await target.services.backup.restore(archive);
 
@@ -203,7 +195,7 @@ describe('backups', () => {
     expect(client?.clientSecret).toBe(source.client.clientSecret);
     expect(target.services.apis.find(apiIdentifier)?.allowedClientIds).toEqual([source.client.clientId]);
     expect(target.services.keys.current().jwks.map((jwk) => jwk.kid)).toEqual(sourceKids);
-    expect(target.services.host.current().issuer).toBe(ISSUER);
+    expect(target.services.host.current().issuer).toBe(UNSERVED_ISSUER);
     // Neither the target's own web sessions nor the source's come back.
     expect(target.services.webSessions.find(target.webSession)).toBeNull();
     expect(target.services.webSessions.find(source.webSession)).toBeNull();
@@ -212,7 +204,7 @@ describe('backups', () => {
       { model: PROVIDER_SESSION.model, id: PROVIDER_SESSION.id },
     ]);
     // The restored data boots on its own.
-    expect((await boot(target.database, key)).users.list().map((user) => user.username)).toEqual(['ada']);
+    expect((await boot(target.database, keys)).users.list().map((user) => user.username)).toEqual(['ada']);
   });
 
   it('restores an archive made before the documents were named for their concept', async () => {
@@ -242,7 +234,7 @@ describe('backups', () => {
   });
 
   it('brings back every store’s data, not only what the target held before', async () => {
-    const key = newSecretKey();
+    const keys = newSecretKeys();
     /**
      * Fills every store a restore reloads, each with values its server is told apart by.
      *
@@ -288,12 +280,12 @@ describe('backups', () => {
       forgotPassword: services.mail.status().options.forgotPassword,
       linkUser: services.passwordLinks.find(token),
     });
-    const source = await populated(key);
+    const source = await populated(keys);
     const sourceToken = await fill(source.services, source.user.id, 'source');
     const expected = read(source.services, source.user.id, sourceToken);
     const archive = await source.services.backup.create({ includeSessions: false });
 
-    const target = await populated(key);
+    const target = await populated(keys);
     await fill(target.services, target.user.id, 'target');
     await target.services.backup.restore(archive);
 
@@ -310,12 +302,12 @@ describe('backups', () => {
   });
 
   it('opens secrets sealed under the previous key, and re-seals them under the current one', async () => {
-    const oldKey = newSecretKey();
-    const source = await populated(oldKey);
+    const old = newSecretKeys();
+    const source = await populated(old);
     const archive = await source.services.backup.create({ includeSessions: false });
-    const newer = newSecretKey();
+    const newer = newSecretKeys();
     const target = await populated(newer);
-    const targetServices = await boot(target.database, newer, oldKey);
+    const targetServices = await boot(target.database, { current: newer.current, previous: old.current });
     await targetServices.backup.restore(archive);
     expect(targetServices.clients.find(source.client.clientId)?.clientSecret).toBe(source.client.clientSecret);
     await targetServices.settled();
@@ -326,9 +318,9 @@ describe('backups', () => {
   });
 
   it('refuses an archive sealed under another key, or when no key is set, writing nothing', async () => {
-    const source = await populated(newSecretKey());
+    const source = await populated(newSecretKeys());
     const archive = await source.services.backup.create({ includeSessions: false });
-    const target = await populated(newSecretKey());
+    const target = await populated(newSecretKeys());
     const before = await target.database.db.select().from(users);
 
     expect(await refusal(() => target.services.backup.restore(archive))).toBe(BackupErrorCode.WrongKey);

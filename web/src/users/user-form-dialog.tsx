@@ -139,7 +139,7 @@ export function UserFormDialog({ user, open, onOpenChange, onInvited }: UserForm
         <>
           <Button variant="outline" onClick={close} content="Cancel" />
           <form.AppForm>
-            <form.SubmitButton content={isEdit ? 'Save changes' : 'Create user'} />
+            <form.SubmitButton requireChanges={isEdit} content={isEdit ? 'Save changes' : 'Create user'} />
           </form.AppForm>
         </>
       )}

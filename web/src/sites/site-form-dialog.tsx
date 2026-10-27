@@ -108,7 +108,7 @@ export function SiteFormDialog({ site, open, onOpenChange, onSaved }: SiteFormDi
         <>
           <Button variant="outline" onClick={close} content="Cancel" />
           <form.AppForm>
-            <form.SubmitButton content={isEdit ? 'Save changes' : 'Add site'} />
+            <form.SubmitButton requireChanges={isEdit} content={isEdit ? 'Save changes' : 'Add site'} />
           </form.AppForm>
         </>
       )}

@@ -1,12 +1,11 @@
 import { eq } from 'drizzle-orm';
 import { isSealed, SecretKeyError } from '../../server/core/secret-box.ts';
-import { openServices } from '../../server/core/services.ts';
 import { DOCUMENT_NAMES } from '../../server/db/documents.ts';
 import { documents } from '../../server/db/schema.ts';
 import { AuditType } from '../../server/store/audit.ts';
 import { BACKUP_LAYOUT, BackupErrorCode, readBackup } from '../../server/store/backup.ts';
 import { adminGql, type Browser, PASSWORD, signInAsAdmin } from '../browser.ts';
-import { createTestUser, newSecretKeys, startTestApp, type TestApp } from '../helpers.ts';
+import { createTestUser, newSecretKeys, openTestServices, startTestApp, type TestApp } from '../helpers.ts';
 import { createFakeTransport, type FakeTransport, TEST_SERVER, waitFor } from './fake-transport.ts';
 
 const MAIL = `{ mail { source isConfigured server { host port secure user hasPassword from } forgotPassword
@@ -91,14 +90,7 @@ describe('email', () => {
     // Booting again with another key stops, without touching the stored settings.
     await app.services.settled();
     const before = await storedMail(app);
-    await expect(
-      openServices({
-        database: app.database.db,
-        issuer: app.services.issuer,
-        isProxied: false,
-        secretKeys: newSecretKeys(),
-      }),
-    ).rejects.toThrow(SecretKeyError);
+    await expect(openTestServices(app.database.db, newSecretKeys())).rejects.toThrow(SecretKeyError);
     expect(await storedMail(app)).toEqual(before);
 
     const log = await app.services.audit.list({});

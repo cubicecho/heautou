@@ -88,7 +88,7 @@ average 13); every failing file passes alone. See T5 and T6.
 | T2 | Test [pin] | Pins that boot refuses a wrong key for factors and upstreams too | Covers two of five sealed stores left untested | — | done |
 | T7 | Test [reuse] | Moves the copied `withTotp` helper into the shared authenticator helper | Removes a copy | — | done |
 | T8 | Test [reuse] | One `signInToWebApp` helper in the browser helpers, used by `signInAsAdmin` too | Removes two copies | — | done |
-| T9 | Test [reuse] | One test-services opener instead of three | Removes copies that differ in cleanup | — | open |
+| T9 | Test [reuse] | One test-services opener instead of three | Removes copies that differ in cleanup | — | done |
 | T10 | Test [readability] | Types the device flow test's reply once instead of casting it nine times | P17 in tests | — | done |
 | T11 | Test [readability] | Replaces fixed 50 ms sleeps in "nothing was sent" checks with a signal the work finished | Those tests prove something under load | (unverified seam) | done |
 | T12 | Test [readability] | Keeps each backup behavior asserted in one test file | One layer per behavior; a shorter slow file | — | done |
@@ -98,15 +98,15 @@ average 13); every failing file passes alone. See T5 and T6.
 | R20 | Refactor [reuse] | One web module for query keys and the refetch helper | Removes an exact copy and a duplicated key | — | done |
 | R21 | Refactor [consistency] | Splits the web's 833-line admin hooks module by concept | The web module most files import becomes findable | R20 | done |
 | R22 | Refactor [reuse] | Shares the `{ok}` and `{redirectTo}` reply schemas declared five times | Removes copies | — | done |
-| B5 | Bug (question) | Asks whether the sign-in page's reply reader is meant to differ from the shared one | Settles R23's shape | — | open |
-| R23 | Refactor [reuse] | Moves the sign-in page's fetching into a core module on the shared reply reader | Removes a near copy | T13, B5 | open |
+| B5 | Bug (question) | Asks whether the sign-in page's reply reader is meant to differ from the shared one | Settles R23's shape | — | done |
+| R23 | Refactor [reuse] | Moves the sign-in page's fetching into a core module on the shared reply reader | Removes a near copy | T13, B5 | done |
 | R24 | Refactor [reuse] | One helper reads a parameter from the URL fragment | Removes an exact copy | — | done |
 | R25 | Refactor [readability] | Moves the error-message and claims helpers out of the web's `lists` module | The module says what it holds | — | done |
 | R26 | Refactor [reuse] | One "not saved" alert for the five form dialogs | Removes five copies | — | done |
 | R27 | Refactor [consistency] | Moves the five settings sections out of the settings route into concept folders, like mail and backup | Same shape as their siblings | — | done |
 | B1 | Bug (question) | Asks whether the generated activity list should wait for audit entries still queued, as the subscription does | The list shows a change just made | — | done |
 | B3 | Bug | Notes that nothing stops two servers sharing one Postgres, which the in-memory documents can't survive | Prevents silent data loss | — | done |
-| B6 | Bug (question) | Asks whether edit dialogs should agree on keeping Save off until something changes | Consistency; may belong to the UX pass | — | open |
+| B6 | Bug (question) | Asks whether edit dialogs should agree on keeping Save off until something changes | Consistency; may belong to the UX pass | — | done |
 | B7 | Bug | The overview page always warns that secrets are plain text, even when they are sealed | The warning means something | — | done |
 | D1 | Doc | Makes one project guide the source: AGENTS.md still describes flat JSON files and modules that are gone | Agents stop reading a wrong map | — | done |
 | D2 | Doc | Brings CLAUDE.md up to date: device flow, pairing offers, code exchange and pages modules, a repeated phrase, `*.json` locations | The guide matches the code | D1 | done |
@@ -146,7 +146,7 @@ average 13); every failing file passes alone. See T5 and T6.
 | D9 | Doc · low value | The `invalid_scope` message lists only the built-in scopes, not an API's | Matches the code | — | done |
 | D10 | Doc · low value | Fixes `refetching`'s `@param` name | Matches the signature | R20 | done |
 | B9 | Bug · low value | The key store's error still says "The key file was emptied while the server ran." | The message names what is there | — | done |
-| B10 | Bug (question) · low value | Asks whether the upstream id field should also hold ids to `UPSTREAM_DEFAULTS.maxIdLength`, as the server does | Same drift as B4, for the id's length | — | open |
+| B10 | Bug (question) · low value | Asks whether the upstream id field should also hold ids to `UPSTREAM_DEFAULTS.maxIdLength`, as the server does | Same drift as B4, for the id's length | — | done |
 | R41 | Refactor [pattern] · low value | Splits `server/admin/pictures.ts`'s own-picture routes into `server/account/` if the picture routes grow apart | Finishes R15's split, which left them together | — | open |
 | R42 | Refactor [simplify] · low value | Lets the bundler drop the `defaults.ts` groups the web doesn't read (`/* @__PURE__ */` on each `Object.freeze`) | About 3 kB of the web bundle | — | done |
 

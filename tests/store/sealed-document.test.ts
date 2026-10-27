@@ -1,12 +1,6 @@
 import { eq } from 'drizzle-orm';
-import {
-  createSecretBox,
-  isSealed,
-  type SecretBox,
-  SecretKeyErrorCode,
-  type SecretKeys,
-} from '../../server/core/secret-box.ts';
-import { openServices, type Services } from '../../server/core/services.ts';
+import { createSecretBox, isSealed, type SecretBox, SecretKeyErrorCode } from '../../server/core/secret-box.ts';
+import type { Services } from '../../server/core/services.ts';
 import type { Database, OpenDatabase } from '../../server/db/client.ts';
 import { createWriteQueue, openDocument } from '../../server/db/document.ts';
 import { DOCUMENT_NAMES, KEYS_DOCUMENT } from '../../server/db/documents.ts';
@@ -15,9 +9,8 @@ import { ClientAuthMethod } from '../../server/store/clients.ts';
 import { UpstreamKind } from '../../server/store/upstreams.ts';
 import { payloadOf, REDIRECT_URI, signInForTokens } from '../browser.ts';
 import { createTestDatabase } from '../db.ts';
-import { createTestUser, newSecretKey, newSecretKeys, startTestApp } from '../helpers.ts';
+import { createTestUser, newSecretKeys, openTestServices, startTestApp } from '../helpers.ts';
 
-const ISSUER = 'http://127.0.0.1:1/oidc';
 const TOTP_SECRET = 'JBSWY3DPEHPK3PXP';
 const UPSTREAM_SECRET = 'g-secret';
 
@@ -32,21 +25,6 @@ const OTHER_SEALED_STORES: { store: string; reseal: (db: Database, box: SecretBo
     reseal: async (db, box) => db.update(upstreams).set({ clientSecret: box.seal(UPSTREAM_SECRET) }),
   },
 ];
-
-/**
- * Opens the services on a database, as a boot does, and waits for what the boot writes.
- *
- * @param db - The database.
- * @param [current] - The sealing key, or null for none.
- * @param [previous] - The key before it.
- * @returns The services.
- */
-async function boot(db: Database, current: Buffer | null = null, previous: Buffer | null = null): Promise<Services> {
-  const secretKeys: SecretKeys | null = current === null ? null : { current, previous };
-  const services = await openServices({ database: db, issuer: ISSUER, isProxied: false, secretKeys });
-  await services.settled();
-  return services;
-}
 
 /**
  * Reads the stored clients and keys, which hold secrets, as the database has them.
@@ -105,14 +83,14 @@ describe('secrets at rest', () => {
 
   it('keeps plain text without a key, then seals it on the first boot with one', async () => {
     const { db } = database;
-    const plain = await boot(db);
+    const plain = await openTestServices(db);
     const secret = (await addClient(plain)).clientSecret ?? '';
     const privateHalf = plain.keys.current().jwks[0]?.d ?? '';
     const cookieKey = plain.keys.current().cookieKeys[0] ?? '';
     expect(await storedSecrets(db)).toContain(secret);
     expect((await storedSecretValues(db)).some(isSealed)).toBe(false);
 
-    const sealed = await boot(db, newSecretKey());
+    const sealed = await openTestServices(db, newSecretKeys());
     const stored = await storedSecrets(db);
     for (const value of [secret, privateHalf, cookieKey]) {
       expect(stored).not.toContain(value);
@@ -125,10 +103,10 @@ describe('secrets at rest', () => {
 
   it('refuses a wrong key, or no key, without changing the stored data', async () => {
     const { db } = database;
-    await addClient(await boot(db, newSecretKey()));
+    await addClient(await openTestServices(db, newSecretKeys()));
     const before = await storedSecrets(db);
-    await expect(boot(db, newSecretKey())).rejects.toMatchObject({ code: SecretKeyErrorCode.Wrong });
-    await expect(boot(db)).rejects.toMatchObject({ code: SecretKeyErrorCode.Missing });
+    await expect(openTestServices(db, newSecretKeys())).rejects.toMatchObject({ code: SecretKeyErrorCode.Wrong });
+    await expect(openTestServices(db)).rejects.toMatchObject({ code: SecretKeyErrorCode.Missing });
     expect(await storedSecrets(db)).toBe(before);
   });
 
@@ -136,8 +114,8 @@ describe('secrets at rest', () => {
     'refuses a key that does not open the $store, without changing them',
     async ({ reseal }) => {
       const { db } = database;
-      const key = newSecretKey();
-      const services = await boot(db, key);
+      const keys = newSecretKeys();
+      const services = await openTestServices(db, keys);
       await services.factors.setTotp('u1', TOTP_SECRET, 0);
       await services.upstreams.create({
         id: 'google',
@@ -157,19 +135,20 @@ describe('secrets at rest', () => {
       const storedRows = async (): Promise<string> =>
         JSON.stringify([await db.select().from(totpFactors), await db.select().from(upstreams)]);
       const before = await storedRows();
-      await expect(boot(db, key)).rejects.toMatchObject({ code: SecretKeyErrorCode.Wrong });
+      await expect(openTestServices(db, keys)).rejects.toMatchObject({ code: SecretKeyErrorCode.Wrong });
       expect(await storedRows()).toBe(before);
     },
   );
 
   it('re-seals under a new key while the old one is the previous key', async () => {
     const { db } = database;
-    const old = newSecretKey();
-    const { clientSecret } = await addClient(await boot(db, old));
-    const next = newSecretKey();
-    await boot(db, next, old);
-    expect((await boot(db, next)).clients.list()[0]?.clientSecret).toBe(clientSecret);
-    await expect(boot(db, old)).rejects.toMatchObject({ code: SecretKeyErrorCode.Wrong });
+    const old = newSecretKeys();
+    const { clientSecret } = await addClient(await openTestServices(db, old));
+    const next = newSecretKeys(old.current);
+    await openTestServices(db, next);
+    const nextAlone = { current: next.current, previous: null };
+    expect((await openTestServices(db, nextAlone)).clients.list()[0]?.clientSecret).toBe(clientSecret);
+    await expect(openTestServices(db, old)).rejects.toMatchObject({ code: SecretKeyErrorCode.Wrong });
   });
 
   it('signs a user in with sealed keys and secrets, and writes new secrets sealed', async () => {
