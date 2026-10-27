@@ -44,6 +44,17 @@ export function ForgotPassword({ uid, onBack }: ForgotPasswordProps) {
           ? 'If an account matches, a link to choose a new password is on its way to its email address. It works once.'
           : `Type the username or email address of your ${brandName} account. We email a link to choose a new password.`
       }
+      wrapperSlot={
+        isAsking
+          ? (parts, { className }) => (
+              <form.AppForm>
+                <FormElement id={FORM_ID} onSubmit={() => form.handleSubmit()} className={className}>
+                  {parts}
+                </FormElement>
+              </form.AppForm>
+            )
+          : undefined
+      }
       contentSlot={
         isSent ? (
           <Alert
@@ -52,7 +63,7 @@ export function ForgotPassword({ uid, onBack }: ForgotPasswordProps) {
             description="Open the link on this device to come back to this sign-in. No email? Check the spelling, or ask an admin for a link."
           />
         ) : (
-          <FormElement id={FORM_ID} onSubmit={() => form.handleSubmit()} className="grid gap-4">
+          <div className="grid gap-4">
             <InputField
               form={form}
               name="identifier"
@@ -65,17 +76,13 @@ export function ForgotPassword({ uid, onBack }: ForgotPasswordProps) {
             {ask.error !== null && (
               <Alert variant="destructive" title="No link sent" description={messageOf(ask.error)} />
             )}
-          </FormElement>
+          </div>
         )
       }
       footerActionsSlot={
         <>
           <Button variant="outline" onClick={onBack} content="Back to sign in" />
-          {isAsking && (
-            <form.AppForm>
-              <form.SubmitButton content="Send link" />
-            </form.AppForm>
-          )}
+          {isAsking && <form.SubmitButton content="Send link" />}
         </>
       }
     />

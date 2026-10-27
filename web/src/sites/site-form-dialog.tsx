@@ -56,8 +56,15 @@ export function SiteFormDialog({ site, open, onOpenChange, onSaved }: SiteFormDi
       title={isEdit ? `Edit ${site.name}` : 'New protected site'}
       description="A site behind your reverse proxy that only signed-in users may reach."
       hasUnsavedChanges={() => form.state.isDefaultValue === false}
+      wrapperSlot={(parts, { className }) => (
+        <form.AppForm>
+          <FormElement onSubmit={() => form.handleSubmit()} className={className}>
+            {parts}
+          </FormElement>
+        </form.AppForm>
+      )}
       contentSlot={
-        <FormElement onSubmit={() => form.handleSubmit()} className="grid gap-4">
+        <div className="grid gap-4">
           <InputField
             form={form}
             name="name"
@@ -102,14 +109,12 @@ export function SiteFormDialog({ site, open, onOpenChange, onSaved }: SiteFormDi
             description="A user who signed in with a password alone is asked to sign in again with their authenticator app or passkey. One with no second factor is turned away."
           />
           <SaveFailure error={failure} />
-        </FormElement>
+        </div>
       }
       footerActionsSlot={(close) => (
         <>
           <Button variant="outline" onClick={close} content="Cancel" />
-          <form.AppForm>
-            <form.SubmitButton requireChanges={isEdit} content={isEdit ? 'Save changes' : 'Add site'} />
-          </form.AppForm>
+          <form.SubmitButton requireChanges={isEdit} content={isEdit ? 'Save changes' : 'Add site'} />
         </>
       )}
     />

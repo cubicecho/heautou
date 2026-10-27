@@ -172,8 +172,15 @@ export function UpstreamFormDialog({ upstream, open, onOpenChange }: UpstreamFor
       description="Lets users sign in with an account they have elsewhere, such as Google, GitHub or a company identity provider."
       size="lg"
       hasUnsavedChanges={() => form.state.isDefaultValue === false}
+      wrapperSlot={(parts, { className }) => (
+        <form.AppForm>
+          <FormElement onSubmit={() => form.handleSubmit()} className={className}>
+            {parts}
+          </FormElement>
+        </form.AppForm>
+      )}
       contentSlot={
-        <FormElement onSubmit={() => form.handleSubmit()} className="grid gap-4">
+        <div className="grid gap-4">
           {isEdit ? (
             <SelectField form={form} name="kind" label="Kind" options={UPSTREAM_KIND_OPTIONS} />
           ) : (
@@ -375,14 +382,12 @@ export function UpstreamFormDialog({ upstream, open, onOpenChange }: UpstreamFor
             )}
           </form.Subscribe>
           <SaveFailure error={failure} />
-        </FormElement>
+        </div>
       }
       footerActionsSlot={(close) => (
         <>
           <Button variant="outline" onClick={close} content="Cancel" />
-          <form.AppForm>
-            <form.SubmitButton requireChanges={isEdit} content={isEdit ? 'Save changes' : 'Add provider'} />
-          </form.AppForm>
+          <form.SubmitButton requireChanges={isEdit} content={isEdit ? 'Save changes' : 'Add provider'} />
         </>
       )}
     />

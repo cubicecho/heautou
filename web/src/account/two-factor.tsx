@@ -118,9 +118,16 @@ function TotpSetupDialog({ onOpenChange, onCodes }: TotpSetupDialogProps) {
       onOpenChange={onOpenChange}
       title="Set up an authenticator app"
       description="Scan the code with an app such as Aegis, 2FAS, Google Authenticator or a password manager, then type the code it shows."
+      wrapperSlot={(parts, { className }) => (
+        <form.AppForm>
+          <FormElement onSubmit={() => form.handleSubmit()} className={className}>
+            {parts}
+          </FormElement>
+        </form.AppForm>
+      )}
       contentSlot={
         start.error === null ? (
-          <FormElement onSubmit={() => form.handleSubmit()} className="grid gap-4">
+          <div className="grid gap-4">
             {qr.data === undefined ? (
               <Spinner />
             ) : (
@@ -152,7 +159,7 @@ function TotpSetupDialog({ onOpenChange, onCodes }: TotpSetupDialogProps) {
             {confirm.error !== null && (
               <Alert variant="destructive" title="Not turned on" description={messageOf(confirm.error)} />
             )}
-          </FormElement>
+          </div>
         ) : (
           <Alert variant="destructive" title="Could not start" description={messageOf(start.error)} />
         )
@@ -160,9 +167,7 @@ function TotpSetupDialog({ onOpenChange, onCodes }: TotpSetupDialogProps) {
       footerActionsSlot={(close) => (
         <>
           <Button variant="outline" onClick={close} content="Cancel" />
-          <form.AppForm>
-            <form.SubmitButton content="Turn on" />
-          </form.AppForm>
+          <form.SubmitButton content="Turn on" />
         </>
       )}
     />
@@ -200,8 +205,15 @@ function AddPasskeyDialog({ onOpenChange, onCodes }: AddPasskeyDialogProps) {
       onOpenChange={onOpenChange}
       title="Add a passkey"
       description="Your browser or password manager makes the passkey and asks for your fingerprint, face or PIN to use it."
+      wrapperSlot={(parts, { className }) => (
+        <form.AppForm>
+          <FormElement onSubmit={() => form.handleSubmit()} className={className}>
+            {parts}
+          </FormElement>
+        </form.AppForm>
+      )}
       contentSlot={
-        <FormElement onSubmit={() => form.handleSubmit()} className="grid gap-4">
+        <div className="grid gap-4">
           <InputField
             form={form}
             name="name"
@@ -213,14 +225,12 @@ function AddPasskeyDialog({ onOpenChange, onCodes }: AddPasskeyDialogProps) {
           {add.error !== null && (
             <Alert variant="destructive" title="Passkey not added" description={messageOf(add.error)} />
           )}
-        </FormElement>
+        </div>
       }
       footerActionsSlot={(close) => (
         <>
           <Button variant="outline" onClick={close} content="Cancel" />
-          <form.AppForm>
-            <form.SubmitButton content="Add passkey" />
-          </form.AppForm>
+          <form.SubmitButton content="Add passkey" />
         </>
       )}
     />
@@ -264,8 +274,15 @@ function PasswordConfirmDialog(props: PasswordConfirmDialogProps) {
       onOpenChange={onOpenChange}
       title={title}
       description={description}
+      wrapperSlot={(parts, { className }) => (
+        <form.AppForm>
+          <FormElement onSubmit={() => form.handleSubmit()} className={className}>
+            {parts}
+          </FormElement>
+        </form.AppForm>
+      )}
       contentSlot={
-        <FormElement onSubmit={() => form.handleSubmit()} className="grid gap-4">
+        <div className="grid gap-4">
           <PasswordField
             form={form}
             name="password"
@@ -275,14 +292,12 @@ function PasswordConfirmDialog(props: PasswordConfirmDialogProps) {
             autoFocus
           />
           {failure !== null && <Alert variant="destructive" description={failure} />}
-        </FormElement>
+        </div>
       }
       footerActionsSlot={(close) => (
         <>
           <Button variant="outline" onClick={close} content="Cancel" />
-          <form.AppForm>
-            <form.SubmitButton variant={isDestructive ? 'destructive' : 'default'} content={confirmLabel} />
-          </form.AppForm>
+          <form.SubmitButton variant={isDestructive ? 'destructive' : 'default'} content={confirmLabel} />
         </>
       )}
     />

@@ -38,8 +38,15 @@ export function PasswordDialog({ user, open, onOpenChange }: PasswordDialogProps
       title={`Set ${user.username}'s password`}
       description="The old password stops working. Sessions already signed in stay signed in."
       hasUnsavedChanges={() => form.state.isDefaultValue === false}
+      wrapperSlot={(parts, { className }) => (
+        <form.AppForm>
+          <FormElement onSubmit={() => form.handleSubmit()} className={className}>
+            {parts}
+          </FormElement>
+        </form.AppForm>
+      )}
       contentSlot={
-        <FormElement onSubmit={() => form.handleSubmit()} className="grid gap-4">
+        <div className="grid gap-4">
           <PasswordField
             form={form}
             name="password"
@@ -54,14 +61,12 @@ export function PasswordDialog({ user, open, onOpenChange }: PasswordDialogProps
           {setPassword.error !== null && (
             <Alert variant="destructive" title="Password not set" description={messageOf(setPassword.error)} />
           )}
-        </FormElement>
+        </div>
       }
       footerActionsSlot={(close) => (
         <>
           <Button variant="outline" onClick={close} content="Cancel" />
-          <form.AppForm>
-            <form.SubmitButton content="Set password" />
-          </form.AppForm>
+          <form.SubmitButton content="Set password" />
         </>
       )}
     />
