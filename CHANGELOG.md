@@ -1,3 +1,10 @@
+# [1.21.0](https://github.com/cubicecho/heautou/compare/v1.20.4...v1.21.0) (2026-11-06)
+
+
+### Features
+
+* **server:** reset a forgotten admin password from the environment ([a23144b](https://github.com/cubicecho/heautou/commit/a23144bfb9fffeee982ba7c970e124e328e75497))
+
 ## [1.20.4](https://github.com/cubicecho/heautou/compare/v1.20.3...v1.20.4) (2026-10-27)
 
 
