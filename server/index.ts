@@ -1,7 +1,9 @@
 // Boot only. Preflight is the first import: it exits with a sentence when the configuration is unusable.
 import './core/preflight.ts';
 import { adminUrls } from './admin/admin-client.ts';
+import { AdminPasswordResetOutcome } from './admin/password-reset.ts';
 import {
+  adminPasswordReset,
   databaseUrl,
   dataDir,
   dbConnectTimeoutMs,
@@ -32,6 +34,16 @@ import { cookieDomainProblem } from './store/protected-sites.ts';
 
 const LISTEN_HOST = '0.0.0.0';
 const SECONDS_PER_MINUTE = 60;
+
+/** How each outcome of `RESET_ADMIN_PASSWORD` is logged: one that changed nothing it should have is an error. */
+const RESET_LOGS: Record<AdminPasswordResetOutcome, (line: string) => void> = {
+  [AdminPasswordResetOutcome.Reset]: console.warn,
+  [AdminPasswordResetOutcome.AlreadyUsed]: console.warn,
+  [AdminPasswordResetOutcome.NotAnAdmin]: console.error,
+  [AdminPasswordResetOutcome.NoAdmin]: console.error,
+  [AdminPasswordResetOutcome.SeveralAdmins]: console.error,
+  [AdminPasswordResetOutcome.Refused]: console.error,
+};
 
 const sealingKeys = secretKeys();
 const bucket = s3Config();
@@ -93,6 +105,7 @@ async function openOrExit(database: OpenDatabase): Promise<Services> {
       objectStorage: bucket === null ? null : createObjectStorage(bucket),
       proxyCookieDomain: forwardAuthCookieDomain(),
       trustedProxies: forwardAuthTrustedProxies(),
+      adminPasswordReset: adminPasswordReset(),
     });
   } catch (error) {
     if (error instanceof SecretKeyError) {
@@ -110,6 +123,11 @@ if (sealingKeys === null) {
   console.warn(
     `[boot] SECRET_KEY is not set: client secrets and signing keys are stored in plain text in ${database.label}. Set SECRET_KEY or SECRET_KEY_FILE to seal them.`,
   );
+}
+
+const reset = services.adminPasswordReset;
+if (reset !== null) {
+  RESET_LOGS[reset.outcome](`[reset] ${reset.message}`);
 }
 
 const environmentDomain = services.forwardAuth.environmentCookieDomain;

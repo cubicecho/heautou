@@ -42,7 +42,7 @@ Who can change things, and through what. Read from the guards, not the docs.
 | App (client) | A registered OIDC client | `/oidc/*` (oidc-provider) | Its own grants and tokens; with a setup URL's token its own registration (RFC 7591), then its registration through RFC 7592 |
 | Reverse proxy | An address `createProxyTrust` believes | `/auth/verify`, `/auth/sign-in`, `/auth/callback`, `/auth/sign-out` | Proxy sessions (by signing a user in or out) |
 | Upstream provider | Another OIDC provider or GitHub | `/upstream/:id/callback` | Nothing itself; its answer may create a user or link an identity, as the upstream's settings allow |
-| The server | The running process | Boot and timers | Makes keys on first boot, rotates them at boot when due, imports an older data directory once, prunes the audit log |
+| The server | The running process | Boot and timers | Makes keys on first boot, rotates them at boot when due, imports an older data directory once, sets an admin's password from `RESET_ADMIN_PASSWORD` once, prunes the audit log |
 | Shell operator | Someone with the data, the server stopped | `npm run backup`, `npm run db:migrate` | Replaces all data from an archive; applies migrations |
 
 ## Lifecycles
@@ -219,6 +219,8 @@ Owner: `server/store/audit.ts`.
   breach check. Owner: `server/core/password-policy.ts`, `server/store/settings.ts`.
 - **Setup (first admin):** making the first admin while none exists: free for ten minutes
   after boot, then with the token the boot log prints. Owner: `server/admin/setup.ts`.
+- **Admin password reset:** an operator who can't sign in puts a new password for an admin in
+  the environment, and the next start sets it, once. Owner: `server/admin/password-reset.ts`.
 - **Web session:** a browser signed in to heautou's own web app: the admin UI for an admin,
   the account page for anyone. Owner: `server/store/web-sessions.ts` (`services.webSessions`).
   Its rows are in the `web_sessions` table and its cookie is `heautou_session`. Its document

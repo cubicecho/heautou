@@ -2,6 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
+import type { AdminPasswordReset } from '../admin/password-reset.ts';
 import { DATABASE_DEFAULTS, HTTP_DEFAULTS, OBJECT_STORAGE_DEFAULTS } from './defaults.ts';
 import { parseSecretKey, SecretKeyError, SecretKeyErrorCode, type SecretKeys } from './secret-box.ts';
 
@@ -215,6 +216,21 @@ export const databaseUrl = (): string => {
  */
 export const dbConnectTimeoutMs = (): number =>
   envNumber(process.env.DB_CONNECT_TIMEOUT_MS, DATABASE_DEFAULTS.connectTimeoutMs);
+
+/**
+ * A new password for an admin who lost theirs, which boot sets once.
+ *
+ * @returns `RESET_ADMIN_PASSWORD` (or the file `RESET_ADMIN_PASSWORD_FILE` names) and `RESET_ADMIN_USERNAME`, or null
+ * when no password is set.
+ */
+export const adminPasswordReset = (): AdminPasswordReset | null => {
+  const password = envOrFile('RESET_ADMIN_PASSWORD');
+  if (password === '') {
+    return null;
+  }
+  const username = (process.env.RESET_ADMIN_USERNAME ?? '').trim();
+  return { username: username === '' ? null : username, password };
+};
 
 /**
  * The bucket profile pictures are kept in.

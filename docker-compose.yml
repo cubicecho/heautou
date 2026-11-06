@@ -16,6 +16,9 @@ services:
       SECRET_KEY: ${SECRET_KEY:-}
       # Unset keeps the data in PGlite under /data. docker-compose.postgres.yml adds a Postgres and sets it.
       DATABASE_URL: ${DATABASE_URL:-}
+      # A forgotten admin password, set once on the next start; see .env.example. Remove both afterwards.
+      RESET_ADMIN_PASSWORD: ${RESET_ADMIN_PASSWORD:-}
+      RESET_ADMIN_USERNAME: ${RESET_ADMIN_USERNAME:-}
       NODE_ENV: production
     ports:
       - "${PORT:-3000}:3000"

@@ -1,11 +1,13 @@
 import type Provider from 'oidc-provider';
 import type { Client, KoaContextWithOIDC } from 'oidc-provider';
 import { adminClientMetadata, adminUrls } from '../admin/admin-client.ts';
+import { type AdminPasswordReset, type AdminPasswordResetResult, resetAdminPassword } from '../admin/password-reset.ts';
 import { createSetupGate, type SetupGate } from '../admin/setup.ts';
 import type { Database } from '../db/client.ts';
 import { createDataSet, type DataSet } from '../db/data-set.ts';
 import { createWriteQueue, type DataDocument, type DocumentStore, openDocument } from '../db/document.ts';
 import {
+  ADMIN_PASSWORD_RESET_DOCUMENT,
   APIS_DOCUMENT,
   BRANDING_DOCUMENT,
   CLIENTS_DOCUMENT,
@@ -106,6 +108,8 @@ export interface ServiceSettings {
   proxyCookieDomain?: string | null;
   /** `FORWARD_AUTH_TRUSTED_PROXIES`. Unset or null falls back to `TRUST_PROXY` and loopback. */
   trustedProxies?: readonly string[] | null;
+  /** `RESET_ADMIN_PASSWORD` and `RESET_ADMIN_USERNAME`, applied once at boot. Unset or null, nothing is reset. */
+  adminPasswordReset?: AdminPasswordReset | null;
 }
 
 /** Everything the HTTP app is built from. */
@@ -164,6 +168,8 @@ export interface Services {
   proxySessions: ProxySessionStore;
   /** Forward auth's cookie domain and trusted proxies. */
   forwardAuth: ForwardAuthConfig;
+  /** What became of the admin password reset in the environment, for boot to log. Null when none was set. */
+  adminPasswordReset: AdminPasswordResetResult | null;
 }
 
 /**
@@ -255,6 +261,18 @@ export async function openServices(settings: ServiceSettings): Promise<Services>
     audit,
   });
   sendNotifications({ audit, mailer: mail, users, branding });
+  const passwordPolicy = createPasswordPolicy(providerSettings.passwordRules, {}, settings.fetchRange);
+  const reset = settings.adminPasswordReset ?? null;
+  const adminPasswordReset =
+    reset === null
+      ? null
+      : await resetAdminPassword(reset, {
+          document: await openDocument(store, ADMIN_PASSWORD_RESET_DOCUMENT),
+          users,
+          passwordPolicy,
+          passwordLinks,
+          audit,
+        });
   const protectedSites = createProtectedSiteStore(tracked(await openDocument(store, PROTECTED_SITES_DOCUMENT)), {
     issuerHost: forwardAuthUrls(settings.issuer).host,
     now,
@@ -353,7 +371,7 @@ export async function openServices(settings: ServiceSettings): Promise<Services>
     }),
     branding,
     settings: providerSettings,
-    passwordPolicy: createPasswordPolicy(providerSettings.passwordRules, {}, settings.fetchRange),
+    passwordPolicy,
     audit,
     setup,
     keys,
@@ -366,5 +384,6 @@ export async function openServices(settings: ServiceSettings): Promise<Services>
     protectedSites,
     proxySessions,
     forwardAuth,
+    adminPasswordReset,
   };
 }
