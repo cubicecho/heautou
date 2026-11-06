@@ -22,9 +22,12 @@ npm run db:generate          # after changing server/db/schema.ts: writes the mi
 npm run db:migrate           # applies the migrations without starting the server (boot applies them too)
 ```
 
-`.env.example` documents the `S3_` variables (profile pictures; each with a `_FILE` form), `ISSUER_URL`, `PORT`, `DATA_DIR`, `DATABASE_URL` (and its `_FILE` form) and `DB_CONNECT_TIMEOUT_MS`, `TRUST_PROXY` and `SECRET_KEY` (and its `_FILE` and `_PREVIOUS` forms), and the optional `SMTP_URL` (or `SMTP_HOST` and its parts) and `SMTP_FROM`. While there is no admin the app
+`.env.example` documents the `S3_` variables (profile pictures; each with a `_FILE` form), `ISSUER_URL`, `PORT`, `DATA_DIR`, `DATABASE_URL` (and its `_FILE` form) and `DB_CONNECT_TIMEOUT_MS`, `TRUST_PROXY` and `SECRET_KEY` (and its `_FILE` and `_PREVIOUS` forms), the optional `SMTP_URL` (or `SMTP_HOST` and its parts) and `SMTP_FROM`, and `RESET_ADMIN_PASSWORD` (and its `_FILE` form) with `RESET_ADMIN_USERNAME`. While there is no admin the app
 shows `/setup`: a new admin needs nothing for 10 minutes after boot (`ADMIN_DEFAULTS.setupWindowSeconds`); after that,
-or to promote an existing user, it needs the token the boot log prints.
+or to promote an existing user, it needs the token the boot log prints. An admin who forgot their password sets
+`RESET_ADMIN_PASSWORD` and restarts: `server/admin/password-reset.ts` sets it once at boot (through the password
+rules, audited as `user_password_set` with no actor), and remembers a hash of the value in the `admin-password-reset`
+document, which backups and restores leave alone, so the same value is never applied again.
 
 ## CI and releases
 

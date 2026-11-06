@@ -3,6 +3,7 @@
 // lacks the way the store did when it read one.
 import { eq } from 'drizzle-orm';
 import type { AdapterPayload } from 'oidc-provider';
+import type { AdminPasswordResetDocument } from '../admin/password-reset.ts';
 import type { ModelDocument } from '../oidc/adapter.ts';
 import type { Api } from '../store/apis.ts';
 import type { Branding } from '../store/branding.ts';
@@ -67,6 +68,7 @@ export const DOCUMENT_NAMES = {
   mail: 'mail',
   protectedSites: 'protected-sites',
   proxySessions: 'proxy-sessions',
+  adminPasswordReset: 'admin-password-reset',
 } as const;
 
 /** The directory oidc-provider's models were kept in, one file per model. */
@@ -667,6 +669,11 @@ export const KEYS_DOCUMENT = singleDocument<ProviderKeys | null>(DOCUMENT_NAMES.
 export const BRANDING_DOCUMENT = singleDocument<Partial<Branding>>(DOCUMENT_NAMES.branding, {});
 export const SETTINGS_DOCUMENT = singleDocument<SettingsDocument>(DOCUMENT_NAMES.settings, {});
 export const MAIL_DOCUMENT = singleDocument<MailDocument>(DOCUMENT_NAMES.mail, {});
+/** Not in `DOCUMENT_MAPPINGS`: it is about this server's environment, so backups and restores leave it alone. */
+export const ADMIN_PASSWORD_RESET_DOCUMENT = singleDocument<AdminPasswordResetDocument>(
+  DOCUMENT_NAMES.adminPasswordReset,
+  {},
+);
 
 /**
  * Lays out one oidc-provider model's entries.
@@ -717,7 +724,10 @@ export function modelOfFile(file: string): string | null {
   return /^\w+$/.test(model) ? model : null;
 }
 
-/** Every store's document but the provider's models, which `oidcModelDocument` lays out one model at a time. */
+/**
+ * Every store's document but the provider's models, which `oidcModelDocument` lays out one model at a time, and the
+ * admin password reset's marker.
+ */
 export const DOCUMENT_MAPPINGS: readonly LooseMapping[] = [
   loosen(USERS_DOCUMENT),
   loosen(CLIENTS_DOCUMENT),
