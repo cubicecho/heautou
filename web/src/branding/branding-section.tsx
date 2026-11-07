@@ -1,8 +1,8 @@
 import { BRANDING_DEFAULTS } from '@server/core/defaults.ts';
 import { useState } from 'react';
 import { InputField, useAppForm } from '@/components/app-form';
-import { QueryError } from '@/components/query-state';
-import { Section } from '@/components/section';
+import { CardLayout } from '@/components/card-layout';
+import { LoadError } from '@/components/load-state';
 import { SettingRow } from '@/components/setting-row';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -69,13 +69,13 @@ export function BrandingSection() {
   };
 
   return (
-    <Section
+    <CardLayout
       title="Branding"
       description="What the sign-in page and the sidebar call this provider."
-      surface="card"
+      level={2}
       contentSlot={
         <div className="grid gap-4">
-          {branding.isError && <QueryError error={branding.error} onRetry={branding.refetch} what="the branding" />}
+          {branding.isError && <LoadError error={branding.error} onRetry={branding.refetch} what="the branding" />}
           <FormElement onSubmit={() => form.handleSubmit()} className="flex flex-wrap items-end gap-2">
             <InputField
               form={form}

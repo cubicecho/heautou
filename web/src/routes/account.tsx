@@ -5,13 +5,13 @@ import { TwoFactorSection } from '@/account/two-factor';
 import { auditTypeLabel } from '@/activity/audit-types';
 import { useAppForm } from '@/components/app-form';
 import { ConfirmButton } from '@/components/confirm-button';
-import { DescriptionList, PropertyRow } from '@/components/description-list';
+import { EmptyState } from '@/components/empty-state';
 import { List } from '@/components/list';
 import { ListItem } from '@/components/list-item';
-import { EmptyState } from '@/components/page';
+import { LoadError } from '@/components/load-state';
 import { PageLayout } from '@/components/page-layout';
 import { PasswordField } from '@/components/password-field';
-import { QueryError } from '@/components/query-state';
+import { PropertyList, PropertyRow } from '@/components/property-list';
 import { Section } from '@/components/section';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -105,7 +105,7 @@ function RecentSignIns() {
       description="Where your account signed in lately, and the attempts that failed."
       contentSlot={
         activity.isError ? (
-          <QueryError error={activity.error} onRetry={activity.refetch} what="your sign-ins" />
+          <LoadError error={activity.error} onRetry={activity.refetch} what="your sign-ins" />
         ) : activity.isPending ? (
           <Spinner />
         ) : (
@@ -202,10 +202,10 @@ function AccountPage() {
       contentClassName="gap-8"
       contentSlot={
         me === undefined ? (
-          account.isError && <QueryError error={account.error} onRetry={account.refetch} what="your account" />
+          account.isError && <LoadError error={account.error} onRetry={account.refetch} what="your account" />
         ) : (
           <>
-            <DescriptionList
+            <PropertyList
               contentSlot={[
                 <PropertyRow key="username" label="Username" value={me.username} valueClassName="font-mono" />,
                 <PropertyRow key="email" label="Email" value={me.email || '—'} />,

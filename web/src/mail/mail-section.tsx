@@ -1,10 +1,11 @@
 import { type MailSettingsFieldsFragment, MailSource } from '@/__generated__/graphql';
 import { InputField, NumberField, SwitchField, useAppForm } from '@/components/app-form';
+import { CardLayout } from '@/components/card-layout';
 import { ConfirmButton } from '@/components/confirm-button';
-import { DescriptionList, PropertyRow } from '@/components/description-list';
 import { FieldRow } from '@/components/field-row';
+import { LoadError } from '@/components/load-state';
 import { PasswordField } from '@/components/password-field';
-import { QueryError } from '@/components/query-state';
+import { PropertyList, PropertyRow } from '@/components/property-list';
 import { Section } from '@/components/section';
 import { SettingRow } from '@/components/setting-row';
 import { Alert } from '@/components/ui/alert';
@@ -214,13 +215,13 @@ export function MailSection() {
   const isLocked = current?.source === MailSource.Env;
 
   return (
-    <Section
+    <CardLayout
       title="Email"
       description="Lets invite and reset links be sent by email, and the optional emails below. Without a server, links are copied by hand as before."
-      surface="card"
+      level={2}
       contentSlot={
         <div className="grid gap-4">
-          {mail.isError && <QueryError error={mail.error} onRetry={mail.refetch} what="the email settings" />}
+          {mail.isError && <LoadError error={mail.error} onRetry={mail.refetch} what="the email settings" />}
           {current !== undefined &&
             (isLocked ? (
               <>
@@ -229,7 +230,7 @@ export function MailSection() {
                   title="Set by the environment"
                   description="SMTP_URL or SMTP_HOST sets the server, so it cannot be changed here. Change it there and restart."
                 />
-                <DescriptionList
+                <PropertyList
                   contentSlot={[
                     <PropertyRow
                       key="host"

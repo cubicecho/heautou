@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { CenteredLayout } from '@/components/centered-layout';
+import { CenteredCardLayout } from '@/components/centered-card-layout';
 import { CircleCheck } from '@/components/ui/icons';
 import { loggedOutSearchSchema } from '@/provider/search';
 
@@ -16,7 +16,7 @@ function LoggedOutPage() {
   const from = client === undefined ? 'Heautou' : `${client} and Heautou`;
 
   return (
-    <CenteredLayout
+    <CenteredCardLayout
       level={1}
       iconSlot={<CircleCheck />}
       title="You're signed out"

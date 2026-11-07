@@ -1,6 +1,6 @@
+import { CardLayout } from '@/components/card-layout';
 import { Combobox } from '@/components/combobox';
-import { QueryError } from '@/components/query-state';
-import { Section } from '@/components/section';
+import { LoadError } from '@/components/load-state';
 import { SettingRow } from '@/components/setting-row';
 import { Alert } from '@/components/ui/alert';
 import { Switch } from '@/components/ui/switch';
@@ -26,13 +26,13 @@ export function PasswordRulesSection() {
   const isLocked = current === undefined || save.isPending;
 
   return (
-    <Section
+    <CardLayout
       title="Passwords"
       description="Checked whenever a password is set: by an admin, with an invite or reset link, on the account page or at setup. Passwords set before keep working."
-      surface="card"
+      level={2}
       contentSlot={
         <div className="grid gap-4">
-          {rules.isError && <QueryError error={rules.error} onRetry={rules.refetch} what="the password rules" />}
+          {rules.isError && <LoadError error={rules.error} onRetry={rules.refetch} what="the password rules" />}
           <SettingRow
             title="Minimum strength"
             description="How hard to guess a new password must be, as zxcvbn rates it. The forms show a meter as it is typed."

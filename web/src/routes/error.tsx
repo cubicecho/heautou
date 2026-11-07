@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { CenteredLayout } from '@/components/centered-layout';
-import { DescriptionList, PropertyRow } from '@/components/description-list';
+import { CenteredCardLayout } from '@/components/centered-card-layout';
+import { PropertyList, PropertyRow } from '@/components/property-list';
 import { Button } from '@/components/ui/button';
 import { CopyButton } from '@/components/ui/copy-button';
 import { TriangleAlert } from '@/components/ui/icons';
@@ -36,12 +36,12 @@ function ErrorPage() {
   ].filter((row) => row !== null);
 
   return (
-    <CenteredLayout
+    <CenteredCardLayout
       level={1}
       iconSlot={<TriangleAlert />}
       title={copy.title}
       description={copy.description}
-      contentSlot={rows.length === 0 ? undefined : <DescriptionList contentSlot={rows} />}
+      contentSlot={rows.length === 0 ? undefined : <PropertyList contentSlot={rows} />}
       footerActionsSlot={
         <>
           {copy.isClientSetup && <Button variant="outline" content="Open clients" linkSlot={<Link to="/clients" />} />}

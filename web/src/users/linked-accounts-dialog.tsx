@@ -1,9 +1,9 @@
 import type { UserFieldsFragment } from '@/__generated__/graphql';
 import { ConfirmButton } from '@/components/confirm-button';
 import { DialogLayout } from '@/components/dialog-layout';
+import { EmptyState } from '@/components/empty-state';
 import { List } from '@/components/list';
 import { ListItem } from '@/components/list-item';
-import { EmptyState } from '@/components/page';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { messageOf } from '@/core/errors';

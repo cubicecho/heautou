@@ -2,7 +2,7 @@ import { browserSupportsWebAuthn, startAuthentication } from '@simplewebauthn/br
 import { createFileRoute } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 import { InputField, useAppForm } from '@/components/app-form';
-import { CenteredLayout } from '@/components/centered-layout';
+import { CenteredCardLayout } from '@/components/centered-card-layout';
 import { PasswordField } from '@/components/password-field';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -225,7 +225,7 @@ function LoginPage() {
   }
 
   return (
-    <CenteredLayout
+    <CenteredCardLayout
       level={1}
       iconSlot={<BrandIcon className="size-5" />}
       title={secondFactor === null ? 'Sign in' : 'Confirm it’s you'}

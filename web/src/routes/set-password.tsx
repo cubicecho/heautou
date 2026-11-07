@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { useState } from 'react';
 import { useAppForm } from '@/components/app-form';
-import { CenteredLayout } from '@/components/centered-layout';
+import { CenteredCardLayout } from '@/components/centered-card-layout';
 import { PasswordField } from '@/components/password-field';
 import { Alert } from '@/components/ui/alert';
 import { FormElement } from '@/components/ui/form-element';
@@ -47,7 +47,7 @@ function SetPasswordPage() {
     who === undefined ? 'Choose a password' : who.isInvite ? `Welcome, ${who.username}` : 'Choose a new password';
 
   return (
-    <CenteredLayout
+    <CenteredCardLayout
       level={1}
       iconSlot={<BrandIcon className="size-5" />}
       title={title}

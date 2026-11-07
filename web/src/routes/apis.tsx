@@ -2,13 +2,13 @@ import { createFileRoute } from '@tanstack/react-router';
 import { useState } from 'react';
 import { type ApiFieldsFragment, TokenFormat } from '@/__generated__/graphql';
 import { ApiFormDialog, TOKEN_FORMATS } from '@/apis/api-form-dialog';
+import { CollapsibleRow } from '@/components/collapsible-row';
 import { ConfirmButton } from '@/components/confirm-button';
-import { DescriptionList, PropertyRow } from '@/components/description-list';
-import { DisclosureRow } from '@/components/disclosure-row';
+import { EmptyState } from '@/components/empty-state';
 import { List } from '@/components/list';
-import { EmptyState } from '@/components/page';
+import { LoadState } from '@/components/load-state';
 import { PageLayout } from '@/components/page-layout';
-import { QueryState } from '@/components/query-state';
+import { PropertyList, PropertyRow } from '@/components/property-list';
 import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -40,7 +40,7 @@ function ApiDetails({ api }: { api: ApiFieldsFragment }) {
   const clientNames = api.allowedClients.map((client) => client.name);
 
   return (
-    <DescriptionList
+    <PropertyList
       contentSlot={[
         <PropertyRow
           key="identifier"
@@ -118,7 +118,7 @@ function ApisPage() {
           {remove.error !== null && (
             <Alert variant="destructive" title="API not deleted" description={messageOf(remove.error)} />
           )}
-          <QueryState
+          <LoadState
             query={query}
             what="the APIs"
             count={apis.length}
@@ -134,7 +134,7 @@ function ApisPage() {
           <List
             label="APIs"
             contentSlot={apis.map((api) => (
-              <DisclosureRow
+              <CollapsibleRow
                 key={api.identifier}
                 open={openId === api.identifier}
                 onOpenChange={(next) => setOpenId(next ? api.identifier : null)}

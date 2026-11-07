@@ -1,7 +1,7 @@
+import { CardLayout } from '@/components/card-layout';
 import { ConfirmButton } from '@/components/confirm-button';
-import { DescriptionList, PropertyRow } from '@/components/description-list';
-import { QueryError } from '@/components/query-state';
-import { Section } from '@/components/section';
+import { LoadError } from '@/components/load-state';
+import { PropertyList, PropertyRow } from '@/components/property-list';
 import { SettingRow } from '@/components/setting-row';
 import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -19,13 +19,13 @@ export function KeysSection() {
   const rotatedAt = keys.data?.rotatedAt ?? null;
 
   return (
-    <Section
+    <CardLayout
       title="Signing keys"
       description="Tokens are signed with the current key. The previous one stays published so tokens it signed still verify."
-      surface="card"
+      level={2}
       contentSlot={
         <div className="grid gap-4">
-          {keys.isError && <QueryError error={keys.error} onRetry={keys.refetch} what="the keys" />}
+          {keys.isError && <LoadError error={keys.error} onRetry={keys.refetch} what="the keys" />}
           <SettingRow
             title="Rotate keys"
             description={
@@ -47,7 +47,7 @@ export function KeysSection() {
               />
             }
           />
-          <DescriptionList
+          <PropertyList
             contentSlot={(keys.data?.signingKeys ?? []).map((key) => (
               <PropertyRow
                 key={key.kid}

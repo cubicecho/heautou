@@ -7,13 +7,13 @@ import { PairDialog } from '@/clients/pair-dialog';
 import { PresetPanel } from '@/clients/preset-panel';
 import { presetById } from '@/clients/presets';
 import { maskSecret, SecretToggle } from '@/clients/secret';
+import { CollapsibleRow } from '@/components/collapsible-row';
 import { ConfirmButton } from '@/components/confirm-button';
-import { DescriptionList, PropertyRow } from '@/components/description-list';
-import { DisclosureRow } from '@/components/disclosure-row';
+import { EmptyState } from '@/components/empty-state';
 import { List } from '@/components/list';
-import { EmptyState } from '@/components/page';
+import { LoadState } from '@/components/load-state';
 import { PageLayout } from '@/components/page-layout';
-import { QueryState } from '@/components/query-state';
+import { PropertyList, PropertyRow } from '@/components/property-list';
 import { Section } from '@/components/section';
 import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -238,7 +238,7 @@ function GenericSetup({ client, credentialRows }: { client: ClientFieldsFragment
       title="Configure the app"
       description="Set these on the app's OpenID Connect page. Most apps need only the discovery URL, the client ID and the secret."
       contentSlot={
-        <DescriptionList
+        <PropertyList
           contentSlot={[
             ...providerRows,
             ...credentialRows,
@@ -354,7 +354,7 @@ function ClientDetail({ client }: { client: ClientFieldsFragment }) {
       )}
       <Section
         title="Details"
-        contentSlot={<DescriptionList contentSlot={[...presetCredentialRows, ...detailRows(client)]} />}
+        contentSlot={<PropertyList contentSlot={[...presetCredentialRows, ...detailRows(client)]} />}
       />
     </div>
   );
@@ -409,7 +409,7 @@ function ClientsPage() {
    * @returns The row.
    */
   const clientRow = (client: ClientFieldsFragment) => (
-    <DisclosureRow
+    <CollapsibleRow
       key={client.clientId}
       open={openId === client.clientId}
       onOpenChange={(next) => setOpenId(next ? client.clientId : null)}
@@ -472,7 +472,7 @@ function ClientsPage() {
           {remove.error !== null && (
             <Alert variant="destructive" title="Client not deleted" description={messageOf(remove.error)} />
           )}
-          <QueryState
+          <LoadState
             query={query}
             what="the clients"
             count={clients.length}

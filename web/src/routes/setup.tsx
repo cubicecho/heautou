@@ -3,8 +3,8 @@ import { createFileRoute } from '@tanstack/react-router';
 import { useState } from 'react';
 import { z } from 'zod';
 import { InputField, useAppForm } from '@/components/app-form';
-import { CenteredLayout } from '@/components/centered-layout';
-import { Disclosure } from '@/components/disclosure';
+import { CenteredCardLayout } from '@/components/centered-card-layout';
+import { Collapsible } from '@/components/collapsible';
 import { PasswordField } from '@/components/password-field';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -111,7 +111,7 @@ function SetupPage() {
   // waits behind a disclosure, since a fresh install has no user to promote.
   const isFresh = linkToken === null && asksForToken === false;
   const existingUser = (
-    <Disclosure
+    <Collapsible
       title="Make an existing user the admin"
       description="For a server that already has users."
       contentClassName="gap-2"
@@ -139,7 +139,7 @@ function SetupPage() {
     : 'Make the first admin, or type an existing user’s username and password to make them the admin.';
 
   return (
-    <CenteredLayout
+    <CenteredCardLayout
       level={1}
       iconSlot={<BrandIcon className="size-5" />}
       title="Set up Heautou"

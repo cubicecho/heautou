@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import type { ForwardAuthFieldsFragment, ProtectedSiteFieldsFragment } from '@/__generated__/graphql';
 import { Combobox } from '@/components/combobox';
+import { EmptyState } from '@/components/empty-state';
 import { FieldRow } from '@/components/field-row';
 import { FormField } from '@/components/form-field';
-import { EmptyState } from '@/components/page';
 import { Section } from '@/components/section';
 import { CodeBlock } from '@/components/ui/code';
 import { CopyButton } from '@/components/ui/copy-button';

@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { ConfirmButton } from '@/components/confirm-button';
 import { List } from '@/components/list';
 import { ListItem } from '@/components/list-item';
-import { QueryError } from '@/components/query-state';
+import { LoadError } from '@/components/load-state';
 import { Section } from '@/components/section';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -61,7 +61,7 @@ export function LinkedAccountsSection() {
       description="Accounts elsewhere you can sign in with instead of your password. Each one is linked to you alone."
       contentSlot={
         upstreams.isError ? (
-          <QueryError error={upstreams.error} onRetry={upstreams.refetch} what="your linked accounts" />
+          <LoadError error={upstreams.error} onRetry={upstreams.refetch} what="your linked accounts" />
         ) : upstreams.isPending ? (
           <Spinner />
         ) : (

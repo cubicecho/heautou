@@ -2,15 +2,15 @@ import { createFileRoute } from '@tanstack/react-router';
 import { useState } from 'react';
 import type { ForwardAuthFieldsFragment, ProtectedSiteFieldsFragment } from '@/__generated__/graphql';
 import { InputField, useAppForm } from '@/components/app-form';
+import { CardLayout } from '@/components/card-layout';
+import { Collapsible } from '@/components/collapsible';
+import { CollapsibleRow } from '@/components/collapsible-row';
 import { ConfirmButton } from '@/components/confirm-button';
-import { DescriptionList, PropertyRow } from '@/components/description-list';
-import { Disclosure } from '@/components/disclosure';
-import { DisclosureRow } from '@/components/disclosure-row';
+import { EmptyState } from '@/components/empty-state';
 import { List } from '@/components/list';
-import { EmptyState } from '@/components/page';
+import { LoadError, LoadState } from '@/components/load-state';
 import { PageLayout } from '@/components/page-layout';
-import { QueryError, QueryState } from '@/components/query-state';
-import { Section } from '@/components/section';
+import { PropertyList, PropertyRow } from '@/components/property-list';
 import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -117,7 +117,7 @@ function ProxySetupSection({ sites }: { sites: readonly ProtectedSiteFieldsFragm
   const query = useForwardAuth();
   const settings = query.data;
   if (query.isError) {
-    return <QueryError error={query.error} onRetry={query.refetch} what="the proxy setup" />;
+    return <LoadError error={query.error} onRetry={query.refetch} what="the proxy setup" />;
   }
   if (settings === undefined) {
     return null;
@@ -127,10 +127,10 @@ function ProxySetupSection({ sites }: { sites: readonly ProtectedSiteFieldsFragm
   const isSetUp = sites.length > 0 && hasCookieDomain;
 
   return (
-    <Section
-      surface="card"
+    <CardLayout
+      level={2}
       contentSlot={
-        <Disclosure
+        <Collapsible
           title="Proxy setup"
           titleClassName="text-foreground"
           description="Point the reverse proxy's forward auth at these addresses, from where it reaches Heautou, or paste the snippet below."
@@ -154,7 +154,7 @@ function ProxySetupSection({ sites }: { sites: readonly ProtectedSiteFieldsFragm
           contentClassName="gap-4 pt-2"
           contentSlot={
             <>
-              <DescriptionList
+              <PropertyList
                 contentSlot={[
                   <AddressRow
                     key="verify"
@@ -250,7 +250,7 @@ function SitesPage() {
           {remove.error !== null && (
             <Alert variant="destructive" title="Site not deleted" description={messageOf(remove.error)} />
           )}
-          <QueryState
+          <LoadState
             query={query}
             what="the protected sites"
             count={sites.length}
@@ -266,7 +266,7 @@ function SitesPage() {
           <List
             label="Protected sites"
             contentSlot={sites.map((site) => (
-              <DisclosureRow
+              <CollapsibleRow
                 key={site.id}
                 open={openId === site.id}
                 onOpenChange={(next) => setOpenId(next ? site.id : null)}
@@ -299,7 +299,7 @@ function SitesPage() {
                   </>
                 }
                 contentSlot={
-                  <DescriptionList
+                  <PropertyList
                     contentSlot={[
                       <PropertyRow key="host" label="Host" value={site.host} valueClassName="font-mono" />,
                       <PropertyRow

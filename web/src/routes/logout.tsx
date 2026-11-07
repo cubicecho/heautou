@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { CenteredLayout } from '@/components/centered-layout';
+import { CenteredCardLayout } from '@/components/centered-card-layout';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { LogOut } from '@/core/app-icons';
@@ -25,7 +25,7 @@ function LogoutPage() {
   const where = client === undefined ? 'Heautou' : `${client} and Heautou`;
 
   return (
-    <CenteredLayout
+    <CenteredCardLayout
       level={1}
       iconSlot={<LogOut />}
       title="Sign out?"

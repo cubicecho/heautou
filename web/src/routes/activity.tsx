@@ -10,11 +10,11 @@ import {
   targetKindLabel,
 } from '@/activity/audit-types';
 import { Combobox } from '@/components/combobox';
+import { EmptyState } from '@/components/empty-state';
 import { List } from '@/components/list';
 import { ListItem } from '@/components/list-item';
-import { EmptyState } from '@/components/page';
+import { LoadState } from '@/components/load-state';
 import { PageLayout } from '@/components/page-layout';
-import { QueryState } from '@/components/query-state';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Activity } from '@/core/app-icons';
@@ -99,7 +99,7 @@ function ActivityPage() {
       }
       contentSlot={
         <>
-          <QueryState
+          <LoadState
             query={query}
             what="the activity"
             count={entries.length}

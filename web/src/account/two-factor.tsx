@@ -5,8 +5,8 @@ import { InputField, useAppForm } from '@/components/app-form';
 import { DialogLayout } from '@/components/dialog-layout';
 import { List } from '@/components/list';
 import { ListItem } from '@/components/list-item';
+import { LoadError } from '@/components/load-state';
 import { PasswordField } from '@/components/password-field';
-import { QueryError } from '@/components/query-state';
 import { Section } from '@/components/section';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -381,7 +381,7 @@ export function TwoFactorSection() {
       contentSlot={
         <>
           {factors.isError ? (
-            <QueryError error={factors.error} onRetry={factors.refetch} what="your second factors" />
+            <LoadError error={factors.error} onRetry={factors.refetch} what="your second factors" />
           ) : data === undefined ? (
             <Spinner />
           ) : (

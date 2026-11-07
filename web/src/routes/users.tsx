@@ -1,11 +1,11 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { useState } from 'react';
 import type { UserFieldsFragment } from '@/__generated__/graphql';
+import { EmptyState } from '@/components/empty-state';
 import { List } from '@/components/list';
 import { ListItem } from '@/components/list-item';
-import { EmptyState } from '@/components/page';
+import { LoadState } from '@/components/load-state';
 import { PageLayout } from '@/components/page-layout';
-import { QueryState } from '@/components/query-state';
 import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -162,7 +162,7 @@ function UsersPage() {
           {failure !== null && (
             <Alert variant="destructive" title="User not changed" description={messageOf(failure)} />
           )}
-          <QueryState
+          <LoadState
             query={query}
             what="the users"
             count={users.length}
