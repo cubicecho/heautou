@@ -243,7 +243,7 @@ type RadioGroupItemProps = {
   /**
    * The picture over the label in a `card` tile, or the segment's face in `segmented`. Ignored by
    * `row`. On device an icon has no `currentColor` to inherit, so in `segmented` give it the
-   * checked segment's `text-active-foreground` and the others' `text-foreground/60` yourself.
+   * checked segment's `text-foreground` and the others' `text-foreground/60` yourself.
    */
   iconSlot?: SlotNode | undefined;
   /**
@@ -305,16 +305,18 @@ function RadioGroupItem({
       .filter(Boolean)
       .join(" ") || undefined;
 
+  // Checked, the circle is the chosen tint, edged in `active` because the tint is not 3:1 from the
+  // surface, and its dot is `foreground`, 3:1 or more on the tint and around it.
   const circle = (
     <div
       className={cn(
         "cube-rn-view",
         "h-4 w-4 shrink-0 items-center justify-center rounded-full border",
-        checked ? "border-active" : "border-foreground/50",
+        checked ? "border-active bg-active/40" : "border-foreground/50",
         group.invalid && "border-negative",
       )}
     >
-      {checked ? <div className="cube-rn-view h-2 w-2 rounded-full bg-active" /> : null}
+      {checked ? <div className="cube-rn-view h-2 w-2 rounded-full bg-foreground" /> : null}
     </div>
   );
 
@@ -326,17 +328,20 @@ function RadioGroupItem({
     if (segmented) {
       return cn(
         "min-w-0 flex-1 flex-row items-center justify-center gap-1.5 rounded-sm px-3",
+        // The checked segment is the chosen tint, a step further under the pointer and focused.
         checked
-          ? "group/radio bg-active text-active-foreground focus-visible:bg-hover focus-visible:text-foreground"
+          ? "bg-active/40 text-foreground hover:bg-active/60 focus-visible:bg-active/60"
           : "text-foreground/60 hover:bg-hover hover:text-foreground focus-visible:bg-hover focus-visible:text-foreground",
       );
     }
     if (card) {
       return cn(
         "min-w-0 flex-1 items-center gap-1.5 rounded-lg border p-3",
-        // The border alone says checked: a tinted fill takes the muted description under 4.5:1.
-        checked ? "border-active bg-background" : "border-foreground/50 bg-background",
-        "focus-visible:bg-hover",
+        // Checked is the chosen tint inside an `active` edge, a step further under the pointer and
+        // focused; its description turns `foreground`, as muted text on the tint is under 4.5:1.
+        checked
+          ? "border-active bg-active/40 hover:bg-active/60 focus-visible:bg-active/60"
+          : "border-foreground/50 bg-background hover:bg-hover focus-visible:bg-hover",
         group.invalid && "border-negative",
       );
     }
@@ -360,9 +365,7 @@ function RadioGroupItem({
               className={cn(
                 "cube-rn-text",
                 "truncate text-sm font-semibold",
-                checked
-                  ? "text-active-foreground group-focus-visible/radio:text-foreground"
-                  : "text-foreground/60",
+                checked ? "text-foreground" : "text-foreground/60",
               )}
             >
               {label}
@@ -391,7 +394,11 @@ function RadioGroupItem({
           {description ? (
             <span
               id={descriptionId}
-              className="cube-rn-text text-center text-foreground/60 text-xs"
+              className={cn(
+                "cube-rn-text",
+                "text-center text-xs",
+                checked ? "text-foreground" : "text-foreground/60",
+              )}
             >
               {description}
             </span>
