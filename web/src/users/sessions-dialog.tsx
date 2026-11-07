@@ -1,10 +1,10 @@
 import type { UserFieldsFragment } from '@/__generated__/graphql';
 import { ConfirmButton } from '@/components/confirm-button';
 import { DialogLayout } from '@/components/dialog-layout';
+import { EmptyState } from '@/components/empty-state';
 import { List } from '@/components/list';
 import { ListItem } from '@/components/list-item';
-import { EmptyState } from '@/components/page';
-import { QueryState } from '@/components/query-state';
+import { LoadState } from '@/components/load-state';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { X } from '@/components/ui/icons';
@@ -40,7 +40,7 @@ export function SessionsDialog({ user, open, onOpenChange }: SessionsDialogProps
       size="lg"
       contentSlot={
         <div className="grid gap-4">
-          <QueryState
+          <LoadState
             query={query}
             what="the sessions"
             count={sessions.length}

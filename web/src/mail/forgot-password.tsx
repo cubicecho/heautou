@@ -1,5 +1,5 @@
 import { InputField, useAppForm } from '@/components/app-form';
-import { CenteredLayout } from '@/components/centered-layout';
+import { CenteredCardLayout } from '@/components/centered-card-layout';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { FormElement } from '@/components/ui/form-element';
@@ -35,7 +35,7 @@ export function ForgotPassword({ uid, onBack }: ForgotPasswordProps) {
   const isAsking = isSent === false;
 
   return (
-    <CenteredLayout
+    <CenteredCardLayout
       level={1}
       iconSlot={<BrandIcon className="size-5" />}
       title="Reset your password"

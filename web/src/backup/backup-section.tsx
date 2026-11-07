@@ -1,8 +1,8 @@
 import { BACKUP_DEFAULTS } from '@server/core/defaults.ts';
 import { useState } from 'react';
+import { CardLayout } from '@/components/card-layout';
 import { ConfirmButton } from '@/components/confirm-button';
-import { QueryError } from '@/components/query-state';
-import { Section } from '@/components/section';
+import { LoadError } from '@/components/load-state';
 import { SettingRow } from '@/components/setting-row';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -80,13 +80,13 @@ export function BackupSection() {
   };
 
   return (
-    <Section
+    <CardLayout
       title="Backup"
       description="An archive of the database: clients, APIs, users and their groups, second factors, invite and reset links, sign-in providers, protected sites, keys, branding, settings, email settings, pairings and the audit log. Profile pictures stay in their bucket, and sign-ins to this site and to protected sites are never in it."
-      surface="card"
+      level={2}
       contentSlot={
         <div className="grid gap-4">
-          {info.isError && <QueryError error={info.error} onRetry={info.refetch} what="the backup settings" />}
+          {info.isError && <LoadError error={info.error} onRetry={info.refetch} what="the backup settings" />}
           {info.data !== undefined && <SealingNote isSealed={info.data.isSealed} />}
           <SettingRow
             title="Include sessions and tokens"

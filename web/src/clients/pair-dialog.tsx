@@ -1,7 +1,7 @@
 import type { ClientFieldsFragment, PairingFieldsFragment } from '@/__generated__/graphql';
 import { ComboboxField, InputField, SwitchField, useAppForm } from '@/components/app-form';
-import { DescriptionList, PropertyRow } from '@/components/description-list';
 import { DialogLayout } from '@/components/dialog-layout';
+import { PropertyList, PropertyRow } from '@/components/property-list';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { CopyButton } from '@/components/ui/copy-button';
@@ -167,7 +167,7 @@ function SetupUrl({ id, setupUrl, onPaired, onRestart }: SetupUrlProps) {
           description="It can sign its users in now. Open it in the list for its settings."
         />
         {isLookingForOffers && <LookingForOffers name={client.name} />}
-        <DescriptionList
+        <PropertyList
           contentSlot={[
             <PropertyRow key="id" label="Client ID" value={client.clientId} valueClassName="font-mono break-all" />,
             <PropertyRow
@@ -189,7 +189,7 @@ function SetupUrl({ id, setupUrl, onPaired, onRestart }: SetupUrlProps) {
   }
   return (
     <div className="grid gap-4">
-      <DescriptionList
+      <PropertyList
         contentSlot={[
           <PropertyRow
             key="url"

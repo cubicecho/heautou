@@ -1,6 +1,6 @@
 import { createLink, createRootRoute, Link, Outlet, useRouterState } from '@tanstack/react-router';
-import { RouteError } from '@/components/route-error';
-import { BarNavItem, Sidebar, SidebarNavItem, SidebarSection } from '@/components/sidebar';
+import { ErrorPage } from '@/components/error-page';
+import { AppBarItem, Sidebar, SidebarItem, SidebarSection } from '@/components/sidebar';
 import { SidebarLayout } from '@/components/split-layout';
 import { Button } from '@/components/ui/button';
 import { Ellipsis, Monitor, Moon, Settings, Sun, UserRound } from '@/components/ui/icons';
@@ -22,8 +22,8 @@ import { BrandIcon, useBrandName } from '@/core/brand';
 import { ACCOUNT_PAGE } from '@/core/paths';
 import { signOut, useViewer } from '@/core/session';
 
-const SidebarLink = createLink(SidebarNavItem);
-const BarLink = createLink(BarNavItem);
+const SidebarLink = createLink(SidebarItem);
+const BarLink = createLink(AppBarItem);
 /**
  * The pages the provider sends a browser to: sign in, sign out, signed out, errors and the device flow, the first-admin setup, and
  * a password link. They are for whoever is signing in to an app, not only admins, so they are drawn without the admin
@@ -52,7 +52,7 @@ const THEMES = [
 
 export const Route = createRootRoute({
   component: RootRoute,
-  errorComponent: ({ error, reset }) => <RouteError error={error} reset={reset} />,
+  errorComponent: ({ error, reset }) => <ErrorPage error={error} reset={reset} />,
 });
 
 /**
@@ -189,7 +189,7 @@ function AdminShell({ pathname }: { pathname: string }) {
                 iconSlot={<UserRound />}
                 active={pathname === ACCOUNT_PAGE}
               />
-              <SidebarNavItem label={signOutLabel} iconSlot={<LogOut />} onClick={signOut} />
+              <SidebarItem label={signOutLabel} iconSlot={<LogOut />} onClick={signOut} />
               <ThemePicker variant="compact" />
             </>
           }

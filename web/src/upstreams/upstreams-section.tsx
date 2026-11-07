@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { UnknownIdentity, type UpstreamFieldsFragment } from '@/__generated__/graphql';
+import { CardLayout } from '@/components/card-layout';
 import { ConfirmButton } from '@/components/confirm-button';
+import { EmptyState } from '@/components/empty-state';
 import { List } from '@/components/list';
 import { ListItem } from '@/components/list-item';
-import { EmptyState } from '@/components/page';
-import { QueryError } from '@/components/query-state';
-import { Section } from '@/components/section';
+import { LoadError } from '@/components/load-state';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Pencil, Plus, Trash2 } from '@/components/ui/icons';
@@ -30,10 +30,10 @@ export function UpstreamsSection() {
   const isFormOpen = dialog.kind === 'open';
 
   return (
-    <Section
+    <CardLayout
       title="Sign-in providers"
       description="Accounts elsewhere, such as Google or GitHub, that users may sign in with. Each user links theirs from their account page."
-      surface="card"
+      level={2}
       actionSlot={
         <Button
           variant="outline"
@@ -46,7 +46,7 @@ export function UpstreamsSection() {
       contentSlot={
         <div className="grid gap-2">
           {upstreams.isError && (
-            <QueryError error={upstreams.error} onRetry={upstreams.refetch} what="the sign-in providers" />
+            <LoadError error={upstreams.error} onRetry={upstreams.refetch} what="the sign-in providers" />
           )}
           {hasNoProviders && <EmptyState compact title="Users sign in with a password or a passkey only." />}
           <List

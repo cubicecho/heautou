@@ -16,7 +16,7 @@ import {
 } from '@/clients/presets';
 import { maskSecret, SecretToggle } from '@/clients/secret';
 import type { SelectEntry } from '@/components/app-form';
-import { DescriptionList, PropertyRow } from '@/components/description-list';
+import { PropertyList, PropertyRow } from '@/components/property-list';
 import { Section } from '@/components/section';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -165,7 +165,7 @@ function ConfigView({ config, secret }: { config: PresetConfig; secret?: SecretV
             </div>
           }
         />
-        <DescriptionList
+        <PropertyList
           layout="stacked"
           contentSlot={config.settings
             .filter((setting) => setting.note !== undefined)
@@ -183,7 +183,7 @@ function ConfigView({ config, secret }: { config: PresetConfig; secret?: SecretV
     );
   }
   return (
-    <DescriptionList
+    <PropertyList
       contentSlot={config.settings.map((setting) => (
         <PropertyRow
           key={setting.name}

@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import type { UserFieldsFragment } from '@/__generated__/graphql';
-import { DescriptionList, PropertyRow } from '@/components/description-list';
 import { DialogLayout } from '@/components/dialog-layout';
+import { PropertyList, PropertyRow } from '@/components/property-list';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { CopyButton } from '@/components/ui/copy-button';
@@ -52,7 +52,7 @@ export function PasswordLinkDialog({ user, open, onOpenChange }: PasswordLinkDia
         <div className="grid gap-4">
           {isPending && <Spinner />}
           {link !== undefined && (
-            <DescriptionList
+            <PropertyList
               contentSlot={[
                 <PropertyRow
                   key="url"

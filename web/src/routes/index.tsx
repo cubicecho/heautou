@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { DescriptionList, PropertyRow } from '@/components/description-list';
+import { LoadError } from '@/components/load-state';
 import { PageLayout } from '@/components/page-layout';
-import { QueryError } from '@/components/query-state';
+import { PropertyList, PropertyRow } from '@/components/property-list';
 import { Section } from '@/components/section';
 import { Alert } from '@/components/ui/alert';
 import { CopyButton } from '@/components/ui/copy-button';
@@ -66,13 +66,13 @@ function OverviewPage() {
               }
             />
           )}
-          {query.isError && <QueryError error={query.error} onRetry={query.refetch} what="the provider's URLs" />}
+          {query.isError && <LoadError error={query.error} onRetry={query.refetch} what="the provider's URLs" />}
           {info !== undefined && (
             <>
               <Section
                 title="Provider"
                 contentSlot={
-                  <DescriptionList
+                  <PropertyList
                     contentSlot={[
                       <UrlRow key="issuer" label="Issuer" url={info.issuer} />,
                       <UrlRow
@@ -95,7 +95,7 @@ function OverviewPage() {
                 title="Endpoints"
                 description="For applications that ask for each URL on its own."
                 contentSlot={
-                  <DescriptionList
+                  <PropertyList
                     contentSlot={ENDPOINTS.map(({ label, path }) => (
                       <UrlRow key={path} label={label} url={`${info.issuer}${path}`} />
                     ))}

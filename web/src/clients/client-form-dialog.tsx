@@ -4,8 +4,8 @@ import { AUTH_METHOD_OPTIONS, AUTH_METHODS, authMethodOf } from '@/clients/auth-
 import { BLANK_PRESET, PRESET_OPTIONS, PresetLinks, SitePresetGuide } from '@/clients/preset-panel';
 import { baseUrlFrom, presetById, presetFields, sitePresetById } from '@/clients/presets';
 import { ComboboxField, InputField, SelectField, SwitchField, TextareaField, useAppForm } from '@/components/app-form';
+import { Collapsible } from '@/components/collapsible';
 import { DialogLayout } from '@/components/dialog-layout';
-import { Disclosure } from '@/components/disclosure';
 import { FieldRow } from '@/components/field-row';
 import { Section } from '@/components/section';
 import { Button } from '@/components/ui/button';
@@ -439,7 +439,7 @@ export function ClientFormDialog({ client, open, onOpenChange, onSaved }: Client
                     {(hasAdvancedErrors) => (
                       <form.Subscribe selector={(state) => advancedSummary(state.values)}>
                         {(summary) => (
-                          <Disclosure
+                          <Collapsible
                             title="Advanced"
                             titleClassName="text-foreground"
                             description={summary}

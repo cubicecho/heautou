@@ -1,5 +1,5 @@
-import { QueryError } from '@/components/query-state';
-import { Section } from '@/components/section';
+import { CardLayout } from '@/components/card-layout';
+import { LoadError } from '@/components/load-state';
 import { SettingRow } from '@/components/setting-row';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -19,14 +19,14 @@ export function RedirectUrisSection() {
     : 'Left alone it follows the issuer, which is https, so it is refused.';
 
   return (
-    <Section
+    <CardLayout
       title="Redirect URIs"
       description="Where an application may be sent back to after a sign-in or sign-out. https is always allowed, and so is plain http on localhost."
-      surface="card"
+      level={2}
       contentSlot={
         <div className="grid gap-4">
           {setting.isError && (
-            <QueryError error={setting.error} onRetry={setting.refetch} what="the redirect URI setting" />
+            <LoadError error={setting.error} onRetry={setting.refetch} what="the redirect URI setting" />
           )}
           <SettingRow
             title="Allow plain http"

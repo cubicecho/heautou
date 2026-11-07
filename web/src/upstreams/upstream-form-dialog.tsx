@@ -8,8 +8,8 @@ import {
   UpstreamKind,
 } from '@/__generated__/graphql';
 import { ComboboxField, InputField, SelectField, SwitchField, TextareaField, useAppForm } from '@/components/app-form';
+import { Collapsible } from '@/components/collapsible';
 import { DialogLayout } from '@/components/dialog-layout';
-import { Disclosure } from '@/components/disclosure';
 import { PasswordField } from '@/components/password-field';
 import { Section } from '@/components/section';
 import { Button } from '@/components/ui/button';
@@ -296,7 +296,7 @@ export function UpstreamFormDialog({ upstream, open, onOpenChange }: UpstreamFor
             selector={(state) => ADVANCED_FIELDS.some((name) => (state.fieldMeta[name]?.errors.length ?? 0) > 0)}
           >
             {(hasAdvancedErrors) => (
-              <Disclosure
+              <Collapsible
                 title="Advanced"
                 titleClassName="text-foreground"
                 description="New users from this provider, and mapping its groups to groups here."

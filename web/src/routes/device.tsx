@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { useEffect } from 'react';
-import { CenteredLayout } from '@/components/centered-layout';
+import { CenteredCardLayout } from '@/components/centered-card-layout';
 import { FormField } from '@/components/form-field';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -57,7 +57,7 @@ function DevicePage() {
 
   if (step === STEP_DONE) {
     return (
-      <CenteredLayout
+      <CenteredCardLayout
         level={1}
         iconSlot={<CircleCheck />}
         title="Device connected"
@@ -68,7 +68,12 @@ function DevicePage() {
 
   if (needsSecret) {
     return (
-      <CenteredLayout level={1} iconSlot={<MonitorSmartphone />} title="Connect a device" contentSlot={<Spinner />} />
+      <CenteredCardLayout
+        level={1}
+        iconSlot={<MonitorSmartphone />}
+        title="Connect a device"
+        contentSlot={<Spinner />}
+      />
     );
   }
 
@@ -76,7 +81,7 @@ function DevicePage() {
 
   if (step === STEP_CONFIRM) {
     return (
-      <CenteredLayout
+      <CenteredCardLayout
         level={1}
         iconSlot={<MonitorSmartphone />}
         title={`Connect ${client ?? 'this device'}?`}
@@ -109,7 +114,7 @@ function DevicePage() {
   const wasAborted = error === ABORTED;
   const failure = error === undefined || wasAborted ? null : (ERROR_COPY[error] ?? FALLBACK_ERROR);
   return (
-    <CenteredLayout
+    <CenteredCardLayout
       level={1}
       iconSlot={<MonitorSmartphone />}
       title="Connect a device"

@@ -1,4 +1,4 @@
-import { QueryError } from '@/components/query-state';
+import { LoadError } from '@/components/load-state';
 import { Section } from '@/components/section';
 import { Spinner } from '@/components/ui/spinner';
 import { useAccountPicture, useRemoveAccountPicture, useSetAccountPicture } from '@/core/pictures';
@@ -27,7 +27,7 @@ export function ProfilePictureSection({ isAdmin }: { isAdmin: boolean }) {
       title="Picture"
       contentSlot={
         picture.isError ? (
-          <QueryError error={picture.error} onRetry={picture.refetch} what="your picture" />
+          <LoadError error={picture.error} onRetry={picture.refetch} what="your picture" />
         ) : data === undefined ? (
           <Spinner />
         ) : (
