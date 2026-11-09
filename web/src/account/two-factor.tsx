@@ -167,7 +167,7 @@ function TotpSetupDialog({ onOpenChange, onCodes }: TotpSetupDialogProps) {
       footerActionsSlot={(close) => (
         <>
           <Button variant="outline" onClick={close} content="Cancel" />
-          <form.SubmitButton content="Turn on" />
+          <form.SubmitButton createLabel="Turn on" />
         </>
       )}
     />
@@ -230,7 +230,7 @@ function AddPasskeyDialog({ onOpenChange, onCodes }: AddPasskeyDialogProps) {
       footerActionsSlot={(close) => (
         <>
           <Button variant="outline" onClick={close} content="Cancel" />
-          <form.SubmitButton content="Add passkey" />
+          <form.SubmitButton createLabel="Add passkey" />
         </>
       )}
     />
@@ -297,7 +297,7 @@ function PasswordConfirmDialog(props: PasswordConfirmDialogProps) {
       footerActionsSlot={(close) => (
         <>
           <Button variant="outline" onClick={close} content="Cancel" />
-          <form.SubmitButton variant={isDestructive ? 'destructive' : 'default'} content={confirmLabel} />
+          <form.SubmitButton variant={isDestructive ? 'destructive' : 'default'} createLabel={confirmLabel} />
         </>
       )}
     />

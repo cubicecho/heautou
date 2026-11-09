@@ -114,7 +114,7 @@ export function SiteFormDialog({ site, open, onOpenChange, onSaved }: SiteFormDi
       footerActionsSlot={(close) => (
         <>
           <Button variant="outline" onClick={close} content="Cancel" />
-          <form.SubmitButton requireChanges={isEdit} content={isEdit ? 'Save changes' : 'Add site'} />
+          <form.SubmitButton requireChanges={isEdit} isEdit={isEdit} createLabel="Add site" />
         </>
       )}
     />

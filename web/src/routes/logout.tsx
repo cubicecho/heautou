@@ -2,7 +2,7 @@ import { createFileRoute } from '@tanstack/react-router';
 import { CenteredCardLayout } from '@/components/centered-card-layout';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { LogOut } from '@/core/app-icons';
+import { LogOut } from '@/components/ui/icons';
 import { goBack, LOGOUT_CONFIRM_ACTION, logoutSearchSchema } from '@/provider/search';
 
 export const Route = createFileRoute('/logout')({

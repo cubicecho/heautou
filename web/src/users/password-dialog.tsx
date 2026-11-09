@@ -66,7 +66,7 @@ export function PasswordDialog({ user, open, onOpenChange }: PasswordDialogProps
       footerActionsSlot={(close) => (
         <>
           <Button variant="outline" onClick={close} content="Cancel" />
-          <form.SubmitButton content="Set password" />
+          <form.SubmitButton createLabel="Set password" />
         </>
       )}
     />

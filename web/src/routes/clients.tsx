@@ -466,7 +466,6 @@ function ClientsPage() {
           />
         </>
       }
-      contentClassName="gap-4"
       contentSlot={
         <>
           {remove.error !== null && (

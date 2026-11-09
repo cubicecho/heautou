@@ -3,7 +3,7 @@ import { ErrorPage } from '@/components/error-page';
 import { AppBarItem, Sidebar, SidebarItem, SidebarSection } from '@/components/sidebar';
 import { SidebarLayout } from '@/components/split-layout';
 import { Button } from '@/components/ui/button';
-import { Ellipsis, Monitor, Moon, Settings, Sun, UserRound } from '@/components/ui/icons';
+import { Activity, Ellipsis, LogOut, Monitor, Moon, Server, Settings, Sun, UserRound } from '@/components/ui/icons';
 import {
   Menu,
   MenuContent,
@@ -17,7 +17,7 @@ import { ThemePicker } from '@/components/ui/theme-picker';
 import { useThemePreference } from '@/components/ui/theme-preference';
 import { isThemePreference, type ThemePreference } from '@/components/ui/theme-preference-base';
 import { useAccount } from '@/core/account';
-import { Activity, AppWindow, LayoutDashboard, LogOut, Server, ShieldCheck, Tags, UsersRound } from '@/core/app-icons';
+import { AppWindow, LayoutDashboard, ShieldCheck, Tags, UsersRound } from '@/core/app-icons';
 import { BrandIcon, useBrandName } from '@/core/brand';
 import { ACCOUNT_PAGE } from '@/core/paths';
 import { signOut, useViewer } from '@/core/session';

@@ -145,7 +145,7 @@ export function UserFormDialog({ user, open, onOpenChange, onInvited }: UserForm
       footerActionsSlot={(close) => (
         <>
           <Button variant="outline" onClick={close} content="Cancel" />
-          <form.SubmitButton requireChanges={isEdit} content={isEdit ? 'Save changes' : 'Create user'} />
+          <form.SubmitButton requireChanges={isEdit} isEdit={isEdit} createLabel="Create user" />
         </>
       )}
     />

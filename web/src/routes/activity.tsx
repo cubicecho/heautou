@@ -17,7 +17,7 @@ import { LoadState } from '@/components/load-state';
 import { PageLayout } from '@/components/page-layout';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Activity } from '@/core/app-icons';
+import { Activity } from '@/components/ui/icons';
 import { type AuditFilters, useAuditFeed, useAuditLog } from '@/core/audit';
 import { useUsers } from '@/core/users';
 import { formatAgo, formatDateTime, joinStats } from '@/lib/format';
@@ -68,7 +68,6 @@ function ActivityPage() {
     <PageLayout
       title="Activity"
       description="Who signed in where, and every change made here. Passwords, secrets and links are never kept."
-      contentClassName="gap-4"
       headerContentSlot={
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant={isLive ? 'positive' : 'outline'} title="New entries appear as they happen.">

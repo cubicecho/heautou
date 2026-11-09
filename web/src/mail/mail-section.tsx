@@ -158,7 +158,7 @@ function ServerForm({ mail }: { mail: MailSettingsFieldsFragment }) {
           />
         )}
         <form.AppForm>
-          <form.SubmitButton requireChanges={server !== null} content="Save server" />
+          <form.SubmitButton requireChanges={server !== null} createLabel="Save server" />
         </form.AppForm>
       </div>
     </FormElement>
@@ -190,7 +190,7 @@ function TestEmail() {
           className="min-w-48 flex-1"
         />
         <form.AppForm>
-          <form.SubmitButton variant="outline" iconSlot={<Send />} content="Send test email" />
+          <form.SubmitButton variant="outline" iconSlot={<Send />} createLabel="Send test email" />
         </form.AppForm>
       </FormElement>
       {send.data !== undefined && (

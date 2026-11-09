@@ -164,7 +164,7 @@ function SetupPage() {
       }
       footerActionsSlot={
         canSetUp ? (
-          <form.SubmitButton content="Make admin" />
+          <form.SubmitButton createLabel="Make admin" />
         ) : isDone ? (
           <Button content="Sign in" onClick={() => window.location.assign(SIGN_IN_PATH)} />
         ) : undefined

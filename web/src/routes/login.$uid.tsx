@@ -269,12 +269,12 @@ function LoginPage() {
         details.error !== null ? undefined : secondFactor === null ? (
           <>
             {canUsePasskeys && passkeyButton}
-            <passwordForm.SubmitButton content="Sign in" />
+            <passwordForm.SubmitButton createLabel="Sign in" />
           </>
         ) : (
           <>
             {canUseOwnPasskey && passkeyButton}
-            {isAskingCode && <codeForm.SubmitButton content="Continue" />}
+            {isAskingCode && <codeForm.SubmitButton createLabel="Continue" />}
           </>
         )
       }

@@ -16,6 +16,7 @@ import { Section } from '@/components/section';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { FormElement } from '@/components/ui/form-element';
+import { LogOut } from '@/components/ui/icons';
 import { Spinner } from '@/components/ui/spinner';
 import {
   type AccountSession,
@@ -24,7 +25,6 @@ import {
   useChangePassword,
   useSignOutEverywhere,
 } from '@/core/account';
-import { LogOut } from '@/core/app-icons';
 import { useBrandName } from '@/core/brand';
 import { messageOf } from '@/core/errors';
 import { signOut } from '@/core/session';
@@ -82,7 +82,7 @@ function ChangePassword() {
           )}
           <div className="flex justify-end">
             <form.AppForm>
-              <form.SubmitButton variant="outline" content="Change password" />
+              <form.SubmitButton variant="outline" createLabel="Change password" />
             </form.AppForm>
           </div>
         </FormElement>

@@ -113,7 +113,7 @@ function SetPasswordPage() {
           </div>
         )
       }
-      footerActionsSlot={isDead || who === undefined ? undefined : <form.SubmitButton content="Set password" />}
+      footerActionsSlot={isDead || who === undefined ? undefined : <form.SubmitButton createLabel="Set password" />}
     />
   );
 }

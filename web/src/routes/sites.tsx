@@ -93,7 +93,7 @@ function CookieDomainForm({ settings }: { settings: ForwardAuthFieldsFragment })
           description="The parent domain of Heautou and the sites, so one sign-in covers them all. Blank keeps the cookie on Heautou's own host."
         />
         <form.AppForm>
-          <form.SubmitButton variant="outline" content="Save domain" />
+          <form.SubmitButton variant="outline" createLabel="Save domain" />
         </form.AppForm>
       </FormElement>
       {save.error !== null && (
@@ -132,7 +132,6 @@ function ProxySetupSection({ sites }: { sites: readonly ProtectedSiteFieldsFragm
       contentSlot={
         <Collapsible
           title="Proxy setup"
-          titleClassName="text-foreground"
           description="Point the reverse proxy's forward auth at these addresses, from where it reaches Heautou, or paste the snippet below."
           defaultOpen={isSetUp === false}
           actionSlot={
@@ -244,7 +243,6 @@ function SitesPage() {
       title="Protected sites"
       description="Sites behind your reverse proxy that have no sign-in of their own. The proxy asks Heautou about each request (forward auth) and sends the browser here to sign in."
       actionSlot={newSite}
-      contentClassName="gap-4"
       contentSlot={
         <>
           {remove.error !== null && (
