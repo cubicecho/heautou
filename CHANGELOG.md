@@ -1,3 +1,10 @@
+## [1.21.1](https://github.com/cubicecho/heautou/compare/v1.21.0...v1.21.1) (2026-11-09)
+
+
+### Bug Fixes
+
+* **web:** reinstall cubeui tabs for the 40px strip, and drop the touchTarget workaround ([b3eeac6](https://github.com/cubicecho/heautou/commit/b3eeac600e5047a9e90b402c6d4628c896232c62)), closes [cubeui#540](https://github.com/cubeui/issues/540) [cubeui#541](https://github.com/cubeui/issues/541)
+
 # [1.21.0](https://github.com/cubicecho/heautou/compare/v1.20.4...v1.21.0) (2026-11-06)
 
 
