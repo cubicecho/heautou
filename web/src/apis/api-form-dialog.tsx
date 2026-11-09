@@ -192,7 +192,7 @@ export function ApiFormDialog({ api, open, onOpenChange, onSaved }: ApiFormDialo
       footerActionsSlot={(close) => (
         <>
           <Button variant="outline" onClick={close} content="Cancel" />
-          <form.SubmitButton requireChanges={isEdit} content={isEdit ? 'Save changes' : 'Create API'} />
+          <form.SubmitButton requireChanges={isEdit} isEdit={isEdit} createLabel="Create API" />
         </>
       )}
     />

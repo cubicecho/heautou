@@ -82,7 +82,7 @@ export function ForgotPassword({ uid, onBack }: ForgotPasswordProps) {
       footerActionsSlot={
         <>
           <Button variant="outline" onClick={onBack} content="Back to sign in" />
-          {isAsking && <form.SubmitButton content="Send link" />}
+          {isAsking && <form.SubmitButton createLabel="Send link" />}
         </>
       }
     />

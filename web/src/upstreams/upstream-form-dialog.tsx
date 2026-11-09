@@ -298,7 +298,6 @@ export function UpstreamFormDialog({ upstream, open, onOpenChange }: UpstreamFor
             {(hasAdvancedErrors) => (
               <Collapsible
                 title="Advanced"
-                titleClassName="text-foreground"
                 description="New users from this provider, and mapping its groups to groups here."
                 // A field in it that is wrong keeps it open, since a closed one would hide why Save is off.
                 open={isAdvancedOpen || hasAdvancedErrors}
@@ -387,7 +386,7 @@ export function UpstreamFormDialog({ upstream, open, onOpenChange }: UpstreamFor
       footerActionsSlot={(close) => (
         <>
           <Button variant="outline" onClick={close} content="Cancel" />
-          <form.SubmitButton requireChanges={isEdit} content={isEdit ? 'Save changes' : 'Add provider'} />
+          <form.SubmitButton requireChanges={isEdit} isEdit={isEdit} createLabel="Add provider" />
         </>
       )}
     />

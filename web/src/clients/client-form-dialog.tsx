@@ -441,7 +441,6 @@ export function ClientFormDialog({ client, open, onOpenChange, onSaved }: Client
                         {(summary) => (
                           <Collapsible
                             title="Advanced"
-                            titleClassName="text-foreground"
                             description={summary}
                             // A field in it that is wrong keeps it open, since a closed one would hide why Save is off.
                             open={isAdvancedOpen || hasAdvancedErrors}
@@ -467,7 +466,8 @@ export function ClientFormDialog({ client, open, onOpenChange, onSaved }: Client
             {(isSite) => (
               <form.SubmitButton
                 requireChanges={isEdit}
-                content={isEdit ? 'Save changes' : 'Create client'}
+                isEdit={isEdit}
+                createLabel="Create client"
                 disabled={isSite}
               />
             )}

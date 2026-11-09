@@ -61,7 +61,6 @@ function GroupsPage() {
     <PageLayout
       title="Groups"
       description="The groups users hold and clients can be limited to. Add one by giving it to a user."
-      contentClassName="gap-4"
       contentSlot={
         <>
           {remove.error !== null && (

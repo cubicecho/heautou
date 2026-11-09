@@ -61,7 +61,7 @@ export function RenameGroupDialog({ name, open, onOpenChange }: RenameGroupDialo
       footerActionsSlot={(close) => (
         <>
           <Button variant="outline" onClick={close} content="Cancel" />
-          <form.SubmitButton content="Rename" />
+          <form.SubmitButton createLabel="Rename" />
         </>
       )}
     />

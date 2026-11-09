@@ -13,9 +13,8 @@ import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { CopyButton } from '@/components/ui/copy-button';
-import { Pencil, Plus, Trash2 } from '@/components/ui/icons';
+import { Pencil, Plus, Server, Trash2 } from '@/components/ui/icons';
 import { useApis, useDeleteApi } from '@/core/apis';
-import { Server } from '@/core/app-icons';
 import { messageOf } from '@/core/errors';
 import { useProviderInfo } from '@/core/provider';
 import { durationText } from '@/token-lifetimes/durations';
@@ -112,7 +111,6 @@ function ApisPage() {
       title="APIs"
       description="Services of your own that take access tokens from this provider. An app asks for a token to one with the resource parameter, and the token's audience is that API."
       actionSlot={newButton('sm')}
-      contentClassName="gap-4"
       contentSlot={
         <>
           {remove.error !== null && (

@@ -105,7 +105,7 @@ function OffersForm({ id, client, offers, isLooking }: OffersFormProps) {
         <Alert variant="destructive" title="Not set up" description={messageOf(finish.error)} />
       )}
       <form.AppForm>
-        <form.SubmitButton content="Finish" className="justify-self-start" />
+        <form.SubmitButton createLabel="Finish" className="justify-self-start" />
       </form.AppForm>
     </FormElement>
   );
@@ -306,7 +306,7 @@ export function PairDialog({ open, onOpenChange, onPaired }: PairDialogProps) {
         started === undefined ? (
           <>
             <Button variant="outline" onClick={close} content="Cancel" />
-            <form.SubmitButton content="Make setup URL" />
+            <form.SubmitButton createLabel="Make setup URL" />
           </>
         ) : (
           <Button variant="outline" onClick={close} content="Close" />

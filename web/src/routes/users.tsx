@@ -156,7 +156,6 @@ function UsersPage() {
           onClick={() => setDialog({ kind: 'new' })}
         />
       }
-      contentClassName="gap-4"
       contentSlot={
         <>
           {failure !== null && (

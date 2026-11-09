@@ -86,7 +86,7 @@ export function BrandingSection() {
               validators={{ onChange: ({ value }) => (value.trim() ? undefined : 'Give the provider a name.') }}
             />
             <form.AppForm>
-              <form.SubmitButton variant="outline" content="Save name" />
+              <form.SubmitButton variant="outline" createLabel="Save name" />
             </form.AppForm>
           </FormElement>
           <SettingRow
